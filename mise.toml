@@ -6,3 +6,5 @@ go = "1.26.6"
 # .github/workflows/ci.yml. 0.10.0 is the first release with a darwin.aarch64
 # build.
 shellcheck = "0.10.0"
+# Desktop frontend. Run native builds on each target OS.
+flutter = "3.47.7"

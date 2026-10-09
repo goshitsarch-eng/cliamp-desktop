@@ -51,8 +51,12 @@ way in both modes:
 - cliamp saves shuffle, repeat, speed, EQ, and output device changes to `config.toml`. A device switch saves `audio_device`.
 
 The view settings in `config.toml`, such as `visualizer`, `simplified`, and
-`expanded`, do not apply. `spectrum.get` and `cliamp visstream` always use the
-default `Bars` analysis.
+`expanded`, do not apply. `spectrum.get` and `cliamp visstream` initially use the default `Bars`
+analysis. Desktop clients can opt into the saved mode with `desktop.vis` or
+`desktop.vis.frame`, select built-in or Lua visualizers, and render their
+original frames. `desktop.theme` changes their theme. The legacy UI-only
+`theme` and `vis` commands remain unavailable. See the
+[desktop IPC operations](remote-control.md#desktop-client-extensions).
 
 ## Use cases
 

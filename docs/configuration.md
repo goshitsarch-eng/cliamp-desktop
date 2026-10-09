@@ -1,6 +1,6 @@
 # Configuration
 
-Use the interactive wizard to configure remote providers. Supported providers are Navidrome, Lyrion, Plex, Jellyfin, Emby, Spotify, Qobuz, Tidal, Mixcloud, NetEase, Audiobookshelf, and YouTube Music:
+Use the interactive wizard to configure remote providers. Supported providers are Navidrome, Lyrion, Plex, Jellyfin, Emby, Spotify, Qobuz, Tidal, SoundCloud, Mixcloud, NetEase, Yandex Music, Audiobookshelf, and YouTube Music:
 
 ```sh
 cliamp setup
@@ -8,7 +8,7 @@ cliamp setup
 
 The wizard writes the provider keys into their section. It keeps your other keys and comments, and it leaves the rest of your config unchanged. The wizard drops the comment at the end of a key line that it rewrites.
 
-The wizard checks the server connection during setup for Navidrome, Lyrion, Plex, Jellyfin, Emby, and Audiobookshelf. For NetEase, it checks the browser session. OAuth providers such as Spotify, Qobuz, and Tidal sign in later in the player. Tidal uses a `link.tidal.com` device code. The wizard does not check Mixcloud credentials. See [cli.md](cli.md#setup-wizard) for details.
+The wizard checks the server connection during setup for Navidrome, Lyrion, Plex, Jellyfin, Emby, and Audiobookshelf. For NetEase, it checks the browser session. OAuth providers such as Spotify, Qobuz, and Tidal sign in later in the player. Tidal uses a `link.tidal.com` device code. The wizard does not check SoundCloud, Mixcloud, or Yandex Music credentials. See [cli.md](cli.md#setup-wizard) for details.
 
 ## Config directory
 

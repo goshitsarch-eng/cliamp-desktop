@@ -225,7 +225,8 @@ func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 			_, browseArtists := entry.Provider.(provider.ArtistBrowser)
 			_, browseAlbums := entry.Provider.(provider.AlbumBrowser)
 			_, catalog := entry.Provider.(provider.CatalogLoader)
-			items = append(items, ipc.ProviderInfo{Key: entry.Key, Name: entry.Name, Searchable: searchable, BrowseArtists: browseArtists, BrowseAlbums: browseAlbums, Catalog: catalog})
+			_, authenticatable := entry.Provider.(playlist.Authenticator)
+			items = append(items, ipc.ProviderInfo{Key: entry.Key, Name: entry.Name, Searchable: searchable, BrowseArtists: browseArtists, BrowseAlbums: browseAlbums, Catalog: catalog, Authenticatable: authenticatable})
 		}
 		request.Reply <- ipc.Response{OK: true, Providers: items}
 		return nil
@@ -235,6 +236,12 @@ func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 	if !ok {
 		request.Reply <- ipc.Response{OK: false, Error: fmt.Sprintf("unknown provider %q", request.Provider)}
 		return nil
+	}
+	if request.Op == "provider.load" || request.Op == "provider.tracks" {
+		if err := ipcProviderPlayable(entry.Provider, request.Playlist); err != nil {
+			request.Reply <- ipc.Response{OK: false, Error: err.Error()}
+			return nil
+		}
 	}
 
 	switch request.Op {
@@ -437,7 +444,7 @@ func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 				request.Reply <- ipcResponseError(err)
 			} else {
 				page, total := ipcPage(albums, request.Offset, request.Limit, 200)
-				request.Reply <- ipc.Response{OK: true, Albums: ipcAlbumInfos(page), Total: total}
+				request.Reply <- ipc.Response{OK: true, Albums: ipcProviderAlbumInfos(entry.Provider, page), Total: total}
 			}
 			return nil
 		}
@@ -466,7 +473,7 @@ func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 			for i, item := range sorts {
 				sortItems[i] = ipc.SortInfo{ID: item.ID, Label: item.Label}
 			}
-			request.Reply <- ipc.Response{OK: true, Albums: ipcAlbumInfos(albums), Sorts: sortItems, Total: len(albums)}
+			request.Reply <- ipc.Response{OK: true, Albums: ipcProviderAlbumInfos(entry.Provider, albums), Sorts: sortItems, Total: len(albums)}
 			return nil
 		}
 	case "provider.album_tracks", "provider.load_album":
@@ -515,8 +522,16 @@ func ipcProviderPlaylistInfos(entry provider.Entry) ([]ipc.PlaylistInfo, error) 
 	items := make([]ipc.PlaylistInfo, len(lists))
 	for i, list := range lists {
 		items[i] = ipc.PlaylistInfo{ID: list.ID, Name: list.Name, Provider: entry.Key, Section: list.Section, TrackCount: list.TrackCount, DurationSecs: list.DurationSecs, Favorite: list.Favorite}
+		if shows, ok := entry.Provider.(provider.ShowLister); ok {
+			items[i].Show = shows.IsShowID(list.ID)
+		}
 		if sectioned, ok := entry.Provider.(provider.SectionedList); ok {
 			items[i].Favoritable = sectioned.IsFavoritableID(list.ID)
+			if titler, ok := entry.Provider.(provider.SectionTitler); ok {
+				if title := titler.SectionTitle(sectioned.IDPrefix(list.ID)); title != "" {
+					items[i].Section = title
+				}
+			}
 		}
 	}
 	return items, nil
@@ -697,7 +712,17 @@ func ipcTrackInfos(tracks []playlist.Track, favorite func(playlist.Track) bool) 
 func ipcAlbumInfos(albums []provider.AlbumInfo) []ipc.AlbumInfo {
 	items := make([]ipc.AlbumInfo, len(albums))
 	for i, album := range albums {
-		items[i] = ipc.AlbumInfo{ID: album.ID, Name: album.Name, Artist: album.Artist, ArtistID: album.ArtistID, Year: album.Year, TrackCount: album.TrackCount, Genre: album.Genre}
+		items[i] = ipc.AlbumInfo{ID: album.ID, Name: album.Name, Artist: album.Artist, ArtistID: album.ArtistID, Year: album.Year, TrackCount: album.TrackCount, Genre: album.Genre, Restricted: album.Restricted}
+	}
+	return items
+}
+
+func ipcProviderAlbumInfos(source playlist.Provider, albums []provider.AlbumInfo) []ipc.AlbumInfo {
+	items := ipcAlbumInfos(albums)
+	if shows, ok := source.(provider.ShowLister); ok {
+		for i := range items {
+			items[i].Show = shows.IsShowID(items[i].ID)
+		}
 	}
 	return items
 }
@@ -708,7 +733,8 @@ func ipcTrackInfo(track playlist.Track, index, queuePosition int, favorite bool)
 	return ipc.TrackInfo{
 		Title: track.Title, Artist: track.Artist, Album: track.Album, Genre: track.Genre,
 		Path: track.Path, AlbumArtURL: track.AlbumArtURL, Year: track.Year,
-		TrackNumber: track.TrackNumber, DurationSecs: track.DurationSecs, Index: index,
+		EmbeddedLyrics: track.EmbeddedLyrics,
+		TrackNumber:    track.TrackNumber, DurationSecs: track.DurationSecs, Index: index,
 		QueuePosition: queuePosition, Stream: track.Stream, Realtime: track.Realtime,
 		Restricted: track.Restricted, Feed: track.Feed, Bookmark: favorite, Unplayable: track.Unplayable,
 		DirSourced: track.DirSourced, ProviderMeta: maps.Clone(track.ProviderMeta),
@@ -719,7 +745,8 @@ func ipcTrackFromInfo(info ipc.TrackInfo) playlist.Track {
 	return playlist.Track{
 		Title: info.Title, Artist: info.Artist, Album: info.Album, Genre: info.Genre,
 		Path: info.Path, AlbumArtURL: info.AlbumArtURL, Year: info.Year,
-		TrackNumber: info.TrackNumber, DurationSecs: info.DurationSecs,
+		EmbeddedLyrics: info.EmbeddedLyrics,
+		TrackNumber:    info.TrackNumber, DurationSecs: info.DurationSecs,
 		Stream: info.Stream || playlist.IsURL(info.Path), Realtime: info.Realtime,
 		Restricted: info.Restricted, Feed: info.Feed, Unplayable: info.Unplayable,
 		DirSourced: info.DirSourced, ProviderMeta: maps.Clone(info.ProviderMeta),

@@ -299,10 +299,14 @@ func (m *Model) handleProviderPaneKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "enter":
 		if m.provPane.signIn {
 			if auth, ok := m.provider.(playlist.Authenticator); ok {
+				cmd := m.startTUIProviderAuth(auth)
+				if cmd == nil {
+					return nil
+				}
 				m.provPane.signIn = false
 				m.provPane.loading = true
 				m.err = nil
-				return authenticateProviderCmd(auth, m.provider.Name(), nextRequest(&m.requests.auth))
+				return cmd
 			}
 		}
 		if len(m.provPane.lists) > 0 && !m.provPane.loading {

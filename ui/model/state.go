@@ -37,6 +37,12 @@ type playlistUndo struct {
 	persisted bool
 	removed   playlist.Track
 	savedIdx  int
+	// Desktop batches and reorders use the same Ctrl+Z slot. A saved reorder
+	// restores the exact document only while no other writer changed it.
+	persistedDocument              bool
+	documentBefore, documentAfter  []byte
+	restoreSource                  bool
+	previousLoaded, previousSource string
 }
 
 // netSearchScreenType identifies which screen of the net search overlay is active.

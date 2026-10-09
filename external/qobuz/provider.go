@@ -118,7 +118,15 @@ var signIn = newClientInteractive
 // Authenticate runs the interactive OAuth sign-in flow (opens a browser, waits
 // for the redirect). Implements playlist.Authenticator.
 func (p *QobuzProvider) Authenticate() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	return p.AuthenticateContext(context.Background())
+}
+
+// AuthenticateContext cancels the browser callback and token requests with the caller.
+func (p *QobuzProvider) AuthenticateContext(parent context.Context) error {
+	if err := parent.Err(); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(parent, 5*time.Minute)
 	defer cancel()
 
 	// Cancel the old flow and register this one in one lock hold, so a
@@ -145,6 +153,9 @@ func (p *QobuzProvider) Authenticate() error {
 	p.mu.Unlock()
 
 	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	p.mu.Lock()

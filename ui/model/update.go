@@ -232,10 +232,16 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case provAuthDoneMsg:
+		m.handleIPCProviderTUIAuthDone(msg)
 		cmd := m.handleProvAuthDone(msg)
 		return m, cmd
 
+	case ipcProviderAuthDoneMsg:
+		m.handleIPCProviderAuthDone(msg)
+		return m, nil
+
 	case ProvAuthURLMsg:
+		m.handleIPCProviderAuthURL(msg)
 		if !m.provPane.loading || !m.isActiveProvider(msg.ProviderName) {
 			return m, nil
 		}
@@ -354,6 +360,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ipcProviderLoadResult:
 		cmd := m.handleIPCProviderLoad(msg)
+		return m, cmd
+	case ipcProviderDesktopResult:
+		cmd := m.handleIPCProviderDesktopResult(msg)
+		return m, cmd
+	case ipcSourcesDesktopResult:
+		cmd := m.handleIPCDesktopSources(msg)
+		return m, cmd
+	case ipcPlaylistDesktopDoneMsg:
+		cmd := m.handleIPCPlaylistDesktopDone(msg)
 		return m, cmd
 
 	case ipcPlaylistRenamedMsg:

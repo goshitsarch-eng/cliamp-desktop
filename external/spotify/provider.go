@@ -101,7 +101,16 @@ var signIn = func(ctx context.Context, clientID string, existing *Session) (*Ses
 // session already exists at that point, its Web API token is missing or its
 // stream keys were rejected, so the session is rebuilt through the browser.
 func (p *SpotifyProvider) Authenticate() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	return p.AuthenticateContext(context.Background())
+}
+
+// AuthenticateContext stops the OAuth callback and network requests when the
+// caller cancels. Authenticate preserves the standalone TUI entry point.
+func (p *SpotifyProvider) AuthenticateContext(parent context.Context) error {
+	if err := parent.Err(); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(parent, 5*time.Minute)
 	defer cancel()
 
 	// Cancel the old flow and register this one in one lock hold, so a
@@ -130,6 +139,12 @@ func (p *SpotifyProvider) Authenticate() error {
 	p.mu.Unlock()
 
 	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		if sess != nil {
+			sess.Close()
+		}
 		return err
 	}
 	p.mu.Lock()

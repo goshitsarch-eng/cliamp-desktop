@@ -46,6 +46,8 @@ type V2Request struct {
 	Params    json.RawMessage `json:"params,omitempty"`
 	JobID     string          `json:"job_id,omitempty"`
 	Topics    []string        `json:"topics,omitempty"`
+	Width     int             `json:"width,omitempty"`
+	Height    int             `json:"height,omitempty"`
 }
 
 // MarshalJSON always writes the required v2 envelope version.
@@ -114,6 +116,8 @@ type RuntimeSnapshot struct {
 	Duration         float64    `json:"duration,omitempty"`
 	Seekable         bool       `json:"seekable"`
 	Volume           float64    `json:"volume,omitempty"`
+	VolumeMin        float64    `json:"volume_min"`
+	LyricsOffsetMS   int64      `json:"lyrics_offset_ms"`
 	Playlist         string     `json:"playlist,omitempty"`
 	Index            int        `json:"index,omitempty"`
 	Total            int        `json:"total,omitempty"`
@@ -128,6 +132,8 @@ type RuntimeSnapshot struct {
 	Visualizer       string     `json:"visualizer,omitempty"`
 	Theme            *ThemeInfo `json:"theme,omitempty"`
 	StreamError      string     `json:"stream_error,omitempty"`
+	Notice           string     `json:"notice,omitempty"`
+	NoticeError      bool       `json:"notice_error,omitempty"`
 }
 
 // V2Result is the dispatcher result payload. Exactly one of Result or

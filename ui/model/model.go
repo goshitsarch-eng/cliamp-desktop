@@ -311,6 +311,7 @@ const (
 
 // Model is the Bubbletea model for the CLIAMP TUI.
 type Model struct {
+	ipcPlaylistDesktop *ipcPlaylistDesktopState
 	downloadsDirectory string
 	// audioDevice names the output device that the last device switch or
 	// list reported. The runtime snapshot shows it.
@@ -500,6 +501,10 @@ type Model struct {
 	// ipcRuntime publishes GUI-facing runtime snapshots from the Update owner.
 	// It is shared by value-receiver copies of Model.
 	ipcRuntime *ipcRuntimeState
+
+	// desktop holds appearance preferences and interactive sign-in state for
+	// graphical clients. Its mutations belong to the Update owner.
+	desktop ipcDesktopState
 
 	// historyStore records Recently Played. It is nil when the config
 	// directory is unavailable. buildProviders in package main shares it with

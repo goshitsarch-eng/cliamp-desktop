@@ -105,7 +105,7 @@ const (
 )
 
 func providers() []providerSpec {
-	return []providerSpec{
+	return append([]providerSpec{
 		{
 			key:     "navidrome",
 			name:    "Navidrome / Subsonic",
@@ -435,13 +435,23 @@ func providers() []providerSpec {
 					{value: "low", label: "AAC 96kbps"},
 				},
 			},
-			owned: []string{"enabled", "quality"},
+			fields: []fieldSpec{
+				{key: "client_id", label: "OAuth Client ID (optional)", help: "leave blank to use cliamp's built-in client"},
+				{key: "client_secret", label: "OAuth Client Secret (optional)", secret: true, help: "only needed for an alternate OAuth client"},
+			},
+			owned: []string{"enabled", "quality", "client_id", "client_secret"},
 			body: func(v map[string]string) []config.KeyValue {
 				q := v[keyTidalQuality]
 				if q == "" {
 					q = "lossless"
 				}
-				return []config.KeyValue{rawKV("enabled", "true"), quotedKV("quality", q)}
+				kv := []config.KeyValue{rawKV("enabled", "true"), quotedKV("quality", q)}
+				for _, key := range []string{"client_id", "client_secret"} {
+					if v[key] != "" {
+						kv = append(kv, quotedKV(key, v[key]))
+					}
+				}
+				return kv
 			},
 		},
 		{
@@ -630,7 +640,7 @@ func providers() []providerSpec {
 				}
 			},
 		},
-	}
+	}, additionalDesktopProviders()...)
 }
 
 func netEaseCookiesFrom(v map[string]string) string {

@@ -519,7 +519,7 @@ func TestSetupValidateMatchesDocs(t *testing.T) {
 		"navidrome": true, "lyrion": true, "plex": true, "jellyfin": true,
 		"emby": true, "audiobookshelf": true, "netease": true,
 		"spotify": false, "qobuz": false, "tidal": false, "mixcloud": false,
-		"ytmusic": false,
+		"ytmusic": false, "soundcloud": false, "yandex": false,
 	}
 	specs := providers()
 	if len(specs) != len(want) {

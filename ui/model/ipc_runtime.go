@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/bjarneo/cliamp/internal/playback"
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
@@ -56,6 +57,9 @@ type ipcRuntimeFingerprint struct {
 	device           string
 	visualizer       string
 	theme            string
+	lyricsOffsetMS   int64
+	notice           string
+	noticeError      bool
 	streamTitle      string
 	streamError      string
 	// buffering, durationSecs and seekable change when a buffering track
@@ -107,6 +111,10 @@ func (m *Model) handleV2Request(msg V2RequestMsg) tea.Cmd {
 		response := m.v2BandsResponse()
 		m.replyV2(msg.Reply, ipc.V2Result{Result: marshalV2Result(response)}, nil)
 		return nil
+	case "visualizer.frame":
+		response, err := m.visualizerFrame(msg.Request.Width, msg.Request.Height)
+		m.replyV2(msg.Reply, ipc.V2Result{Result: marshalV2Result(response)}, err)
+		return nil
 	}
 
 	if msg.Jobs == nil || msg.JobID == "" {
@@ -131,6 +139,12 @@ func (m *Model) handleV2Request(msg V2RequestMsg) tea.Cmd {
 		return nil
 	}
 
+	if ipc.IsProviderDesktopOperation(request.Cmd) {
+		return m.handleV2ProviderDesktop(ctx, msg)
+	}
+	if isDesktopPlaylistOperation(request.Cmd) {
+		return m.handleV2DesktopPlaylistRequest(ctx, msg.Jobs, msg.JobID, request)
+	}
 	switch request.Cmd {
 	case "play":
 		var cmd tea.Cmd
@@ -191,14 +205,38 @@ func (m *Model) handleV2Request(msg V2RequestMsg) tea.Cmd {
 		m.saveSpeed()
 		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true, Speed: m.player.Speed()})
 		return nil
-	case "queue", "track.play", "track.queue", "queue.play", "queue.enqueue", "queue.remove", "queue.move", "queue.clear", "queue.list":
+	case "queue", "queue.enqueue", "queue.remove", "queue.move", "queue.clear", "playnext.remove", "playnext.move", "playnext.clear":
+		return m.handleV2DesktopQueueMutation(ctx, msg.Jobs, msg.JobID, request)
+	case "track.play", "track.queue", "queue.play", "queue.list":
 		return m.handleV2QueueRequest(ctx, msg.Jobs, msg.JobID, request)
-	case "playnext.list", "playnext.remove", "playnext.move", "playnext.clear":
+	case "playnext.list":
 		return m.handleV2PlayNext(msg.Jobs, msg.JobID, request)
-	case "theme":
+	case "desktop.theme.preview", "desktop.vis.preview":
+		return m.handleV2AppearancePreview(msg, request)
+	case "theme", "desktop.theme":
 		return m.handleV2Theme(msg.Jobs, msg.JobID, request)
 	case "vis":
 		return m.handleV2Visualizer(msg.Jobs, msg.JobID, request)
+	case "desktop.vis":
+		var params struct {
+			Index *int `json:"index"`
+		}
+		if err := json.Unmarshal(msg.Request.Params, &params); err != nil {
+			m.failV2Job(msg.Jobs, msg.JobID, v2InvalidParamsError())
+			return nil
+		}
+		return m.handleV2DesktopVisualizer(msg.Jobs, msg.JobID, request, params.Index)
+	case "desktop.vis.frame":
+		return m.handleV2VisualizerFrame(msg.Jobs, msg.JobID, request)
+	case "desktop.quit":
+		m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: true})
+		return func() tea.Msg { return playback.QuitMsg{} }
+	case "sources.load":
+		return m.handleV2DesktopSources(ctx, msg.Jobs, msg.JobID, request)
+	case "lyrics.offset":
+		return m.handleV2LyricsOffset(msg)
+	case "provider.auth", "provider.auth.status":
+		return m.handleV2ProviderAuth(msg.Jobs, msg.JobID, request)
 	case "device":
 		return m.handleV2Device(msg.Jobs, msg.JobID, request)
 	case "eq":
@@ -623,6 +661,8 @@ func (m *Model) runtimePlaylist() string {
 
 func (m *Model) runtimeSnapshot() ipc.RuntimeSnapshot {
 	snapshot := ipc.RuntimeSnapshot{Playlist: m.runtimePlaylist(), Device: m.audioDevice}
+	snapshot.Notice = m.status.text
+	snapshot.NoticeError = m.status.kind == feedbackError
 	if m.ipcRuntime != nil {
 		snapshot.Revision = m.ipcRuntime.revision
 	}
@@ -675,6 +715,8 @@ func (m *Model) runtimeSnapshot() ipc.RuntimeSnapshot {
 	snapshot.Duration = duration.Seconds()
 	snapshot.Seekable = m.player.Seekable()
 	snapshot.Volume = m.player.Volume()
+	snapshot.VolumeMin = m.player.VolumeMin()
+	snapshot.LyricsOffsetMS = m.lyrics.offset.Milliseconds()
 	mono := m.player.Mono()
 	snapshot.Mono = &mono
 	snapshot.Speed = m.player.Speed()
@@ -754,6 +796,9 @@ func (m *Model) runtimeFingerprint() ipcRuntimeFingerprint {
 		fingerprint.visualizer = m.vis.ModeName()
 	}
 	fingerprint.theme = m.ThemeName()
+	fingerprint.lyricsOffsetMS = m.lyrics.offset.Milliseconds()
+	fingerprint.notice = m.status.text
+	fingerprint.noticeError = m.status.kind == feedbackError
 	if err := m.player.StreamErr(); err != nil {
 		fingerprint.streamError = err.Error()
 	}
@@ -872,7 +917,7 @@ func isV2LibraryOperation(operation string) bool {
 
 func v2MutatesLivePlaylist(operation string) bool {
 	switch operation {
-	case "queue", "queue.play", "queue.enqueue", "queue.remove", "queue.move", "queue.clear", "track.play", "track.queue", "playnext.remove", "playnext.move", "playnext.clear":
+	case "queue", "queue.play", "queue.enqueue", "queue.remove", "queue.move", "queue.clear", "track.play", "track.queue", "playnext.remove", "playnext.move", "playnext.clear", "sources.load", "queue.undo", "tracks.append", "tracks.replace", "tracks.enqueue", "queue.remove_many", "playnext.remove_many":
 		return true
 	default:
 		return false

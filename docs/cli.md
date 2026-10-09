@@ -163,7 +163,7 @@ CLI flags override config file values for the current session only. Persisted bo
 
 ## Setup wizard
 
-Configure remote providers through a small TUI. Supported providers are Navidrome, Lyrion, Plex, Jellyfin, Emby, Spotify, Qobuz, Tidal, Mixcloud, NetEase, Audiobookshelf, and YouTube Music. Each provider page links to its required credentials. The wizard writes the provider keys into the `[provider]` section of `~/.config/cliamp/config.toml` and leaves the rest of the file unchanged. For YouTube Music, it edits an existing `[youtube]` or `[yt]` section. It checks the server connection during setup for Navidrome, Lyrion, Plex, Jellyfin, Emby, and Audiobookshelf, and the browser session for NetEase. OAuth providers (Spotify, Qobuz, Tidal) authenticate later in the player. Setup does not check Mixcloud credentials.
+Configure remote providers through a small TUI. Supported providers are Navidrome, Lyrion, Plex, Jellyfin, Emby, Spotify, Qobuz, Tidal, SoundCloud, Mixcloud, NetEase, Yandex Music, Audiobookshelf, and YouTube Music. Each provider page links to its required credentials. The wizard writes the provider keys into the `[provider]` section of `~/.config/cliamp/config.toml` and leaves the rest of the file unchanged. For YouTube Music, it edits an existing `[youtube]` or `[yt]` section. It checks the server connection during setup for Navidrome, Lyrion, Plex, Jellyfin, Emby, and Audiobookshelf, and the browser session for NetEase. OAuth providers (Spotify, Qobuz, Tidal) authenticate later in the player. Setup does not check SoundCloud, Mixcloud, or Yandex Music credentials.
 
 ```sh
 cliamp setup

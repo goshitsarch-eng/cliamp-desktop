@@ -41,7 +41,7 @@ func TestV2Operations(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			operations := v2Operations(tc.headless, tc.plugins)
-			for _, name := range append(append([]string{"play", "queue.list", "provider.search"}, appearance...), plugins...) {
+			for _, name := range append(append([]string{"play", "queue.list", "provider.search", "provider.auth", "provider.auth.status", "desktop.theme", "desktop.vis", "desktop.vis.frame", "desktop.quit"}, appearance...), plugins...) {
 				_, ok := operations.Lookup(name)
 				if want := !slices.Contains(tc.missing, name); ok != want {
 					t.Errorf("%s registered = %v, want %v", name, ok, want)

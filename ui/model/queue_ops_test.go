@@ -36,8 +36,8 @@ type queueOpState struct {
 
 // A queue edit follows one rule, whether a key, IPC or a Lua plugin starts
 // it. Each row runs one edit through a key press, runV2 and PluginQueueMsg
-// and expects the same end state. Only the x key records an undo. A remote
-// or plugin removal records none.
+// and expects the same end state. Desktop IPC also records the shared undo
+// snapshot; Lua edits continue to invalidate older undo without recording one.
 func TestQueueEditsFollowOneRule(t *testing.T) {
 	d := playlist.Track{Path: "/music/d.mp3"}
 	for _, tc := range []struct {
@@ -221,8 +221,12 @@ func TestQueueEditsFollowOneRule(t *testing.T) {
 			}
 			for entry, got := range states {
 				wantEntry := want
-				if entry != "key" {
+				if entry == "plugin" {
 					wantEntry.undo, wantEntry.undoHint = false, false
+				}
+				if entry == "V2" && tc.wantV2Err == "" {
+					wantEntry.undo = true
+					wantEntry.undoHint = tc.v2Op == "queue.remove"
 				}
 				if got != wantEntry {
 					t.Errorf("%s: state = %+v, want %+v", entry, got, wantEntry)
@@ -370,9 +374,9 @@ func TestPlaylistUndoRestoresOnlyTheLastEdit(t *testing.T) {
 					t.Fatalf("queue.remove = %+v", response)
 				}
 			},
-			refused: true,
 			want: func(s queueOpState) bool {
-				return s.queue == "a" && s.saved == "a" && s.loaded == "Mix"
+				// The most recent IPC edit owns the shared undo slot.
+				return s.queue == "a c" && s.saved == "a c" && s.loaded == "Mix"
 			},
 		},
 		{
@@ -382,9 +386,8 @@ func TestPlaylistUndoRestoresOnlyTheLastEdit(t *testing.T) {
 					t.Fatalf("queue.move = %+v", response)
 				}
 			},
-			refused: true,
 			want: func(s queueOpState) bool {
-				return s.queue == "c a" && s.saved == "c a" && s.loaded == "Mix"
+				return s.queue == "a c" && s.saved == "a c" && s.loaded == "Mix"
 			},
 		},
 		{
