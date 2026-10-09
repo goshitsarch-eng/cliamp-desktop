@@ -132,7 +132,15 @@ var signIn = newClientInteractive
 // Authenticate runs the interactive device-flow sign-in (shows a
 // link.tidal.com URL, waits for approval). Implements playlist.Authenticator.
 func (p *TidalProvider) Authenticate() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	return p.AuthenticateContext(context.Background())
+}
+
+// AuthenticateContext stops device authorization polling when the caller cancels.
+func (p *TidalProvider) AuthenticateContext(parent context.Context) error {
+	if err := parent.Err(); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(parent, 5*time.Minute)
 	defer cancel()
 
 	// Cancel the old flow and register this one in one lock hold, so a
@@ -159,6 +167,9 @@ func (p *TidalProvider) Authenticate() error {
 	p.mu.Unlock()
 
 	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	p.mu.Lock()

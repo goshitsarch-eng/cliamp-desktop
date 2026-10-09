@@ -14,6 +14,15 @@ https://github.com/user-attachments/assets/55e251f2-e13b-43d9-bb6a-7b1960e7d7d0
   <a href="https://contextowl.co"><img src="https://contextowl.co/uploads/_brand/sponsor-dark.svg" alt="Proudly sponsored by contextowl.co" width="400"></a>
 </div>
 
+## Desktop app
+
+A modern Flutter desktop frontend lives in `desktop/`, with native projects for
+Linux, Windows, and macOS. It uses the existing Go player and adds provider
+discovery and setup, playlist editing with undo, plugin management, preferences,
+synced lyrics, and the original visualizers. See the [desktop guide](docs/desktop.md)
+for builds and the [feature checklist](docs/desktop-feature-parity.md) for coverage
+and platform validation status.
+
 ## Install
 
 ```sh

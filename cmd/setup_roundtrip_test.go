@@ -138,6 +138,20 @@ func TestSetupBodyRoundTrip(t *testing.T) {
 			},
 			want: []string{quote, mixed, backslash},
 		},
+		{
+			section: "soundcloud",
+			values:  map[string]string{"user": mixed, "cookies_from": backslash},
+			got: func(c config.Config) []string {
+				return []string{strconv.FormatBool(c.SoundCloud.IsSet()), c.SoundCloud.User, c.SoundCloud.CookiesFrom}
+			},
+			want: []string{"true", mixed, backslash},
+		},
+		{
+			section: "yandex",
+			values:  map[string]string{"token": mixed},
+			got:     func(c config.Config) []string { return []string{strconv.FormatBool(c.Yandex.IsSet()), c.Yandex.Token} },
+			want:    []string{"true", mixed},
+		},
 	}
 
 	tested := map[string]bool{}

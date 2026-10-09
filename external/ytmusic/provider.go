@@ -79,11 +79,18 @@ var signIn = NewSession
 // If interactive is true, a browser-based OAuth flow is started. Any previous
 // in-progress OAuth flow is cancelled first to free the callback port.
 func (b *baseProvider) initSession(interactive bool) error {
+	return b.initSessionContext(context.Background(), interactive)
+}
+
+func (b *baseProvider) initSessionContext(parent context.Context, interactive bool) error {
+	if err := parent.Err(); err != nil {
+		return err
+	}
 	timeout := 30 * time.Second
 	if interactive {
 		timeout = 5 * time.Minute
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
 	b.mu.Lock()
@@ -133,6 +140,9 @@ func (b *baseProvider) initSession(interactive bool) error {
 		return err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	b.mu.Lock()
 	if b.session == nil {
 		if b.cacheScope != sess.cacheScope {
@@ -499,8 +509,12 @@ type YouTubeMusicProvider struct {
 
 func (p *YouTubeMusicProvider) Name() string        { return "YouTube Music" }
 func (p *YouTubeMusicProvider) Authenticate() error { return p.base.authenticate() }
-func (p *YouTubeMusicProvider) Close()              { p.base.close() }
-func (p *YouTubeMusicProvider) Refresh()            { p.base.refresh() }
+func (p *YouTubeMusicProvider) AuthenticateContext(ctx context.Context) error {
+	return p.base.initSessionContext(ctx, true)
+}
+func (p *YouTubeMusicProvider) AuthenticationGroup() string { return "youtube" }
+func (p *YouTubeMusicProvider) Close()                      { p.base.close() }
+func (p *YouTubeMusicProvider) Refresh()                    { p.base.refresh() }
 func (p *YouTubeMusicProvider) Tracks(id string) ([]playlist.Track, error) {
 	return p.base.tracks(id)
 }
@@ -529,8 +543,12 @@ type YouTubeProvider struct {
 
 func (p *YouTubeProvider) Name() string        { return "YouTube" }
 func (p *YouTubeProvider) Authenticate() error { return p.base.authenticate() }
-func (p *YouTubeProvider) Close()              { p.base.close() }
-func (p *YouTubeProvider) Refresh()            { p.base.refresh() }
+func (p *YouTubeProvider) AuthenticateContext(ctx context.Context) error {
+	return p.base.initSessionContext(ctx, true)
+}
+func (p *YouTubeProvider) AuthenticationGroup() string { return "youtube" }
+func (p *YouTubeProvider) Close()                      { p.base.close() }
+func (p *YouTubeProvider) Refresh()                    { p.base.refresh() }
 func (p *YouTubeProvider) Tracks(id string) ([]playlist.Track, error) {
 	return p.base.tracks(id)
 }
@@ -559,8 +577,12 @@ type YouTubeAllProvider struct {
 
 func (p *YouTubeAllProvider) Name() string        { return "YouTube (All)" }
 func (p *YouTubeAllProvider) Authenticate() error { return p.base.authenticate() }
-func (p *YouTubeAllProvider) Close()              { p.base.close() }
-func (p *YouTubeAllProvider) Refresh()            { p.base.refresh() }
+func (p *YouTubeAllProvider) AuthenticateContext(ctx context.Context) error {
+	return p.base.initSessionContext(ctx, true)
+}
+func (p *YouTubeAllProvider) AuthenticationGroup() string { return "youtube" }
+func (p *YouTubeAllProvider) Close()                      { p.base.close() }
+func (p *YouTubeAllProvider) Refresh()                    { p.base.refresh() }
 func (p *YouTubeAllProvider) Tracks(id string) ([]playlist.Track, error) {
 	return p.base.tracks(id)
 }

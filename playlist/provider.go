@@ -1,6 +1,9 @@
 package playlist
 
-import "errors"
+import (
+	"context"
+	"errors"
+)
 
 // ErrNeedsAuth is returned by providers that require interactive sign-in
 // before they can be used.
@@ -59,6 +62,18 @@ type Provider interface {
 // Authenticator is optionally implemented by providers that require sign-in.
 type Authenticator interface {
 	Authenticate() error
+}
+
+// ContextAuthenticator supports stopping browser callbacks and device polling
+// when the caller cancels a sign-in operation.
+type ContextAuthenticator interface {
+	AuthenticateContext(context.Context) error
+}
+
+// AuthenticationGroupProvider identifies providers that share one sign-in
+// session. Frontends must not run concurrent authentication for that group.
+type AuthenticationGroupProvider interface {
+	AuthenticationGroup() string
 }
 
 // Refresher is optionally implemented by providers that cache playlist or

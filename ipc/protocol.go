@@ -21,6 +21,7 @@ type Request struct {
 	Sort     string      `json:"sort,omitempty"`
 	Offset   int         `json:"offset,omitempty"`
 	Index    int         `json:"index,omitempty"`
+	Indexes  []int       `json:"indexes,omitempty"`
 	To       int         `json:"to,omitempty"`
 	Limit    int         `json:"limit,omitempty"`
 	Revision uint64      `json:"if_revision,omitempty"`
@@ -29,42 +30,58 @@ type Request struct {
 	Tracks   []TrackInfo `json:"tracks,omitempty"`
 	Topics   []string    `json:"topics,omitempty"`
 	Play     bool        `json:"play,omitempty"`
+	Width    int         `json:"width,omitempty"`
+	Height   int         `json:"height,omitempty"`
 }
 
 // Response is the operation-specific data embedded in a successful V2 job.
 // V2Response and Job carry protocol success and failure state.
 type Response struct {
-	OK         bool           `json:"ok"`
-	Error      string         `json:"error,omitempty"`
-	State      string         `json:"state,omitempty"`
-	Track      *TrackInfo     `json:"track,omitempty"`
-	Position   float64        `json:"position,omitempty"`
-	Duration   float64        `json:"duration,omitempty"`
-	Volume     float64        `json:"volume,omitempty"`
-	Playlist   string         `json:"playlist,omitempty"`
-	Index      int            `json:"index,omitempty"`
-	Total      int            `json:"total,omitempty"`
-	Visualizer string         `json:"visualizer,omitempty"`
-	Shuffle    *bool          `json:"shuffle,omitempty"`
-	Repeat     string         `json:"repeat,omitempty"`
-	Mono       *bool          `json:"mono,omitempty"`
-	Speed      float64        `json:"speed,omitempty"`
-	EQPreset   string         `json:"eq_preset,omitempty"`
-	Device     string         `json:"device,omitempty"`
-	Output     string         `json:"output,omitempty"`
-	Items      []string       `json:"items,omitempty"`
-	Theme      *ThemeInfo     `json:"theme,omitempty"`
-	Bands      []float64      `json:"bands,omitempty"`
-	EQBands    []float64      `json:"eq_bands,omitempty"`
-	Tracks     []TrackInfo    `json:"tracks,omitempty"`
-	Playlists  []PlaylistInfo `json:"playlists,omitempty"`
-	Providers  []ProviderInfo `json:"providers,omitempty"`
-	Artists    []ArtistInfo   `json:"artists,omitempty"`
-	Albums     []AlbumInfo    `json:"albums,omitempty"`
-	Sorts      []SortInfo     `json:"sorts,omitempty"`
-	Lyrics     []LyricLine    `json:"lyrics,omitempty"`
-	History    []HistoryInfo  `json:"history,omitempty"`
-	Devices    []DeviceInfo   `json:"devices,omitempty"`
+	OK         bool              `json:"ok"`
+	Error      string            `json:"error,omitempty"`
+	State      string            `json:"state,omitempty"`
+	Track      *TrackInfo        `json:"track,omitempty"`
+	Position   float64           `json:"position,omitempty"`
+	Duration   float64           `json:"duration,omitempty"`
+	Volume     float64           `json:"volume,omitempty"`
+	Playlist   string            `json:"playlist,omitempty"`
+	Index      int               `json:"index,omitempty"`
+	Total      int               `json:"total,omitempty"`
+	Visualizer string            `json:"visualizer,omitempty"`
+	Shuffle    *bool             `json:"shuffle,omitempty"`
+	Repeat     string            `json:"repeat,omitempty"`
+	Mono       *bool             `json:"mono,omitempty"`
+	Speed      float64           `json:"speed,omitempty"`
+	EQPreset   string            `json:"eq_preset,omitempty"`
+	Device     string            `json:"device,omitempty"`
+	Output     string            `json:"output,omitempty"`
+	Items      []string          `json:"items,omitempty"`
+	Theme      *ThemeInfo        `json:"theme,omitempty"`
+	Bands      []float64         `json:"bands,omitempty"`
+	EQBands    []float64         `json:"eq_bands,omitempty"`
+	Tracks     []TrackInfo       `json:"tracks,omitempty"`
+	Playlists  []PlaylistInfo    `json:"playlists,omitempty"`
+	Providers  []ProviderInfo    `json:"providers,omitempty"`
+	Artists    []ArtistInfo      `json:"artists,omitempty"`
+	Albums     []AlbumInfo       `json:"albums,omitempty"`
+	Sorts      []SortInfo        `json:"sorts,omitempty"`
+	Lyrics     []LyricLine       `json:"lyrics,omitempty"`
+	History    []HistoryInfo     `json:"history,omitempty"`
+	Devices    []DeviceInfo      `json:"devices,omitempty"`
+	Auth       *ProviderAuthInfo `json:"auth,omitempty"`
+	Frame      string            `json:"frame,omitempty"`
+	Width      int               `json:"width,omitempty"`
+	Height     int               `json:"height,omitempty"`
+}
+
+// ProviderAuthInfo describes an interactive sign-in in this runtime. Idle
+// means no sign-in has started here; it does not inspect stored credentials.
+type ProviderAuthInfo struct {
+	Provider    string `json:"provider"`
+	State       string `json:"state"`
+	Cancellable bool   `json:"cancellable"`
+	URL         string `json:"url,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 // ThemeInfo carries the active theme name and its resolved hex colors.
@@ -82,30 +99,32 @@ type ThemeInfo struct {
 
 // TrackInfo is the track metadata in a status response.
 type TrackInfo struct {
-	Title         string            `json:"title,omitempty"`
-	Artist        string            `json:"artist,omitempty"`
-	Album         string            `json:"album,omitempty"`
-	Genre         string            `json:"genre,omitempty"`
-	Path          string            `json:"path"`
-	AlbumArtURL   string            `json:"album_art_url,omitempty"`
-	Year          int               `json:"year,omitempty"`
-	TrackNumber   int               `json:"track_number,omitempty"`
-	DurationSecs  int               `json:"duration_secs,omitempty"`
-	Index         int               `json:"index,omitempty"`
-	QueuePosition int               `json:"queue_position,omitempty"`
-	Stream        bool              `json:"stream,omitempty"`
-	StreamTitle   string            `json:"stream_title,omitempty"`
-	Station       string            `json:"station,omitempty"`
-	Realtime      bool              `json:"realtime,omitempty"`
-	Restricted    bool              `json:"restricted,omitempty"`
-	Feed          bool              `json:"feed,omitempty"`
-	Bookmark      bool              `json:"bookmark,omitempty"`
-	Unplayable    bool              `json:"unplayable,omitempty"`
-	DirSourced    bool              `json:"dir_sourced,omitempty"`
-	ProviderMeta  map[string]string `json:"provider_meta,omitempty"`
+	Title          string            `json:"title,omitempty"`
+	Artist         string            `json:"artist,omitempty"`
+	Album          string            `json:"album,omitempty"`
+	Genre          string            `json:"genre,omitempty"`
+	Path           string            `json:"path"`
+	AlbumArtURL    string            `json:"album_art_url,omitempty"`
+	EmbeddedLyrics string            `json:"embedded_lyrics,omitempty"`
+	Year           int               `json:"year,omitempty"`
+	TrackNumber    int               `json:"track_number,omitempty"`
+	DurationSecs   int               `json:"duration_secs,omitempty"`
+	Index          int               `json:"index,omitempty"`
+	QueuePosition  int               `json:"queue_position,omitempty"`
+	Stream         bool              `json:"stream,omitempty"`
+	StreamTitle    string            `json:"stream_title,omitempty"`
+	Station        string            `json:"station,omitempty"`
+	Realtime       bool              `json:"realtime,omitempty"`
+	Restricted     bool              `json:"restricted,omitempty"`
+	Feed           bool              `json:"feed,omitempty"`
+	Bookmark       bool              `json:"bookmark,omitempty"`
+	Unplayable     bool              `json:"unplayable,omitempty"`
+	DirSourced     bool              `json:"dir_sourced,omitempty"`
+	ProviderMeta   map[string]string `json:"provider_meta,omitempty"`
 }
 
 type PlaylistInfo struct {
+	Show         bool   `json:"show,omitempty"`
 	ID           string `json:"id"`
 	Name         string `json:"name"`
 	Provider     string `json:"provider"`
@@ -117,12 +136,13 @@ type PlaylistInfo struct {
 }
 
 type ProviderInfo struct {
-	Key           string `json:"key"`
-	Name          string `json:"name"`
-	Searchable    bool   `json:"searchable"`
-	BrowseArtists bool   `json:"browse_artists,omitempty"`
-	BrowseAlbums  bool   `json:"browse_albums,omitempty"`
-	Catalog       bool   `json:"catalog,omitempty"`
+	Key             string `json:"key"`
+	Name            string `json:"name"`
+	Searchable      bool   `json:"searchable"`
+	BrowseArtists   bool   `json:"browse_artists,omitempty"`
+	BrowseAlbums    bool   `json:"browse_albums,omitempty"`
+	Catalog         bool   `json:"catalog,omitempty"`
+	Authenticatable bool   `json:"authenticatable,omitempty"`
 }
 
 type ArtistInfo struct {
@@ -132,6 +152,8 @@ type ArtistInfo struct {
 }
 
 type AlbumInfo struct {
+	Show       bool   `json:"show,omitempty"`
+	Restricted bool   `json:"restricted,omitempty"`
 	ID         string `json:"id"`
 	Name       string `json:"name"`
 	Artist     string `json:"artist,omitempty"`

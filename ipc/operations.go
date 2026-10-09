@@ -138,8 +138,15 @@ func DefaultOperationRegistry() *OperationRegistry {
 		{Name: "device", Description: "list or switch audio devices", Parameters: []string{"name"}},
 		{Name: "theme", Description: "list or change themes", Parameters: []string{"name"}},
 		{Name: "vis", Description: "list or change visualizers", Parameters: []string{"name"}},
+		{Name: "desktop.theme.preview", Description: "preview a theme without saving", Parameters: []string{"name"}},
+		{Name: "desktop.vis.preview", Description: "preview a visualizer without saving", Parameters: []string{"index"}},
+		{Name: "desktop.theme", Description: "list or change desktop themes, including in headless mode", Parameters: []string{"name"}},
+		{Name: "desktop.vis", Description: "list or change desktop visualizers, including in headless mode", Parameters: []string{"name", "index"}},
+		{Name: "desktop.vis.frame", Description: "render the active built-in or Lua visualizer as ANSI text", Parameters: []string{"width", "height"}},
+		{Name: "desktop.quit", Description: "quit gracefully, saving playback state"},
 		{Name: "load", Description: "load a local playlist", Async: true, Parameters: []string{"playlist"}},
 		{Name: "queue", Description: "append one path to the live playlist", Parameters: []string{"path", "if_revision"}},
+		{Name: "sources.load", Description: "resolve selected sources and atomically append or replace the queue", Async: true, Parameters: []string{"args", "name", "play", "if_revision"}},
 		{Name: "url.load", Description: "resolve and append a URL, optionally playing it", Async: true, Parameters: []string{"path", "play"}},
 		{Name: "save", Description: "download the current track", Async: true},
 		{Name: "queue.list", Description: "list the live playlist", Parameters: []string{"offset", "limit"}},
@@ -155,6 +162,8 @@ func DefaultOperationRegistry() *OperationRegistry {
 		{Name: "playnext.move", Description: "move a play-next entry", Parameters: []string{"index", "to", "if_revision"}},
 		{Name: "playnext.clear", Description: "clear play-next entries", Parameters: []string{"if_revision"}},
 		{Name: "provider.list", Description: "list configured providers"},
+		{Name: "provider.auth", Description: "start interactive provider sign-in", Async: true, Parameters: []string{"provider"}},
+		{Name: "provider.auth.status", Description: "read interactive provider sign-in state", Parameters: []string{"provider"}},
 		{Name: "provider.playlists", Description: "list provider playlists", Async: true, Parameters: []string{"provider", "offset", "limit"}},
 		{Name: "provider.tracks", Description: "list provider tracks", Async: true, Parameters: []string{"provider", "playlist", "offset", "limit"}},
 		{Name: "provider.load", Description: "load a provider playlist", Async: true, Parameters: []string{"provider", "playlist"}},
@@ -175,9 +184,12 @@ func DefaultOperationRegistry() *OperationRegistry {
 		{Name: "playlist.remove", Description: "remove a saved playlist track", Async: true, Parameters: []string{"provider", "playlist", "index"}},
 		{Name: "playlist.bookmark", Description: "toggle a track favorite (legacy name)", Async: true, Parameters: []string{"provider", "playlist", "track"}},
 		{Name: "lyrics", Description: "fetch lyrics", Async: true},
+		{Name: "lyrics.offset", Description: "read or set lyric timing offset in milliseconds", Parameters: []string{"value"}},
 		{Name: "history", Description: "read history", Async: true, Parameters: []string{"limit"}},
 		{Name: "history.clear", Description: "clear history", Async: true},
 		{Name: "plugin.call", Description: "invoke a plugin command", Async: true, Parameters: []string{"name", "sub", "args"}},
+		{Name: "plugin.keys", Description: "list plugin keyboard actions"},
+		{Name: "plugin.key", Description: "dispatch a registered plugin keyboard action", Parameters: []string{"name"}},
 		{Name: "plugin.commands", Description: "list plugin commands"},
 	}
 	// Operations are submitted as jobs, including fast reads, so callers have a
@@ -188,7 +200,10 @@ func DefaultOperationRegistry() *OperationRegistry {
 			operations[i].Async = true
 		}
 	}
-	return NewOperationRegistry(operations...)
+	registry := NewOperationRegistry(operations...)
+	RegisterProviderDesktopOperations(registry)
+	RegisterDesktopPlaylistOperations(registry)
+	return registry
 }
 
 func validateOperationParams(params json.RawMessage) *V2Error {
@@ -204,7 +219,7 @@ func validateOperationParams(params json.RawMessage) *V2Error {
 			return invalidV2Params()
 		}
 	}
-	for _, name := range []string{"index", "to", "offset", "limit", "if_revision"} {
+	for _, name := range []string{"index", "to", "offset", "limit", "if_revision", "width", "height"} {
 		raw, ok := values[name]
 		if !ok {
 			continue

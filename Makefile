@@ -69,3 +69,10 @@ clean:
 install: build
 	install -d $(HOME)/.local/bin
 	install -m 755 $(BINARY) $(HOME)/.local/bin/$(BINARY)
+
+.PHONY: desktop desktop-test
+desktop:
+	python3 desktop/tool/build.py
+
+desktop-test:
+	cd desktop && flutter analyze && flutter test

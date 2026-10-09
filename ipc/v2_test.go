@@ -59,6 +59,9 @@ func TestOperationRegistryValidation(t *testing.T) {
 		{name: "fractional index", params: `{"index":1.5}`, want: V2ErrorCodeInvalidParams},
 		{name: "string index", params: `{"index":"1"}`, want: V2ErrorCodeInvalidParams},
 		{name: "negative index", params: `{"index":-1}`, want: V2ErrorCodeInvalidParams},
+		{name: "fractional frame width", params: `{"width":80.5}`, want: V2ErrorCodeInvalidParams},
+		{name: "negative frame height", params: `{"height":-1}`, want: V2ErrorCodeInvalidParams},
+		{name: "string frame width", params: `{"width":"80"}`, want: V2ErrorCodeInvalidParams},
 		{name: "malformed batch", params: `{"batch":{}}`, want: V2ErrorCodeInvalidParams},
 		{name: "invalid JSON", params: `{"value":NaN}`, want: V2ErrorCodeInvalidParams},
 	}

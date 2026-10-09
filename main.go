@@ -336,6 +336,8 @@ func configureModel(m *model.Model, cfg config.Config, headless, visualizer60FPS
 	}
 	if headless {
 		// The default visualizer stays, because it serves spectrum.get.
+		// A desktop client opts in to its saved selection on first use.
+		m.SetDesktopVisualizer(cfg.Visualizer)
 		m.SetHeadless(true)
 		return
 	}
@@ -494,7 +496,7 @@ func v2Operations(headless, plugins bool) *ipc.OperationRegistry {
 }
 
 // v2ReplyTimeout bounds the wait for the Model to answer state.get and
-// spectrum.get.
+// spectrum.get and visualizer.frame.
 var v2ReplyTimeout = 3 * time.Second
 
 // newV2Dispatcher answers the V2 requests of the TUI and of headless mode.
@@ -505,7 +507,7 @@ var v2ReplyTimeout = 3 * time.Second
 func newV2Dispatcher(send func(tea.Msg), jobs *ipc.JobStore, plugins *luaplugin.Manager) ipc.V2Dispatcher {
 	return ipc.V2DispatcherFunc(func(ctx context.Context, request ipc.V2Request) (ipc.V2Result, *ipc.V2Error) {
 		switch request.Method {
-		case "state.get", "spectrum.get":
+		case "state.get", "spectrum.get", "visualizer.frame":
 			reply := make(chan model.V2RequestResult, 1)
 			send(model.V2RequestMsg{Request: request, Reply: reply})
 			select {
@@ -522,7 +524,7 @@ func newV2Dispatcher(send func(tea.Msg), jobs *ipc.JobStore, plugins *luaplugin.
 		if err != nil {
 			return ipc.V2Result{}, &ipc.V2Error{Code: ipc.V2ErrorCodeConflict, Message: ipc.V2MessageConflict}
 		}
-		if request.Operation == "plugin.call" || request.Operation == "plugin.commands" {
+		if request.Operation == "plugin.call" || request.Operation == "plugin.commands" || request.Operation == "plugin.keys" || request.Operation == "plugin.key" {
 			go runV2PluginJob(jobs, job.ID, request, plugins)
 			return ipc.V2Result{Job: &job}, nil
 		}
@@ -540,6 +542,29 @@ func runV2PluginJob(jobs *ipc.JobStore, jobID string, request ipc.V2Request, plu
 		_ = jobs.Fail(jobID, ipc.V2Error{Code: ipc.V2ErrorCodeUnavailable, Message: ipc.V2MessageUnavailable})
 		return
 	}
+	if request.Operation == "plugin.keys" {
+		data, err := json.Marshal(map[string]any{"ok": true, "bindings": plugins.DesktopKeyBindings()})
+		if err != nil {
+			_ = jobs.Fail(jobID, ipc.V2Error{Code: ipc.V2ErrorCodeInternal, Message: ipc.V2MessageInternal})
+			return
+		}
+		_ = jobs.Succeed(jobID, data)
+		return
+	}
+	if request.Operation == "plugin.key" {
+		var params ipc.Request
+		if json.Unmarshal(request.Params, &params) != nil || strings.TrimSpace(params.Name) == "" {
+			_ = jobs.Fail(jobID, ipc.V2Error{Code: ipc.V2ErrorCodeInvalidParams, Message: ipc.V2MessageInvalidParams})
+			return
+		}
+		if !plugins.EmitKey(strings.ToLower(strings.TrimSpace(params.Name))) {
+			_ = jobs.Fail(jobID, ipc.V2Error{Code: ipc.V2ErrorCodeNotFound, Message: ipc.V2MessageNotFound})
+			return
+		}
+		_ = jobs.Succeed(jobID, json.RawMessage(`{"ok":true}`))
+		return
+	}
+
 	if request.Operation == "plugin.commands" {
 		data, err := json.Marshal(ipc.Response{OK: true, Items: plugins.CommandList()})
 		if err != nil {

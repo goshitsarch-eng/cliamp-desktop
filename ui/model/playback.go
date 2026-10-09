@@ -349,24 +349,37 @@ func (m *Model) recordPlaylistUndo(undo playlistUndo) {
 }
 
 func (m *Model) undoPlaylistMutation() tea.Cmd {
+	cmd, err := m.restorePlaylistMutation()
+	if err != nil {
+		m.status.Warning(err.Error(), statusTTLDefault)
+	}
+	return cmd
+}
+
+// restorePlaylistMutation is shared by Ctrl+Z and graphical queue.undo. The
+// caller receives persistence failures so IPC cannot report a failed undo as
+// a successful operation.
+func (m *Model) restorePlaylistMutation() (tea.Cmd, error) {
 	undo := m.playlistUndo
 	if !undo.active {
-		m.status.Warning("Nothing to undo", statusTTLShort)
-		return nil
+		return nil, errors.New("nothing to undo")
 	}
 	if undo.revision != m.playlist.Revision() || undo.loaded != m.loadedPlaylist {
 		// Restoring the snapshot would drop every change since the edit.
 		m.playlistUndo = playlistUndo{}
-		m.status.Warning("Can't undo: the playlist changed since the edit", statusTTLDefault)
-		return nil
+		return nil, errDesktopPlaylistConflict
+	}
+	if undo.persistedDocument {
+		if err := restoreDesktopQueueDocument(m.localProvider, undo); err != nil {
+			return nil, err
+		}
 	}
 	if undo.persisted {
 		// Put back only the removed track in one locked update, so a track
 		// that another writer added since the edit is kept.
 		updater, ok := m.localProvider.(playlistUpdater)
 		if !ok {
-			m.status.Warning("Undo unavailable", statusTTLDefault)
-			return nil
+			return nil, errors.New("undo unavailable")
 		}
 		err := updater.UpdatePlaylist(undo.loaded, func(tracks []playlist.Track) ([]playlist.Track, error) {
 			if slices.ContainsFunc(tracks, func(t playlist.Track) bool { return t.Path == undo.removed.Path }) {
@@ -375,11 +388,14 @@ func (m *Model) undoPlaylistMutation() tea.Cmd {
 			return slices.Insert(tracks, min(undo.savedIdx, len(tracks)), undo.removed), nil
 		})
 		if err != nil {
-			m.status.Errorf(statusTTLDefault, "Undo failed: %s", err)
-			return nil
+			return nil, err
 		}
 	}
 	m.playlist.Restore(undo.snapshot)
+	if undo.restoreSource {
+		m.loadedPlaylist, m.playlistSource = undo.previousLoaded, undo.previousSource
+	}
+	m.recountHeaderState(m.playlist.Tracks())
 	m.normalizeQueueOverlay()
 	m.playlistUndo = playlistUndo{}
 	if m.plCursor >= m.playlist.Len() {
@@ -387,7 +403,7 @@ func (m *Model) undoPlaylistMutation() tea.Cmd {
 	}
 	m.adjustScroll()
 	m.status.Show("Restored previous playlist state", statusTTLDefault)
-	return m.rearmStalePreload()
+	return m.rearmStalePreload(), nil
 }
 
 // playTrack plays a track, using async starts for streams and local ffmpeg
