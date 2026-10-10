@@ -2,6 +2,8 @@ package model
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -44,6 +46,20 @@ func (m *Model) handleV2DesktopSources(ctx context.Context, jobs *ipc.JobStore, 
 			if err != nil {
 				result.err = err
 				return result
+			}
+			for _, track := range tracks {
+				if track.Stream || playlist.IsURL(track.Path) || strings.HasPrefix(track.Path, "ssh://") {
+					continue
+				}
+				info, err := os.Stat(track.Path)
+				if err != nil {
+					result.err = fmt.Errorf("playlist entry is unavailable: %w", err)
+					return result
+				}
+				if !info.Mode().IsRegular() {
+					result.err = fmt.Errorf("playlist entry is not an audio file: %s", track.Path)
+					return result
+				}
 			}
 			result.tracks = append(result.tracks, tracks...)
 		}

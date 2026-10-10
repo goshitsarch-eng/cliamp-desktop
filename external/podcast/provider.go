@@ -106,12 +106,13 @@ func (p *Provider) Playlists() ([]playlist.PlaylistInfo, error) {
 	appendShows := func(prefix, section string, shows []show) {
 		for _, s := range shows {
 			name := s.Title
-			if p.subscribedLocked(s.FeedURL) {
+			subscribed := p.subscribedLocked(s.FeedURL)
+			if subscribed {
 				name = "[subscribed] " + name
 			}
 			lists = append(lists, playlist.PlaylistInfo{
 				ID: prefix + ":" + s.FeedURL, Name: name, TrackCount: s.EpisodeCount, Section: section,
-				Favorite: prefix == "f",
+				Favorite: subscribed,
 			})
 		}
 	}

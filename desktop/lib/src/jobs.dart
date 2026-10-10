@@ -66,7 +66,10 @@ class _JobsPanelState extends State<JobsPanel> {
           children: [
             ListTile(
               leading: const Icon(Icons.work_history_outlined),
-              title: const Text('Background activity'),
+              title: Text(
+                'Background activity',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               subtitle: Text(
                 active == 0 ? 'No operations running' : '$active running',
               ),

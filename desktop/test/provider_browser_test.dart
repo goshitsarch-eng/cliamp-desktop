@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cliamp_desktop/src/backend.dart';
 import 'package:cliamp_desktop/src/provider_browser.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 typedef _Json = Map<String, dynamic>;
@@ -145,6 +146,27 @@ Future<void> _mount(
 }
 
 void main() {
+  testWidgets('Escape clears provider search and releases editing focus', (
+    tester,
+  ) async {
+    final backend = _ProviderBackend();
+    await _mount(tester, backend);
+    final search = find.byType(TextField);
+    await tester.enterText(search, 'no match');
+    await tester.pumpAndSettle();
+    expect(find.text('Nearby stations'), findsNothing);
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(search).controller!.text, isEmpty);
+    expect(find.text('Nearby stations'), findsOneWidget);
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText)).focusNode.hasFocus,
+      isFalse,
+    );
+  });
+
   testWidgets(
     'ordinary track append keeps metadata and does not select playback or play-next',
     (tester) async {

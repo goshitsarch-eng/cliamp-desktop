@@ -192,7 +192,7 @@ class _ProviderSetupDialogState extends State<ProviderSetupDialog> {
                   const SizedBox(height: 14),
                   Text(
                     widget.backend.ownsDaemon
-                        ? 'Restart the player to load the provider. This stops current playback.'
+                        ? 'Restart the player to load the provider. Playback is briefly interrupted; your queue and playback position are restored.'
                         : 'This app is connected to an existing Cliamp player. Restart that player, then reconnect this app to load the provider.',
                   ),
                   if (_saving) ...[

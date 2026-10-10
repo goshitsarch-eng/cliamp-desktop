@@ -10,6 +10,10 @@ for implemented workflows and remaining platform/account acceptance checks.
 
 *Linux release using generated local audio.*
 
+The desktop window has a 640×480 minimum content size. Provider browsers scroll in short windows so collection controls and tracks stay reachable. Short windows use a
+compact library heading; longer visualizer controls and import dialogs scroll.
+Library and provider counts use singular labels for one item.
+
 ## Prerequisites
 
 Use Flutter 3.47.7 and Go 1.26.6 from `mise.toml`. Flutter desktop builds must run
@@ -57,9 +61,10 @@ against the same directory when editing settings.
 `CLIAMP_CONFIG_DIR` can isolate a test instance. Use **Connect service** in
 Providers or Settings to configure a provider with the existing wizard rules.
 The form masks credentials and passes them privately to the engine over stdin.
-After saving, choose **Restart player** to reload an app-owned engine; the app
-asks before stopping playback. For an attached engine, restart it where it was
-started. Browser sign-in is available on providers that support it. Provider
+After saving, choose **Restart player** to reload an app-owned engine. Playback
+briefly stops while the engine reloads; the app restores the queue, play-next
+order and active playback position. For an attached engine, restart it where it
+was started. Browser sign-in is available on providers that support it. Provider
 setup and credentials remain in the existing cliamp configuration. Never put credentials in build
 scripts or Flutter assets.
 
@@ -137,6 +142,12 @@ command line or in the Flutter asset bundle.
 
 ## Library and playback workflows
 
+The command palette accepts Return to run its first matching result. Escape clears provider search and releases editing focus. Background queue updates preserve loaded pages and selection when the ordered tracks are unchanged.
+
+The desktop validates local playlist entries before importing them. A missing file or a directory used as an audio entry leaves the current queue intact. Background activity lists active and completed operations in a resizable dialog.
+
+Synced lyrics keep the active line visible when the window is resized while Follow lyrics is enabled. Visualizer captions follow the selected light or dark theme. Podcast catalogs use show-specific labels. Long error messages scroll within a bounded notification above the player. Keyboard shortcuts remain available after native file and folder imports.
+
 **Add music** accepts native file/folder selection or entered file, playlist,
 URL and SSH paths. Choose append or replace and whether to start playback. The
 engine resolves a selection before replacing the queue, so a failed source leaves
@@ -196,6 +207,7 @@ Common shortcuts are:
 | Ctrl+S | Download playing track |
 | Ctrl+K or F1 | Command palette |
 | Ctrl+X | Compact player |
+| Escape | Close the current popup, or clear selection/search and leave the search field |
 
 Click the current playback time or use **Jump to time** to enter seconds,
 `MM:SS`, or `HH:MM:SS`. On macOS, Cmd+J also opens this dialog. The app checks
@@ -210,8 +222,8 @@ An operation timeout is not permission to replay a mutation automatically.
 
 Settings includes searchable grouped preferences for playback, audio quality,
 startup, downloads, appearance and provider options. Saving preserves unrelated
-config sections. Settings with startup effects require a restart; the app asks
-before restarting its own player and does not restart an attached player.
+config sections. Settings with startup effects require selecting **Restart player**.
+The app retains the listening queue and does not restart an attached player.
 Provider passwords and stored tokens are handled separately by account setup.
 
 The plugin manager can list, install, trust, remove, enable/disable and configure
@@ -247,3 +259,23 @@ The approval is single-use and changed installed content cannot inherit an old
 approval. `configure` takes `name` and a string `values` map; `remove` takes
 `name`. Successful changes report `restart_required`. These management commands
 operate outside IPC so they also work before the audio engine starts.
+
+## Native UI audit
+
+On Linux, install Xvfb, xfwm4, ImageMagick (`import`), ffmpeg, dbus-run-session and libXtst in addition to
+the desktop build prerequisites. From the repository root, run:
+
+```sh
+python3 desktop/tool/native_audit.py --engine /absolute/path/to/cliamp
+```
+
+The audit opens the actual Flutter Linux window and connects it to the real Go
+engine using generated audio and isolated profiles. It records interaction
+results, framework errors and native screenshots in a temporary directory.
+`--output /path/to/evidence` retains results at a chosen location; `--display :106`
+selects a different unused X11 display. The null audio output supports playback
+state checks but does not verify audible sound. Account-backed services and the
+Windows/macOS runners require separate native acceptance testing.
+
+See the [audit report](qa/desktop-audit.md), [UI inventory](qa/desktop-ui-inventory.md),
+and [defect log](qa/desktop-defects.md) for execution evidence and validation limits.

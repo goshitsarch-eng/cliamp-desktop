@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'backend.dart';
 import 'fuzzy.dart';
@@ -99,6 +100,11 @@ class _ProviderBrowserState extends State<ProviderBrowser> {
   bool get _genres => _view.kind == 'genres';
   bool get _tracks => _view.kind == 'tracks';
   bool get _subscriptions => _view.kind == 'subscriptions';
+  String get _countLabel {
+    final plural = _genres ? 'categories' : _view.kind;
+    if (_total != 1) return plural;
+    return _genres ? 'category' : plural.replaceFirst(RegExp(r's$'), '');
+  }
 
   @override
   void initState() {
@@ -467,7 +473,9 @@ class _ProviderBrowserState extends State<ProviderBrowser> {
         _BrowseView(
           'provider.catalog.search',
           'playlists',
-          query.trim().isEmpty ? 'Station catalog' : 'Station search',
+          query.trim().isEmpty
+              ? (_browse['shows'] == true ? 'Show catalog' : 'Station catalog')
+              : (_browse['shows'] == true ? 'Show search' : 'Station search'),
           {'query': query.trim()},
         ),
       );
@@ -863,46 +871,76 @@ class _ProviderBrowserState extends State<ProviderBrowser> {
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      _toolbar(),
-      if (_loading || _busy)
-        const LinearProgressIndicator(minHeight: 2)
-      else
-        const SizedBox(height: 2),
-      if (_error != null) _message(_error!, error: true),
-      if (_notice != null) _message(_notice!),
-      if (_failed.isNotEmpty)
-        _message(
-          'Some shows could not be loaded: ${_failed.join(', ')}. Successful episodes were added.',
-          error: true,
-        ),
-      _breadcrumbs(),
-      if (_subscriptions) _subscriptionToolbar(),
-      if (_genres || _rows(_response['sorts']).isNotEmpty) _filterToolbar(),
-      Expanded(
-        child: _items.isEmpty && !_loading
-            ? _empty()
-            : _tracks
-            ? _trackRows()
-            : _collectionRows(),
-      ),
-      if (_items.length < _total || _catalogMore)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: TextButton(
-            onPressed: _loading
-                ? null
-                : () => _show(_view, push: false, append: true),
-            child: Text(
-              _catalogMore
-                  ? 'Load more stations'
-                  : 'Load more · ${_items.length} of $_total',
+  Widget build(BuildContext context) => CallbackShortcuts(
+    bindings: {
+      const SingleActivator(LogicalKeyboardKey.escape): () {
+        _search.clear();
+        FocusScope.of(context).unfocus();
+        setState(() => _filter = '');
+        if (_name(_view.params['query']).isNotEmpty && _trail.isNotEmpty) {
+          var previous = _view;
+          do {
+            previous = _trail.removeLast();
+          } while (_name(previous.params['query']).isNotEmpty &&
+              _trail.isNotEmpty);
+          _show(previous, push: false);
+        }
+      },
+    },
+    child: FocusScope(
+      autofocus: true,
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: SizedBox(
+            height: constraints.maxHeight < 500 ? 500 : constraints.maxHeight,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _toolbar(),
+                if (_loading || _busy)
+                  const LinearProgressIndicator(minHeight: 2)
+                else
+                  const SizedBox(height: 2),
+                if (_error != null) _message(_error!, error: true),
+                if (_notice != null) _message(_notice!),
+                if (_failed.isNotEmpty)
+                  _message(
+                    'Some shows could not be loaded: ${_failed.join(', ')}. Successful episodes were added.',
+                    error: true,
+                  ),
+                _breadcrumbs(),
+                if (_subscriptions) _subscriptionToolbar(),
+                if (_genres || _rows(_response['sorts']).isNotEmpty)
+                  _filterToolbar(),
+                Expanded(
+                  child: _items.isEmpty && !_loading
+                      ? _empty()
+                      : _tracks
+                      ? _trackRows()
+                      : _collectionRows(),
+                ),
+                if (_items.length < _total || _catalogMore)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: TextButton(
+                      onPressed: _loading
+                          ? null
+                          : () => _show(_view, push: false, append: true),
+                      child: Text(
+                        _catalogMore
+                            ? (_browse['shows'] == true
+                                  ? 'Load more shows'
+                                  : 'Load more stations')
+                            : 'Load more · ${_items.length} of $_total',
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
-    ],
+      ),
+    ),
   );
 
   Widget _toolbar() {
@@ -980,7 +1018,9 @@ class _ProviderBrowserState extends State<ProviderBrowser> {
                   ),
                 if (widget.provider['catalog'] == true)
                   _route(
-                    'Station catalog',
+                    _browse['shows'] == true
+                        ? 'Show catalog'
+                        : 'Station catalog',
                     Icons.radio_outlined,
                     () => _openMode('catalog'),
                   ),
@@ -1044,11 +1084,7 @@ class _ProviderBrowserState extends State<ProviderBrowser> {
                 ),
               ),
               Text(
-                '$_total ${_view.kind == 'tracks'
-                    ? 'tracks'
-                    : _view.kind == 'genres'
-                    ? 'categories'
-                    : _view.kind}',
+                '$_total $_countLabel',
                 style: TextStyle(color: _dim, fontSize: 11),
               ),
             ],
@@ -1481,7 +1517,11 @@ class _ProviderBrowserState extends State<ProviderBrowser> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    track['realtime'] == true ? 'LIVE' : _time(duration),
+                    track['realtime'] == true
+                        ? 'LIVE'
+                        : duration > 0
+                        ? _time(duration)
+                        : '—',
                     style: TextStyle(color: _dim, fontSize: 11),
                   ),
                   if (album == null)
