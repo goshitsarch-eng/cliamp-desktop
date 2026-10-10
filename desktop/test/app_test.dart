@@ -4,6 +4,7 @@ import 'package:cliamp_desktop/src/app.dart';
 import 'package:cliamp_desktop/src/backend.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart' show timeDilation;
 import 'package:flutter_test/flutter_test.dart';
 
 typedef _Json = Map<String, dynamic>;
@@ -121,7 +122,14 @@ class _FakeBackend implements PlayerBackend {
         return {'ok': true, ...?playlistCapabilities?[params['provider']]};
       case 'queue.list':
         if (pendingQueue != null) return pendingQueue!.future;
-        return {'ok': true, 'tracks': List.of(tracks), 'total': tracks.length};
+        return {
+          'ok': true,
+          'tracks': tracks
+              .skip((params['offset'] as int?) ?? 0)
+              .take((params['limit'] as int?) ?? 200)
+              .toList(),
+          'total': tracks.length,
+        };
       case 'provider.tracks':
       case 'provider.search':
         return {'ok': true, 'tracks': List.of(tracks), 'total': tracks.length};
@@ -245,6 +253,23 @@ class _FakeBackend implements PlayerBackend {
   }
 }
 
+class _JobsBackend extends _FakeBackend implements JobProgressBackend {
+  @override
+  List<BackendJob> get currentJobs => [
+    BackendJob(
+      id: 'audit',
+      operation: 'load',
+      state: 'succeeded',
+      createdAt: DateTime(2026),
+      finishedAt: DateTime(2026),
+    ),
+  ];
+  @override
+  Stream<List<BackendJob>> get jobs => const Stream.empty();
+  @override
+  Future<void> cancelJob(String jobId) async {}
+}
+
 Future<void> _open(
   WidgetTester tester,
   _FakeBackend backend, {
@@ -271,6 +296,307 @@ Future<void> _navigate(WidgetTester tester, String label) async {
 }
 
 void main() {
+  testWidgets('shortcuts resume after a native source picker returns', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    const channel = MethodChannel('plugins.flutter.io/file_selector');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+      call,
+    ) async {
+      expect(call.method, 'openFile');
+      FocusManager.instance.primaryFocus?.unfocus();
+      return ['/music/picked.wav'];
+    });
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      ),
+    );
+    await _open(tester, backend);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyO);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose files'));
+    await tester.pumpAndSettle();
+    expect(find.text('Add your music'), findsNothing);
+    expect(
+      backend.calls.any(
+        (call) =>
+            call.operation == 'url.load' &&
+            call.params['path'] == '/music/picked.wav',
+      ),
+      isTrue,
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyO);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(find.text('Add your music'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('background queue refresh retains pages and stable selection', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    backend.tracks.clear();
+    backend.tracks.addAll(
+      List.generate(
+        205,
+        (index) => <String, dynamic>{
+          'path': '/music/$index.wav',
+          'title': 'Track $index',
+          'index': index,
+        },
+      ),
+    );
+    await _open(tester, backend);
+    await tester.tap(find.text('Load more · 200 of 205'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Select tracks'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select visible'));
+    await tester.pumpAndSettle();
+    expect(find.text('205 selected'), findsOneWidget);
+    backend.publishState({
+      'playlist_revision': 42,
+      'track': backend.tracks[1],
+      'index': 1,
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('205 selected'), findsOneWidget);
+    expect(find.textContaining('Load more ·'), findsNothing);
+    expect(
+      backend.calls
+          .where(
+            (c) => c.operation == 'queue.list' && c.params['offset'] == 200,
+          )
+          .length,
+      2,
+    );
+    backend.tracks.removeAt(0);
+    backend.publishState({'playlist_revision': 43});
+    await tester.pumpAndSettle();
+    expect(find.text('0 selected'), findsOneWidget);
+  });
+
+  testWidgets('Return runs the matching command from palette search', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    await _open(tester, backend);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f1);
+    await tester.pumpAndSettle();
+    final query = find.widgetWithText(TextField, 'Find a command');
+    await tester.enterText(query, 'Open History');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.text('Commands & keyboard shortcuts'), findsNothing);
+    expect(backend.calls.any((call) => call.operation == 'history'), isTrue);
+  });
+
+  testWidgets('long operation errors remain readable at minimum size', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    backend.failures['toggle'] = BackendException(
+      'Unavailable path: ${'x' * 4000}',
+    );
+    await _open(tester, backend, size: const Size(640, 480));
+    await tester.tap(find.byTooltip('Play'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(
+      find
+          .descendant(
+            of: find.byType(SnackBar),
+            matching: find.byTooltip('Close'),
+          )
+          .hitTestable(),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.descendant(
+        of: find.byType(SnackBar),
+        matching: find.byTooltip('Close'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('populated activity dialog lays out and resizes', (tester) async {
+    await _open(tester, _JobsBackend());
+    await tester.tap(find.byTooltip('Background activity'));
+    await tester.pumpAndSettle();
+    expect(find.text('Load music'), findsOneWidget);
+    for (final size in [const Size(640, 480), const Size(1300, 900)]) {
+      tester.view.physicalSize = size;
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Close').hitTestable(), findsOneWidget);
+    }
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+  });
+
+  testWidgets('unchanged and hidden spectrum packets do not schedule frames', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    await _open(tester, backend);
+    backend.publishState({});
+    await tester.idle();
+    expect(tester.binding.hasScheduledFrame, isFalse);
+    backend._spectrum.add([0, 0, 0]);
+    await tester.pumpAndSettle();
+    backend._spectrum.add([0, 0, 0]);
+    await tester.idle();
+    expect(tester.binding.hasScheduledFrame, isFalse);
+    await _navigate(tester, 'Settings');
+    backend._spectrum.add([.2, .4, .6]);
+    await tester.idle();
+    expect(tester.binding.hasScheduledFrame, isFalse);
+  });
+
+  testWidgets('current duration fills missing track metadata', (tester) async {
+    final backend = _FakeBackend();
+    backend.tracks.first.remove('duration_secs');
+    await _open(tester, backend);
+    expect(find.text('4:00'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('minimum window keeps tracks and import validation reachable', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    await _open(tester, backend, size: const Size(640, 480));
+    expect(tester.takeException(), isNull);
+    final list = tester.getRect(find.byTooltip('Play Night Drive'));
+    expect(list.height, greaterThan(0));
+    expect(list.bottom, lessThan(332));
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Enter a source or choose files or folders.'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Play Night Drive'), findsOneWidget);
+  });
+
+  testWidgets('player semantics survive menu resizing', (tester) async {
+    final backend = _FakeBackend();
+    final semantics = tester.ensureSemantics();
+    await _open(tester, backend);
+    await tester.tap(find.byTooltip('Playback options'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Adjust volume…'));
+    await tester.pumpAndSettle();
+    for (final size in [const Size(640, 480), const Size(1280, 940)]) {
+      tester.view.physicalSize = size;
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
+  });
+
+  testWidgets('seek accessibility survives availability transitions', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    final semantics = tester.ensureSemantics();
+    await _open(tester, backend);
+    for (final size in [const Size(640, 480), const Size(1280, 940)]) {
+      tester.view.physicalSize = size;
+      for (final seekable in [false, true, false, true]) {
+        backend.publishState({'seekable': seekable});
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final slider = find.byKey(ValueKey(('seek', seekable)));
+        expect(slider, findsOneWidget);
+        final nodes = [
+          tester
+              .binding
+              .renderViews
+              .single
+              .owner!
+              .semanticsOwner!
+              .rootSemanticsNode!,
+        ];
+        final values = <String>[];
+        while (nodes.isNotEmpty) {
+          final node = nodes.removeLast();
+          values.add(node.getSemanticsData().value);
+          node.visitChildren((child) {
+            nodes.add(child);
+            return true;
+          });
+        }
+        expect(values, contains('0:15'));
+      }
+    }
+    semantics.dispose();
+  });
+
+  testWidgets('slow dialog dismissal keeps text controllers alive', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    await _open(tester, backend);
+    timeDilation = 10;
+    try {
+      await tester.tap(find.text('Add music'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, '/music/a.wav');
+      await tester.tap(find.text('Cancel'));
+      await tester.pump(const Duration(milliseconds: 400));
+      backend.publishState({
+        'theme': {'name': 'Light', 'bg': '#ffffff', 'fg': '#111111'},
+      });
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(tester.takeException(), isNull);
+      await tester.pumpAndSettle();
+      expect(find.text('Add your music'), findsNothing);
+      expect(tester.takeException(), isNull);
+    } finally {
+      timeDilation = 1;
+    }
+  });
+
+  testWidgets('queue notifications stay above the playback controls', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    await _open(tester, backend, size: const Size(640, 480));
+    await tester.tap(find.byTooltip('Track actions').first);
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Play next'));
+    await tester.pumpAndSettle();
+    expect(find.text('Added to play next'), findsOneWidget);
+    expect(
+      tester.getRect(find.byType(SnackBar)).bottom,
+      lessThanOrEqualTo(332),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'shared engine theme events recolor the desktop and reset to default',
     (tester) async {
@@ -373,7 +699,7 @@ void main() {
       );
     }
     // Playback remains keyboard-accessible after leaving the text field.
-    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pumpAndSettle();
@@ -516,6 +842,32 @@ void main() {
     expect(find.text('Engine connected'), findsOneWidget);
     expect(find.text('Morning Light'), findsOneWidget);
     expect(backend.connections, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('normal queue load catches a revision received while loading', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    await _open(tester, backend);
+    await _navigate(tester, 'History');
+    final pending = Completer<_Json>();
+    backend.pendingQueue = pending;
+    await tester.tap(find.text('Queue').first);
+    await tester.pump();
+    backend.publishState({'playlist_revision': 84});
+    await tester.pump();
+    backend.pendingQueue = null;
+    pending.complete({
+      'ok': true,
+      'tracks': List.of(backend.tracks),
+      'total': backend.tracks.length,
+    });
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Play Morning Light'));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    expect(backend.mutations('queue.play').single.params['if_revision'], 84);
     expect(tester.takeException(), isNull);
   });
 

@@ -49,7 +49,10 @@ class _PluginManagerDialogState extends State<PluginManagerDialog> {
   }
 
   Future<void> _review({String? name}) async {
-    if (name == null && _source.text.trim().isEmpty) return;
+    if (name == null && _source.text.trim().isEmpty) {
+      setState(() => _error = 'Enter a plugin source to review.');
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;

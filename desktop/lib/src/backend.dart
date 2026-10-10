@@ -866,7 +866,41 @@ class CliampBackend
     }
   }
 
+  Future<List<Map<String, dynamic>>> _sessionTracks(String operation) async {
+    final tracks = <Map<String, dynamic>>[];
+    while (true) {
+      final page = await _callConnected(operation, {
+        'offset': tracks.length,
+        'limit': 200,
+      });
+      final rows = (page['tracks'] as List? ?? []).whereType<Map>();
+      tracks.addAll(rows.map((row) => Map<String, dynamic>.from(row)));
+      if (tracks.length >=
+          ((page['total'] as num?)?.toInt() ?? tracks.length)) {
+        return tracks;
+      }
+      if (rows.isEmpty) {
+        throw const BackendException(
+          'Unable to capture the complete queue before restarting.',
+          code: 'incomplete_queue',
+        );
+      }
+    }
+  }
+
   Future<void> _restartOwnedEngine() async {
+    // Capture before stopping: a failed read must leave the original player intact.
+    var state = await _readSnapshot();
+    final tracks = await _sessionTracks('queue.list');
+    final next = await _sessionTracks('playnext.list');
+    final captured = await _readSnapshot();
+    if (captured['playlist_revision'] != state['playlist_revision']) {
+      throw const BackendException(
+        'The queue changed while preparing to restart. Try again.',
+        code: 'queue_changed',
+      );
+    }
+    state = captured;
     _connected = false;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
@@ -874,6 +908,54 @@ class CliampBackend
     await _stopOwnedDaemon();
     _checkOpen();
     await _connect();
+    await _callConnected('queue.clear');
+    for (var offset = 0; offset < tracks.length; offset += 200) {
+      await _callConnected('tracks.append', {
+        'tracks': tracks.skip(offset).take(200).toList(),
+        'play': false,
+      });
+    }
+    if (state['shuffle'] is bool) {
+      await _callConnected('shuffle', {
+        'name': state['shuffle'] == true ? 'on' : 'off',
+      });
+    }
+    if (state['repeat'] is String) {
+      await _callConnected('repeat', {
+        'name': (state['repeat'] as String).toLowerCase(),
+      });
+    }
+    final index = (state['index'] as num?)?.toInt() ?? 0;
+    if (tracks.isNotEmpty &&
+        index >= 0 &&
+        index < tracks.length &&
+        (state['state'] == 'playing' || state['state'] == 'paused')) {
+      await _callConnected('queue.play', {'index': index});
+      final deadline = DateTime.now().add(operationTimeout);
+      while (true) {
+        final current = await _readSnapshot();
+        if ((current['state'] == 'playing' || current['state'] == 'paused') &&
+            (current['track'] as Map?)?['path'] == tracks[index]['path']) {
+          break;
+        }
+        if (current['stream_error'] != null ||
+            DateTime.now().isAfter(deadline)) {
+          throw const BackendException(
+            'The queue was restored, but playback could not resume.',
+            code: 'resume_failed',
+          );
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      if (state['state'] == 'paused') await _callConnected('pause');
+      if (state['seekable'] == true && (state['position'] as num? ?? 0) > 0) {
+        await _callConnected('seek.absolute', {'value': state['position']});
+      }
+    }
+    for (final entry in next) {
+      await _callConnected('queue.enqueue', {'index': entry['index'] ?? 0});
+    }
+    _publishSnapshot(await _readSnapshot());
   }
 
   Map<String, dynamic> _decodeObject(String source) {
@@ -965,6 +1047,13 @@ class CliampBackend
     Map<String, dynamic> params = const {},
   ]) async {
     await connect();
+    return _callConnected(operation, params);
+  }
+
+  Future<Map<String, dynamic>> _callConnected(
+    String operation, [
+    Map<String, dynamic> params = const {},
+  ]) async {
     final deadline = DateTime.now().add(operationTimeout);
     var response = await _command([
       'remote',

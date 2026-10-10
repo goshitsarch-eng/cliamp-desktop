@@ -27,6 +27,7 @@ class _SyncedLyricsState extends State<SyncedLyrics> {
   final _scroll = ScrollController();
   List<GlobalKey> _keys = [];
   int _lastLine = -1;
+  double? _lastViewportHeight;
   bool _follow = true;
 
   @override
@@ -36,7 +37,9 @@ class _SyncedLyricsState extends State<SyncedLyrics> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(builder: _buildLyrics);
+
+  Widget _buildLyrics(BuildContext context, BoxConstraints constraints) {
     if (_keys.length != widget.lines.length) {
       _keys = List.generate(widget.lines.length, (_) => GlobalKey());
       _lastLine = -1;
@@ -56,7 +59,11 @@ class _SyncedLyricsState extends State<SyncedLyrics> {
         }
       }
     }
-    if (synced && _follow && active >= 0 && active != _lastLine) {
+    if (synced &&
+        _follow &&
+        active >= 0 &&
+        (active != _lastLine || constraints.maxHeight != _lastViewportHeight)) {
+      _lastViewportHeight = constraints.maxHeight;
       _lastLine = active;
       final key = _keys[active];
       WidgetsBinding.instance.addPostFrameCallback((_) {

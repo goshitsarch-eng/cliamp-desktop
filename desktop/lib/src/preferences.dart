@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import 'backend.dart';
@@ -55,7 +56,60 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     }
   }
 
+  String? _validate(Map<String, dynamic> field, String value) {
+    final type = field['type'];
+    if (type == 'number' || type == 'integer') {
+      final number = double.tryParse(value.trim());
+      if (number == null ||
+          !number.isFinite ||
+          (type == 'integer' && number != number.truncateToDouble())) {
+        return type == 'integer'
+            ? 'Enter a whole number.'
+            : 'Enter a finite number.';
+      }
+      final minimum = field['min'] as num?;
+      final maximum = field['max'] as num?;
+      if ((minimum != null && number < minimum) ||
+          (maximum != null && number > maximum)) {
+        return 'Value is outside the supported range ($minimum to $maximum).';
+      }
+    }
+    if (type == 'list' || type == 'equalizer') {
+      dynamic parsed;
+      try {
+        parsed = jsonDecode(value);
+      } on FormatException {
+        parsed = null;
+      }
+      if (type == 'list') {
+        if (parsed is! List ||
+            parsed.any(
+              (item) =>
+                  item is! String || item.contains('\n') || item.contains('\r'),
+            )) {
+          return 'Enter a JSON array of single-line names, such as ["First", "Second"].';
+        }
+      } else if (parsed is! List ||
+          parsed.length != 10 ||
+          parsed.any(
+            (item) => item is! num || !item.isFinite || item < -12 || item > 12,
+          )) {
+        return 'Enter ten gains from -12 to 12 dB in a JSON array.';
+      }
+    }
+    return null;
+  }
+
   Future<void> _save() async {
+    for (final field in _fields) {
+      final key = '${field['key']}';
+      if (_values[key] == _initial[key]) continue;
+      final error = _validate(field, _values[key] ?? '');
+      if (error != null) {
+        setState(() => _error = '${field['label']}: $error');
+        return;
+      }
+    }
     setState(() {
       _busy = true;
       _error = null;

@@ -573,148 +573,173 @@ class _EngineVisualizerState extends State<EngineVisualizer> {
   }
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(32, 14, 32, 28),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'See what you hear.',
-          style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -.6,
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Original Cliamp visualizers, including your Lua extensions.',
-          style: TextStyle(color: Color(0xff9da4b6), fontSize: 12),
-        ),
-        const SizedBox(height: 24),
-        if (!_supported)
-          const Expanded(
-            child: Center(
-              child: Text(
-                'Visualizers require the desktop-enabled Cliamp engine.',
-              ),
-            ),
-          )
-        else ...[
-          Wrap(
-            spacing: 20,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => SingleChildScrollView(
+      child: SizedBox(
+        height: constraints.maxHeight < 500 ? 500 : constraints.maxHeight,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(32, 14, 32, 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(
-                width: 240,
-                child: DropdownButtonFormField<int>(
-                  key: ValueKey(_modeIndex),
-                  initialValue:
-                      _modeIndex != null &&
-                          _modeIndex! >= 0 &&
-                          _modeIndex! < _modes.length
-                      ? _modeIndex
-                      : null,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Visualizer'),
-                  items: _modes
-                      .asMap()
-                      .entries
-                      .map(
-                        (e) => DropdownMenuItem(
-                          value: e.key,
-                          child: Text(e.value, overflow: TextOverflow.ellipsis),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: _changing
-                      ? null
-                      : (value) {
-                          if (value != null) {
-                            _select('desktop.vis', {'index': value});
-                          }
-                        },
+              const Text(
+                'See what you hear.',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -.6,
                 ),
               ),
-              SizedBox(
-                width: 200,
-                child: DropdownButtonFormField<String>(
-                  key: ValueKey(_theme),
-                  initialValue: _themes.contains(_theme) ? _theme : null,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Theme'),
-                  items: _themes
-                      .toSet()
-                      .map(
-                        (theme) => DropdownMenuItem(
-                          value: theme,
-                          child: Text(theme, overflow: TextOverflow.ellipsis),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: _changing
-                      ? null
-                      : (value) {
-                          if (value != null) {
-                            _select('desktop.theme', {'name': value});
-                          }
-                        },
+              const SizedBox(height: 8),
+              Text(
+                'Original Cliamp visualizers, including your Lua extensions.',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 12,
                 ),
               ),
-              IconButton(
-                tooltip: 'Next visualizer',
-                onPressed: _changing
-                    ? null
-                    : () => _select('desktop.vis', {'name': 'next'}),
-                icon: const Icon(Icons.skip_next_rounded),
-              ),
-              IconButton(
-                tooltip: 'Enter fullscreen visualizer',
-                onPressed: _fullscreen,
-                icon: const Icon(Icons.fullscreen),
-              ),
-              ..._previewActions(),
+              const SizedBox(height: 24),
+              if (!_supported)
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      'Visualizers require the desktop-enabled Cliamp engine.',
+                    ),
+                  ),
+                )
+              else ...[
+                Wrap(
+                  spacing: 20,
+                  runSpacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 240,
+                      child: DropdownButtonFormField<int>(
+                        key: ValueKey(_modeIndex),
+                        initialValue:
+                            _modeIndex != null &&
+                                _modeIndex! >= 0 &&
+                                _modeIndex! < _modes.length
+                            ? _modeIndex
+                            : null,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Visualizer',
+                        ),
+                        items: _modes
+                            .asMap()
+                            .entries
+                            .map(
+                              (e) => DropdownMenuItem(
+                                value: e.key,
+                                child: Text(
+                                  e.value,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: _changing
+                            ? null
+                            : (value) {
+                                if (value != null) {
+                                  _select('desktop.vis', {'index': value});
+                                }
+                              },
+                      ),
+                    ),
+                    SizedBox(
+                      width: 200,
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey(_theme),
+                        initialValue: _themes.contains(_theme) ? _theme : null,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'Theme'),
+                        items: _themes
+                            .toSet()
+                            .map(
+                              (theme) => DropdownMenuItem(
+                                value: theme,
+                                child: Text(
+                                  theme,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: _changing
+                            ? null
+                            : (value) {
+                                if (value != null) {
+                                  _select('desktop.theme', {'name': value});
+                                }
+                              },
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Next visualizer',
+                      onPressed: _changing
+                          ? null
+                          : () => _select('desktop.vis', {'name': 'next'}),
+                      icon: const Icon(Icons.skip_next_rounded),
+                    ),
+                    IconButton(
+                      tooltip: 'Enter fullscreen visualizer',
+                      onPressed: _fullscreen,
+                      icon: const Icon(Icons.fullscreen),
+                    ),
+                    ..._previewActions(),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: Container(
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: _background,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: .06),
+                      ),
+                    ),
+                    child: _error != null
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(_error!, textAlign: TextAlign.center),
+                                  const SizedBox(height: 15),
+                                  TextButton(
+                                    onPressed: _start,
+                                    child: const Text('Try again'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : _canvas(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _mode.isEmpty
+                      ? 'Start a track to bring your music to life.'
+                      : '$_mode · $_theme',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
             ],
           ),
-          const SizedBox(height: 24),
-          Expanded(
-            child: Container(
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: const Color(0xff0b0d12),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white.withValues(alpha: .06)),
-              ),
-              child: _error != null
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(_error!, textAlign: TextAlign.center),
-                            const SizedBox(height: 15),
-                            TextButton(
-                              onPressed: _start,
-                              child: const Text('Try again'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : _canvas(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            _mode.isEmpty
-                ? 'Start a track to bring your music to life.'
-                : '$_mode · $_theme',
-            style: const TextStyle(color: Color(0xff9da4b6), fontSize: 11),
-          ),
-        ],
-      ],
+        ),
+      ),
     ),
   );
 }

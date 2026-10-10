@@ -5,6 +5,7 @@ import 'dart:ui' show AppExitResponse;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/services.dart';
 
@@ -143,6 +144,8 @@ class _LibraryState extends State<_Library> {
   final _messenger = GlobalKey<ScaffoldMessengerState>();
   final _search = TextEditingController();
   final _searchFocus = FocusNode();
+  final _contentFocus = FocusScopeNode();
+  final _selectionScroll = ScrollController();
   StreamSubscription<Json>? _events;
   Timer? _positionTicker;
   final _positionClock = Stopwatch();
@@ -246,7 +249,14 @@ class _LibraryState extends State<_Library> {
       );
       await _spectrum?.cancel();
       _spectrum = widget.backend.spectrum.listen((bands) {
-        if (mounted) setState(() => _bands = bands);
+        if (!mounted || listEquals(_bands, bands)) return;
+        // Only these views paint the spectrum. Keep the latest data for the
+        // next navigation without rebuilding unrelated forms at stream rate.
+        if (_page == _Page.queue || _page == _Page.equalizer) {
+          setState(() => _bands = bands);
+        } else {
+          _bands = bands;
+        }
       }, onError: (Object _) {});
       if (_supports('plugin.keys')) {
         final keys = await widget.backend.call('plugin.keys');
@@ -285,6 +295,11 @@ class _LibraryState extends State<_Library> {
 
   void _acceptState(Json state) {
     if (!mounted || state.isEmpty) return;
+    if (_connected &&
+        _connectionError == null &&
+        jsonEncode(state) == jsonEncode(_state)) {
+      return;
+    }
     if (_text(state['notice']).isNotEmpty &&
         state['notice'] != _state['notice']) {
       _notice(_text(state['notice']), error: state['notice_error'] == true);
@@ -368,12 +383,17 @@ class _LibraryState extends State<_Library> {
   void _notice(String message, {bool error = false}) {
     _messenger.currentState?.showSnackBar(
       SnackBar(
-        content: Text(
-          message,
-          style: TextStyle(
-            color: error
-                ? Theme.of(context).colorScheme.onErrorContainer
-                : Theme.of(context).colorScheme.onInverseSurface,
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 120),
+          child: SingleChildScrollView(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: error
+                    ? Theme.of(context).colorScheme.onErrorContainer
+                    : Theme.of(context).colorScheme.onInverseSurface,
+              ),
+            ),
           ),
         ),
         backgroundColor: error
@@ -381,6 +401,9 @@ class _LibraryState extends State<_Library> {
             : Theme.of(context).colorScheme.inverseSurface,
         behavior: SnackBarBehavior.floating,
         showCloseIcon: true,
+        closeIconColor: error
+            ? Theme.of(context).colorScheme.onErrorContainer
+            : Theme.of(context).colorScheme.onInverseSurface,
         duration: Duration(seconds: error ? 8 : 4),
       ),
     );
@@ -394,6 +417,11 @@ class _LibraryState extends State<_Library> {
     bool quiet = false,
   }) async {
     final generation = ++_loadGeneration;
+    final retainQueueView =
+        quiet &&
+        !append &&
+        (operation == 'queue.list' || operation == 'playnext.list');
+    final previousItems = _items;
     final requestedRevision = (_state['playlist_revision'] as num?)?.toInt();
     if (!mounted) return;
     setState(() {
@@ -403,7 +431,10 @@ class _LibraryState extends State<_Library> {
       _loading = true;
       _loadError = null;
       if (!append && !quiet) _items = [];
-      if (!append) _marked.clear();
+      if (!append && !retainQueueView) {
+        _marked.clear();
+        _selectionAnchor = null;
+      }
       if (_page == _Page.playlists && !append) {
         _playlistCapabilities = {};
         _playlistCapabilityProvider = '';
@@ -423,6 +454,27 @@ class _LibraryState extends State<_Library> {
       }
       if (!mounted || generation != _loadGeneration) return;
       final items = _objects(data[kind]);
+      if (retainQueueView) {
+        final target = math.min(
+          previousItems.length,
+          (data['total'] as num?)?.toInt() ?? items.length,
+        );
+        while (items.length < target) {
+          final page = await widget.backend.call(operation, {
+            ...params,
+            'limit': 200,
+            'offset': items.length,
+          });
+          if (!mounted || generation != _loadGeneration) return;
+          final more = _objects(page[kind]);
+          if (page['ok'] == false || more.isEmpty) {
+            throw const BackendException(
+              'Unable to refresh the complete queue. Try again.',
+            );
+          }
+          items.addAll(more);
+        }
+      }
       Json listening = _object(data['listening']);
       if ((kind == 'tracks' || kind == 'history') &&
           items.isNotEmpty &&
@@ -458,6 +510,14 @@ class _LibraryState extends State<_Library> {
           _playlistCapabilities = playlistCapabilities;
           _playlistCapabilityProvider = capabilityProvider;
         }
+        if (retainQueueView &&
+            !listEquals(
+              previousItems.map((item) => _text(item['path'])).toList(),
+              items.map((item) => _text(item['path'])).toList(),
+            )) {
+          _marked.clear();
+          _selectionAnchor = null;
+        }
         _listening = append ? {..._listening, ...listening} : listening;
         _items = append && operation != 'provider.catalog'
             ? [..._items, ...items]
@@ -476,6 +536,12 @@ class _LibraryState extends State<_Library> {
         }
         _loading = false;
       });
+      // Runtime events can arrive during a normal navigation or page load too.
+      // Reconcile those rows before their captured revision becomes permanent.
+      if ((operation == 'queue.list' || operation == 'playnext.list') &&
+          requestedRevision != _state['playlist_revision']) {
+        unawaited(_fetch(operation, params, kind: kind, quiet: true));
+      }
     } catch (error) {
       if (mounted && generation == _loadGeneration) {
         setState(() {
@@ -664,13 +730,26 @@ class _LibraryState extends State<_Library> {
       _fetch(_request, _params, kind: _kind, quiet: true);
 
   Future<void> _addSource() async {
-    final controller = TextEditingController();
+    try {
+      await _importSources();
+    } finally {
+      // A native chooser can leave focus on the route being dismissed. Restore
+      // the library scope so shortcuts still work when the import completes.
+      if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+        _contentFocus.requestFocus();
+      }
+    }
+  }
+
+  Future<void> _importSources() async {
     var mode = 'append';
-    final paths = await showDialog<List<String>>(
+    String? inputError;
+    final paths = await _showInputDialog<List<String>>(
       context: context,
-      builder: (context) => StatefulBuilder(
+      builder: (context, controller) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Add your music'),
+          scrollable: true,
           content: SizedBox(
             width: 500,
             child: Column(
@@ -732,7 +811,8 @@ class _LibraryState extends State<_Library> {
                   autofocus: true,
                   minLines: 3,
                   maxLines: 6,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
+                    errorText: inputError,
                     labelText: 'File, folder, playlist, URL, or ssh:// path',
                     hintText: 'One source per line',
                     alignLabelWithHint: true,
@@ -753,7 +833,14 @@ class _LibraryState extends State<_Library> {
                     .map((s) => s.trim())
                     .where((s) => s.isNotEmpty)
                     .toList();
-                if (lines.isNotEmpty) Navigator.pop(context, lines);
+                if (lines.isEmpty) {
+                  setDialogState(
+                    () => inputError =
+                        'Enter a source or choose files or folders.',
+                  );
+                } else {
+                  Navigator.pop(context, lines);
+                }
               },
               child: const Text('Continue'),
             ),
@@ -761,7 +848,6 @@ class _LibraryState extends State<_Library> {
         ),
       ),
     );
-    Future<void>.delayed(const Duration(milliseconds: 300), controller.dispose);
     if (paths == null || paths.isEmpty || !mounted) return;
     if (mode == 'replace' &&
         _number(_state['total']) > 0 &&
@@ -798,50 +884,58 @@ class _LibraryState extends State<_Library> {
     bool multiline = false,
     String action = 'Save',
   }) async {
-    final controller = TextEditingController(text: initial);
-    final result = await showDialog<String>(
+    String? error;
+    final result = await _showInputDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: 460,
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            minLines: multiline ? 3 : 1,
-            maxLines: multiline ? 6 : 1,
-            decoration: InputDecoration(
-              labelText: label,
-              hintText: hint,
-              alignLabelWithHint: true,
+      initial: initial,
+      builder: (context, controller) => StatefulBuilder(
+        builder: (context, update) {
+          void submit() {
+            final value = controller.text.trim();
+            if (value.isEmpty) {
+              update(
+                () => error = label == 'Playlist name'
+                    ? 'Enter a playlist name.'
+                    : 'Enter a value for ${label.toLowerCase()}.',
+              );
+            } else {
+              Navigator.pop(context, value);
+            }
+          }
+
+          return AlertDialog(
+            title: Text(title),
+            scrollable: true,
+            content: SizedBox(
+              width: 460,
+              child: TextField(
+                controller: controller,
+                autofocus: true,
+                minLines: multiline ? 3 : 1,
+                maxLines: multiline ? 6 : 1,
+                decoration: InputDecoration(
+                  labelText: label,
+                  hintText: hint,
+                  errorText: error,
+                  alignLabelWithHint: true,
+                ),
+                onChanged: (_) {
+                  if (error != null) update(() => error = null);
+                },
+                onSubmitted: multiline ? null : (_) => submit(),
+              ),
             ),
-            onSubmitted: multiline
-                ? null
-                : (value) {
-                    if (value.trim().isNotEmpty) {
-                      Navigator.pop(context, value.trim());
-                    }
-                  },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (controller.text.trim().isNotEmpty) {
-                Navigator.pop(context, controller.text.trim());
-              }
-            },
-            child: Text(action),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(onPressed: submit, child: Text(action)),
+            ],
+          );
+        },
       ),
     );
-    // Dialog routes animate out after their result completes.
-    Future<void>.delayed(const Duration(milliseconds: 300), controller.dispose);
     return result;
   }
 
@@ -1142,6 +1236,14 @@ class _LibraryState extends State<_Library> {
                     labelText: 'Find a command',
                   ),
                   onChanged: (value) => setDialogState(() => filter = value),
+                  onSubmitted: (value) {
+                    final matches = actions.where(
+                      (action) => fuzzyScore(value, action.$1) != null,
+                    );
+                    if (matches.isNotEmpty) {
+                      Navigator.pop(context, matches.first.$3);
+                    }
+                  },
                 ),
                 const SizedBox(height: 12),
                 Expanded(
@@ -1224,55 +1326,64 @@ class _LibraryState extends State<_Library> {
 
   Widget _selectionToolbar() => Padding(
     padding: const EdgeInsets.fromLTRB(32, 0, 24, 8),
-    child: SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          Text('${_marked.length} selected'),
-          const SizedBox(width: 12),
-          TextButton(
-            onPressed: () => setState(() {
-              final visible = _visibleTracks.map((e) => e.key);
-              if (visible.every(_marked.contains)) {
-                _marked.removeAll(visible);
-              } else {
-                _marked.addAll(visible);
-              }
-            }),
-            child: const Text('Select visible'),
-          ),
-          TextButton(
-            onPressed: _marked.isEmpty ? null : () => _batchTracks('append'),
-            child: const Text('Append'),
-          ),
-          TextButton(
-            onPressed: _marked.isEmpty ? null : () => _batchTracks('next'),
-            child: const Text('Play next'),
-          ),
-          TextButton(
-            onPressed: _marked.isEmpty ? null : () => _batchTracks('replace'),
-            child: const Text('Replace queue'),
-          ),
-          TextButton(
-            onPressed: _marked.isEmpty ? null : () => _batchTracks('save'),
-            child: const Text('Save to playlist'),
-          ),
-          if (_page == _Page.queue ||
-              _page == _Page.next ||
-              _canRemoveSaved(multiple: true))
+    child: Scrollbar(
+      controller: _selectionScroll,
+      thumbVisibility: true,
+      scrollbarOrientation: ScrollbarOrientation.bottom,
+      child: SingleChildScrollView(
+        controller: _selectionScroll,
+        padding: const EdgeInsets.only(bottom: 8),
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            Text('${_marked.length} selected'),
+            const SizedBox(width: 12),
             TextButton(
-              onPressed: _marked.isEmpty ? null : () => _batchTracks('remove'),
-              child: const Text('Remove'),
+              onPressed: () => setState(() {
+                final visible = _visibleTracks.map((e) => e.key);
+                if (visible.every(_marked.contains)) {
+                  _marked.removeAll(visible);
+                } else {
+                  _marked.addAll(visible);
+                }
+              }),
+              child: const Text('Select visible'),
             ),
-          IconButton(
-            tooltip: 'Finish selecting',
-            onPressed: () => setState(() {
-              _selecting = false;
-              _marked.clear();
-            }),
-            icon: const Icon(Icons.close, size: 18),
-          ),
-        ],
+            TextButton(
+              onPressed: _marked.isEmpty ? null : () => _batchTracks('append'),
+              child: const Text('Append'),
+            ),
+            TextButton(
+              onPressed: _marked.isEmpty ? null : () => _batchTracks('next'),
+              child: const Text('Play next'),
+            ),
+            TextButton(
+              onPressed: _marked.isEmpty ? null : () => _batchTracks('replace'),
+              child: const Text('Replace queue'),
+            ),
+            TextButton(
+              onPressed: _marked.isEmpty ? null : () => _batchTracks('save'),
+              child: const Text('Save to playlist'),
+            ),
+            if (_page == _Page.queue ||
+                _page == _Page.next ||
+                _canRemoveSaved(multiple: true))
+              TextButton(
+                onPressed: _marked.isEmpty
+                    ? null
+                    : () => _batchTracks('remove'),
+                child: const Text('Remove'),
+              ),
+            IconButton(
+              tooltip: 'Finish selecting',
+              onPressed: () => setState(() {
+                _selecting = false;
+                _marked.clear();
+              }),
+              icon: const Icon(Icons.close, size: 18),
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -1496,6 +1607,8 @@ class _LibraryState extends State<_Library> {
     _spectrum?.cancel();
     _search.dispose();
     _searchFocus.dispose();
+    _contentFocus.dispose();
+    _selectionScroll.dispose();
     unawaited(widget.backend.close());
     super.dispose();
   }
@@ -1560,6 +1673,7 @@ class _LibraryState extends State<_Library> {
             return;
           }
           _search.clear();
+          _searchFocus.unfocus();
           setState(() {
             _filter = '';
             _marked.clear();
@@ -1569,6 +1683,7 @@ class _LibraryState extends State<_Library> {
         },
       },
       child: FocusScope(
+        node: _contentFocus,
         autofocus: true,
         onKeyEvent: (node, event) {
           if (event is! KeyDownEvent || _pluginBindings.isEmpty) {
@@ -1595,6 +1710,7 @@ class _LibraryState extends State<_Library> {
           return KeyEventResult.handled;
         },
         child: Scaffold(
+          bottomNavigationBar: _playerBar(MediaQuery.sizeOf(context).width),
           body: LayoutBuilder(
             builder: (context, constraints) {
               final compact = constraints.maxWidth < 860;
@@ -1657,7 +1773,6 @@ class _LibraryState extends State<_Library> {
                         ),
                       ),
                     ),
-                  _playerBar(constraints.maxWidth),
                 ],
               );
             },
@@ -1823,7 +1938,12 @@ class _LibraryState extends State<_Library> {
   );
 
   Widget _topbar(bool compact) => Padding(
-    padding: EdgeInsets.fromLTRB(compact ? 20 : 32, 22, compact ? 20 : 32, 18),
+    padding: EdgeInsets.fromLTRB(
+      compact ? 20 : 32,
+      MediaQuery.sizeOf(context).height < 650 ? 8 : 22,
+      compact ? 20 : 32,
+      MediaQuery.sizeOf(context).height < 650 ? 8 : 18,
+    ),
     child: Row(
       children: [
         Expanded(
@@ -1879,9 +1999,11 @@ class _LibraryState extends State<_Library> {
             () => showDialog<void>(
               context: context,
               builder: (context) => AlertDialog(
-                title: const Text('Background activity'),
-                content: JobsPanel(
-                  backend: widget.backend as JobProgressBackend,
+                content: SizedBox(
+                  width: 600,
+                  child: JobsPanel(
+                    backend: widget.backend as JobProgressBackend,
+                  ),
                 ),
                 actions: [
                   TextButton(
@@ -2054,9 +2176,37 @@ class _LibraryState extends State<_Library> {
 
   Widget _libraryHeader(double width) {
     final queue = _page == _Page.queue;
+    final count = queue ? (_state['total'] as num? ?? 0) : _total;
+    final plural = _kind == 'history' ? 'plays' : _kind;
+    final noun = count == 1 && plural.endsWith('s')
+        ? plural.substring(0, plural.length - 1)
+        : plural;
+    final countLabel = '$count $noun';
     final title = _collectionTitle.isNotEmpty
         ? _collectionTitle
         : _pageTitles[_page.index];
+    if (MediaQuery.sizeOf(context).height < 650) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(countLabel, style: TextStyle(color: _muted, fontSize: 11)),
+          ],
+        ),
+      );
+    }
     return Container(
       margin: const EdgeInsets.fromLTRB(32, 7, 32, 18),
       padding: const EdgeInsets.all(25),
@@ -2133,9 +2283,7 @@ class _LibraryState extends State<_Library> {
                     ),
                     const SizedBox(width: 7),
                     Text(
-                      queue
-                          ? '${_state['total'] ?? 0} tracks in queue'
-                          : '$_total ${_kind == 'history' ? 'plays' : _kind}',
+                      queue ? '$countLabel in queue' : countLabel,
                       style: TextStyle(fontSize: 11, color: _muted),
                     ),
                     if (queue && _playing) ...[
@@ -2436,6 +2584,17 @@ class _LibraryState extends State<_Library> {
     }, 'Queue saved as $name');
   }
 
+  String _trackDuration(Json track) {
+    if (track['realtime'] == true) return 'LIVE';
+    var seconds = _number(track['duration_secs']);
+    if (seconds <= 0 &&
+        track['path'] != null &&
+        track['path'] == _track['path']) {
+      seconds = _number(_state['duration']);
+    }
+    return seconds > 0 ? _duration(seconds) : '—';
+  }
+
   Widget _trackList(double width) {
     final entries = _visibleTracks;
     if (entries.isEmpty) {
@@ -2644,9 +2803,7 @@ class _LibraryState extends State<_Library> {
                           SizedBox(
                             width: 47,
                             child: Text(
-                              track['realtime'] == true
-                                  ? 'LIVE'
-                                  : _duration(track['duration_secs']),
+                              _trackDuration(track),
                               textAlign: TextAlign.right,
                               style: TextStyle(color: _muted, fontSize: 11),
                             ),
@@ -2838,9 +2995,9 @@ class _LibraryState extends State<_Library> {
                     _text(
                       item['artist'],
                       item['track_count'] != null
-                          ? '${item['track_count']} tracks'
+                          ? '${item['track_count']} ${item['track_count'] == 1 ? 'track' : 'tracks'}'
                           : item['album_count'] != null
-                          ? '${item['album_count']} albums'
+                          ? '${item['album_count']} ${item['album_count'] == 1 ? 'album' : 'albums'}'
                           : _text(item['section'], _provider),
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -3473,11 +3630,11 @@ class _LibraryState extends State<_Library> {
   Future<void> _operationDialog() async {
     if (_operations.isEmpty) return;
     Json selected = _operations.first;
-    final controller = TextEditingController(text: '{}');
     String? error;
-    final request = await showDialog<Json>(
+    final request = await _showInputDialog<Json>(
       context: context,
-      builder: (context) => StatefulBuilder(
+      initial: '{}',
+      builder: (context, controller) => StatefulBuilder(
         builder: (context, update) => AlertDialog(
           title: const Text('Engine operations'),
           content: SizedBox(
@@ -3553,8 +3710,8 @@ class _LibraryState extends State<_Library> {
                     'operation': selected['name'],
                     'params': params,
                   });
-                } catch (e) {
-                  update(() => error = '$e');
+                } on FormatException catch (e) {
+                  update(() => error = e.message);
                 }
               },
               child: const Text('Run operation'),
@@ -3563,7 +3720,6 @@ class _LibraryState extends State<_Library> {
         ),
       ),
     );
-    Future<void>.delayed(const Duration(milliseconds: 300), controller.dispose);
     if (request != null) {
       final result = await _run(
         _text(request['operation']),
@@ -3832,6 +3988,7 @@ class _LibraryState extends State<_Library> {
                         ),
                       ),
                       child: Slider(
+                        key: ValueKey(('volume', _connected)),
                         value: volume,
                         min: volumeFloor,
                         max: 6,
@@ -3993,6 +4150,10 @@ class _LibraryState extends State<_Library> {
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
           ),
           child: Slider(
+            // Flutter reparents a slider's internal global key when its focus
+            // shortcuts change on enable/disable. Recreate that local subtree
+            // so the accessibility geometry cannot retain the former parent.
+            key: ValueKey(('seek', _connected && _state['seekable'] == true)),
             value: position.clamp(0, math.max(duration, 1)),
             min: 0,
             max: math.max(duration, 1),
@@ -4180,4 +4341,34 @@ class _BandSliderState extends State<_BandSlider> {
       },
     ),
   );
+}
+
+/// The route may remain mounted while it animates out after Navigator.pop.
+/// Keep editable resources alive until Flutter disposes that subtree.
+Future<T?> _showInputDialog<T>({
+  required BuildContext context,
+  String initial = '',
+  required Widget Function(BuildContext, TextEditingController) builder,
+}) => showDialog<T>(
+  context: context,
+  builder: (_) => _DialogInput(initial: initial, builder: builder),
+);
+
+class _DialogInput extends StatefulWidget {
+  const _DialogInput({required this.initial, required this.builder});
+  final String initial;
+  final Widget Function(BuildContext, TextEditingController) builder;
+  @override
+  State<_DialogInput> createState() => _DialogInputState();
+}
+
+class _DialogInputState extends State<_DialogInput> {
+  late final _controller = TextEditingController(text: widget.initial);
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _controller);
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 }

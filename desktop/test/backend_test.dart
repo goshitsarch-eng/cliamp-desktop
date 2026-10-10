@@ -870,6 +870,95 @@ void main() {
     },
   );
 
+  test('restart preserves every queue page and play-next order', () async {
+    final runner = FakeLauncher();
+    final tracks = List.generate(
+      201,
+      (index) => {
+        'path': '/music/$index.wav',
+        'index': index,
+        'provider_meta': {'source': 'audit'},
+      },
+    );
+    runner.onCommand = (args) {
+      if (args.length > 1 &&
+          args[1] == 'state' &&
+          !runner.daemons.any((p) => p.isRunning)) {
+        return FakeProcess.failure(
+          'cliamp is not running (no socket at /tmp/x)',
+        );
+      }
+      if (args.length > 1 &&
+          args[1] == 'call' &&
+          ['queue.list', 'playnext.list'].contains(args.last)) {
+        final params = jsonDecode(args[args.indexOf('--params') + 1]) as Map;
+        final rows = args.last == 'queue.list'
+            ? tracks
+            : [tracks[200], tracks[0]];
+        return FakeProcess.json(
+          envelope({
+            'job': {
+              'id': 'read',
+              'state': 'succeeded',
+              'result': {
+                'tracks': rows.skip(params['offset'] as int).take(200).toList(),
+                'total': rows.length,
+              },
+            },
+          }),
+        );
+      }
+      return null;
+    };
+    final backend = runner.backend();
+    addTearDown(backend.close);
+    await backend.connect();
+    await backend.restartOwnedEngine();
+    final append = runner.commands
+        .where((args) => args.last == 'tracks.append')
+        .map((args) => jsonDecode(args[args.indexOf('--params') + 1]) as Map)
+        .toList();
+    expect(append.map((p) => (p['tracks'] as List).length), [200, 1]);
+    expect(append.expand((p) => p['tracks'] as List).toList(), tracks);
+    final queued = runner.commands
+        .where((args) => args.last == 'queue.enqueue')
+        .map(
+          (args) =>
+              (jsonDecode(args[args.indexOf('--params') + 1]) as Map)['index'],
+        )
+        .toList();
+    expect(queued, [200, 0]);
+  });
+
+  test('failed restart capture leaves the owned daemon running', () async {
+    final runner = FakeLauncher();
+    runner.onCommand = (args) {
+      if (args.length > 1 &&
+          args[1] == 'state' &&
+          !runner.daemons.any((p) => p.isRunning)) {
+        return FakeProcess.failure(
+          'cliamp is not running (no socket at /tmp/x)',
+        );
+      }
+      if (args.last == 'queue.list') {
+        return FakeProcess.failure('unable to read queue');
+      }
+      return null;
+    };
+    final backend = runner.backend();
+    addTearDown(backend.close);
+    await backend.connect();
+    await expectLater(
+      backend.restartOwnedEngine(),
+      throwsA(isA<BackendException>()),
+    );
+    expect(runner.daemons.single.isRunning, isTrue);
+    expect(
+      runner.commands.where((args) => args.contains('desktop.quit')),
+      isEmpty,
+    );
+  });
+
   test(
     'tracks and cancels a real job without replaying its submission',
     () async {

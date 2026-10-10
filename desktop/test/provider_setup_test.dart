@@ -232,7 +232,7 @@ void main() {
       expect(backend.restarts, 0);
       expect(find.text('Restart player'), findsOneWidget);
       expect(
-        find.textContaining('This stops current playback'),
+        find.textContaining('Playback is briefly interrupted'),
         findsOneWidget,
       );
       await tester.tap(find.text('Restart player'));
