@@ -266,11 +266,18 @@ Future<void> visualizer(WidgetTester t) async {
 
 Future<void> plugins(WidgetTester t) async {
   await a.nav(t, 'Queue');
-  await a.click(
+  await i.loadSources(
     t,
-    find.byTooltip(RegExp(r'^Play (Aurora - )?Blue Hour$')),
-    'Play before restart',
+    '${a.root}/profile/home/Music/list.m3u',
+    replace: true,
   );
+  if (find.byTooltip('Pause').evaluate().isEmpty) {
+    await a.click(
+      t,
+      find.byTooltip(RegExp(r'^Play (Aurora - )?Blue Hour$')),
+      'Play before restart',
+    );
+  }
   await a.waitFor(t, find.byTooltip('Pause'));
   await a.click(t, find.byTooltip('Pause'), 'Pause before restart');
   await a.key(t, LogicalKeyboardKey.keyJ, ctrl: true);
@@ -583,6 +590,18 @@ Future<void> fileDialogs(WidgetTester t) async {
 
 Future<void> batches(WidgetTester t) async {
   await a.nav(t, 'Queue');
+  // The null audio sink consumes the fixture faster than wall-clock playback.
+  // Keep replacement playback alive until the test explicitly pauses it;
+  // otherwise enqueue legitimately starts a stopped player and drains play-next.
+  for (
+    var n = 0;
+    n < 3 && (await a.backend.snapshot())['repeat'] != 'One';
+    n++
+  ) {
+    final repeat = (await a.backend.snapshot())['repeat'];
+    await a.click(t, find.byTooltip('Repeat: $repeat'), 'Repeat batch fixture');
+  }
+
   Future<void> select() async {
     if (find.byTooltip('Finish selecting').evaluate().isEmpty) {
       await a.click(t, find.byTooltip('Select tracks'), 'Select tracks');

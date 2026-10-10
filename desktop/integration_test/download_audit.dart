@@ -13,11 +13,14 @@ Future<void> exercise(WidgetTester t) async {
     await a.nav(t, 'Queue');
     await a.stage(t, 'save-downloaded-track-and-repeat', () async {
       await i.loadSources(t, temporary.path, replace: true);
-      await a.click(
-        t,
-        find.byTooltip('Play Audit download'),
-        'Play downloaded fixture',
-      );
+      expect((await a.backend.snapshot())['track']['path'], temporary.path);
+      if (find.byTooltip('Pause').evaluate().isEmpty) {
+        await a.click(
+          t,
+          find.byTooltip('Play Audit download'),
+          'Play downloaded fixture',
+        );
+      }
       await a.waitFor(t, find.byTooltip('Pause'));
       await a.click(t, find.byTooltip('Pause'), 'Pause downloaded fixture');
       for (var count = 0; count < 2; count++) {

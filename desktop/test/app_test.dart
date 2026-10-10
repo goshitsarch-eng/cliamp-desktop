@@ -845,6 +845,32 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('normal queue load catches a revision received while loading', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    await _open(tester, backend);
+    await _navigate(tester, 'History');
+    final pending = Completer<_Json>();
+    backend.pendingQueue = pending;
+    await tester.tap(find.text('Queue').first);
+    await tester.pump();
+    backend.publishState({'playlist_revision': 84});
+    await tester.pump();
+    backend.pendingQueue = null;
+    pending.complete({
+      'ok': true,
+      'tracks': List.of(backend.tracks),
+      'total': backend.tracks.length,
+    });
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Play Morning Light'));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    expect(backend.mutations('queue.play').single.params['if_revision'], 84);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'an old visible row keeps its revision while a refresh is pending',
     (tester) async {

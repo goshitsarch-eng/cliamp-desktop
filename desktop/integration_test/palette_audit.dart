@@ -45,7 +45,7 @@ Future<void> exercise(WidgetTester t) async {
           if ((await a.backend.snapshot())['seekable'] != true) {
             await a.click(
               t,
-              find.byTooltip('Play Aurora - Blue Hour'),
+              find.byTooltip(RegExp(r'^Play (Aurora - )?Blue Hour$')),
               'Start seekable track',
             );
           }

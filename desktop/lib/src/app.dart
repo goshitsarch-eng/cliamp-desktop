@@ -536,7 +536,10 @@ class _LibraryState extends State<_Library> {
         }
         _loading = false;
       });
-      if (retainQueueView && requestedRevision != _state['playlist_revision']) {
+      // Runtime events can arrive during a normal navigation or page load too.
+      // Reconcile those rows before their captured revision becomes permanent.
+      if ((operation == 'queue.list' || operation == 'playnext.list') &&
+          requestedRevision != _state['playlist_revision']) {
         unawaited(_fetch(operation, params, kind: kind, quiet: true));
       }
     } catch (error) {

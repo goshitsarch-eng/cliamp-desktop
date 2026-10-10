@@ -67,6 +67,9 @@ playlist deletion/undo, errors/retry, and all library pages at 900×650.
 On 2026-10-09, all 96 Flutter tests passed and `flutter analyze` reported no
 issues. All 59 Go packages passed, along with formatting, vet and staticcheck.
 The Go suite independently exercises the shared engine and added contracts.
+The 2026-10-10 [native desktop audit](qa/desktop-audit.md) records the subsequent
+UI fixes, 114 passing Flutter tests, real native-dialog workflows, release
+relaunch/scaling checks, and the status of the complete regression pass.
 Run the commands in [the desktop guide](desktop.md#validate) against
 the current checkout; test totals change as regression coverage expands.
 

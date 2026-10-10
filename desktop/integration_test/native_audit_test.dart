@@ -1,3 +1,4 @@
+import 'edge_controls_audit.dart' as edge_controls_audit;
 import 'setup_save_audit.dart' as setup_save_audit;
 import 'jobs_audit.dart' as jobs_audit;
 import 'recovery_audit.dart' as recovery_audit;
@@ -389,6 +390,17 @@ void main() {
           await nav(t, 'History');
           await waitFor(t, find.byTooltip('Track actions'));
         });
+      } else if (phase == 'final-tail') {
+        await palette_audit.exercise(t);
+        await download_audit.exercise(t);
+        await recovery_audit.exercise(t);
+        await jobs_audit.exercise(t);
+        await setup_save_audit.exercise(t);
+        await edge_controls_audit.exercise(t);
+      } else if (phase == 'lyric-variants') {
+        await edge_controls_audit.exercise(t, sections: false);
+      } else if (phase == 'edge-controls') {
+        await edge_controls_audit.exercise(t);
       } else if (phase == 'preferences') {
         await interactions.preferences(t);
       } else if (phase == 'setup-save') {
@@ -514,6 +526,7 @@ void main() {
         await recovery_audit.exercise(t);
         await jobs_audit.exercise(t);
         await setup_save_audit.exercise(t);
+        await edge_controls_audit.exercise(t);
       }
     } finally {
       await t.pumpWidget(const SizedBox());

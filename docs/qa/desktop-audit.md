@@ -4,7 +4,7 @@
 
 ## Application tested
 
-Cliamp Desktop **0.1.0+1**, Flutter frontend with the real Go audio engine. Baseline `261ead0` was merged as `1aa11a0`. The follow-up is on `codex/desktop-qa-fixes`. Final implementation commit and release fingerprints will be recorded after the final build.
+Cliamp Desktop **0.1.0+1**, Flutter frontend with the real Go audio engine. Baseline `261ead0` was merged as `1aa11a0`. The follow-up is on `codex/desktop-qa-fixes`. The first 30 fixes are at `2f1aebb68b5fc38ff7191ef32e4f6b4f5fe542c4`; BUG-031 adds a queue-loading race correction and a new regression test. Final commit and verification are pending.
 
 ## Test environment
 
@@ -40,7 +40,7 @@ Account-specific controls requiring authenticated providers remain outside verif
 
 ## Bugs fixed
 
-**30 reproduced defects currently logged.** Full details and individual file references are in the [defect log](desktop-defects.md).
+**31 reproduced application defects logged, plus ENV-001 (unresolved renderer observation).** Full details and individual file references are in the [defect log](desktop-defects.md).
 
 | Defects | Correction | Main files |
 |---|---|---|
@@ -50,6 +50,8 @@ Account-specific controls requiring authenticated providers remain outside verif
 | 009 | Ignore unchanged or invisible spectrum/state updates that caused excessive idle redraws | `app.dart` |
 | 014, 023–024 | Search releases focus, Return executes palette matches, provider Escape clears search and returns from remote results | `app.dart`, `provider_browser.dart` |
 | 015–022, 027–028 | Activity-dialog constraints, atomic local import validation, readable/scrollable errors, lyric resize following, theme contrast, podcast terminology/counts, short provider layouts | `app.dart`, `jobs.dart`, `lyrics.dart`, `visualizer.dart`, `provider_browser.dart`, `ui/model/ipc_sources_desktop.go` |
+| 031 | Reconcile queue revisions received during navigation or pagination | `app.dart` |
+| 030 | Singular counts for one library item | `app.dart` |
 | 025 | Podcast catalog/search favorite flags agree with subscription state | `external/podcast/provider.go` |
 
 Visual evidence includes [small queue before](screenshots/queue-before-640x480.png)/[after](screenshots/queue-after-640x480.png), [visualizer before](screenshots/visualizer-before-640x480.png)/[after](screenshots/visualizer-after-640x480.png), [provider overflow before](screenshots/provider-collection-before.png)/[after](screenshots/provider-collection-after.png), [lyrics before](screenshots/lyrics-before-resize.png)/[after](screenshots/lyrics-after-resize.png), [light caption before](screenshots/light-theme-caption-before.png)/[after](screenshots/light-theme-caption-after.png), [bounded error](screenshots/long-error-after.png), and [activity dialog](screenshots/activity-after-640x480.png).
@@ -66,23 +68,58 @@ Visual evidence includes [small queue before](screenshots/queue-before-640x480.p
 ## Verification so far
 
 - **PASS:** `make check` (format, vet and tests; 59 packages with passing tests), under a Linux child-subreaper wrapper.
-- **PASS:** all **113 Flutter tests** after the latest product fixes.
-- **PASS:** Flutter analysis at the latest completed analysis checkpoint; final analysis pending.
-- **PASS:** targeted native visualizer, palette, source, library, podcast, lyrics, plugin/restart, download, cancellation, recovery, setup-save and native file-picker workflows. Remaining provider routes and the complete final run are pending.
-- **PENDING:** final complete walkthrough, separate-process persistence, final release smoke/scaling and matched performance measurement.
+- **PASS:** all **114 Flutter tests** after the latest product fixes.
+- **PASS:** `flutter analyze` after the latest application change; no issues found.
+- **PASS:** targeted native visualizer, palette, source, library, podcast, lyrics, plugin/restart, download, cancellation, recovery, setup-save and native file-picker workflows. All four available provider browsers also passed their targeted run. The complete final run is pending.
+- **PASS:** separate-process preference/library/history persistence, fresh-profile location consent, matched release measurement, and the independent release smoke/scaling run.
+- **PENDING:** the final uninterrupted combined walkthrough with its corrected test setup and added lyric/section checks.
 
 The container's PID 1 does not reap orphaned children. An existing Lua child-process test mistakes zombies for live processes in an unwrapped run. The local subreaper supplies normal child reaping; no product behavior or test assertion was weakened.
 
 ## Performance
 
-An earlier matched release comparison, after ten seconds of warmup over five-second samples, reduced idle frontend CPU from **225.98% to 15.00%** of one core after the spectrum fix. RSS was approximately 298 MiB versus 293 MiB. Further unchanged-state filtering is included in this follow-up. Final combined-build measurements are pending. Software-renderer figures are environment-specific, not a hardware performance guarantee.
+A matched comparison used the baseline frontend and final release with the same Go engine, fresh isolated profiles, 20 seconds of warmup and 10-second samples. No native test was running during measurement.
+
+| Frontend | Idle CPU (% of one core) | RSS |
+|---|---:|---:|
+| Baseline | 226.19% | 294.8 MiB |
+| Final | 2.10% | 284.8 MiB |
+
+Both releases shut down their owned engine processes after native window close. These Xvfb/software-rendering results demonstrate the redundant-redraw correction on this host; they are not a hardware performance guarantee.
+
+## Independent release smoke test
+
+The Linux release at application commit `2f1aebb68b5fc38ff7191ef32e4f6b4f5fe542c4` was launched independently of Flutter's test driver. Native mouse clicks, keyboard input and wheel scrolling verified:
+
+- Bundle discovery without `CLIAMP_BINARY`: launch the staged sidecar, import a WAV, close and confirm its daemon/event/spectrum processes exit.
+- Ctrl+O, entered WAV import, row playback, favorite toggling and singular count labels.
+- Save queue with typed name and Return; close the native window; confirm the owned engine/event/spectrum processes exit.
+- Relaunch into the same profile, reopen **Release smoke**, and verify **Blue Hour** and its favorite remain. Native Ctrl+F text input and Escape clearing work.
+- At `GDK_SCALE=2`, resize to 1280×960 physical pixels (640×480 logical), attempt a below-minimum resize, open/dismiss Add music, and scroll to the saved playlist. Controls and dialog actions remain reachable, with no visible clipping in the inspected states.
+
+Window size/position and selected page reset to defaults on launch; with `auto_play=false`, the unsaved live queue starts empty. Saved playlists, favorites and history remain available. These reset behaviors are observations, not claims of window/session persistence.
+
+The ALSA null device consumes samples faster than real time. Playback state and seeking can be checked, but these runs cannot validate audible playback or real-world playback timing.
+
+![Release playlist reopened with its favorite](screenshots/release-reopened-playlist.png)
+![Add music at 200% display scaling and minimum logical size](screenshots/release-hidpi-dialog.png)
+
+## Investigated runtime warning
+
+Repeated native resizing under Xvfb/Mesa emits `Timed out waiting for OpenGL frame of size …` in both the baseline release (7 occurrences in an 18-resize probe) and the final release (3 in the equivalent probe). Flutter's `fl_compositor_opengl.cc` reports this when its 100 ms framebuffer-size wait expires. The next frame recovers; inspected dialogs remain intact and responsive. Adding xfwm4 does not eliminate it. An attempted environment switch did not change the release renderer, so no alternate-renderer pass is claimed.
+
+This observation is **not fixed or suppressed**. It requires investigation in Flutter/the graphics stack and comparison on a physical GPU, unavailable in this cloud host. There were no corresponding Dart exceptions or persistent layout failures. See ENV-001 in the defect log. The complete application audit result below is scoped separately from this renderer warning.
 
 ## External verification limits
 
 - **Windows/macOS:** this Linux host cannot launch either native runner. Their native builds, window behavior, platform media keys and packaging require the respective operating systems.
 - **Live accounts:** no provider credentials, private media servers or SSH test endpoint are configured. Authentication, private catalogs, account playback and private SSH sources cannot be certified from public/local-fixture checks.
 - **Physical hardware:** ALSA null output does not test audible output, real device switching, physical media-key hardware or GPU-specific rendering.
-- **Hosted CI:** GitHub Actions cannot start because the repository account is billing-locked. The checked annotation is: “The job was not started because your account is locked due to a billing issue.” [Observed run](https://github.com/goshitsarch-eng/cliamp-desktop/actions/runs/37998938519). Local results do not establish hosted CI success.
+- **Hosted CI:** GitHub Actions cannot start because the repository account is billing-locked. The checked annotation is: “The job was not started because your account is locked due to a billing issue.” [Observed run](https://github.com/goshitsarch-eng/cliamp-desktop/actions/runs/38025595517). Local results do not establish hosted CI success.
+
+## Reusable cloud setup
+
+The onboarding configuration draft's `start_skill` now records activation order, frozen dependency checks, Go subreaping, sequential Flutter validation, release build, and isolated native-runner startup/readiness/cleanup. It also records the exact platform/account/hardware limitations. The draft was saved successfully; publishing and testing restoration in a fresh task are separate user actions and have not been claimed.
 
 ## Final result
 

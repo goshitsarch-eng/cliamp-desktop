@@ -262,8 +262,9 @@ operate outside IPC so they also work before the audio engine starts.
 
 ## Native UI audit
 
-On Linux, install Xvfb, xfwm4, ImageMagick (`import`), ffmpeg, dbus-run-session and libXtst in addition to
-the desktop build prerequisites. From the repository root, run:
+On Linux, install Xvfb, xfwm4, ImageMagick (`import`), ffmpeg, dbus-run-session,
+libXtst and X11 utilities (`xprop`, `xwininfo`) in addition to the desktop build
+prerequisites. From the repository root, run:
 
 ```sh
 python3 desktop/tool/native_audit.py --engine /absolute/path/to/cliamp
@@ -279,3 +280,7 @@ Windows/macOS runners require separate native acceptance testing.
 
 See the [audit report](qa/desktop-audit.md), [UI inventory](qa/desktop-ui-inventory.md),
 and [defect log](qa/desktop-defects.md) for execution evidence and validation limits.
+
+Queue and play-next navigation reconcile runtime changes that arrive while rows
+are loading. Stale actions remain protected by revision checks; rejected
+mutations are not automatically replayed.

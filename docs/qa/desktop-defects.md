@@ -95,7 +95,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** 136.59% of one CPU core in this Xvfb/software-rendered Linux session (baseline release PID 128049).
 - **Root cause / files:** `desktop/lib/src/app.dart`, every 30 Hz spectrum packet calls setState even when bands are identical or the visible page has no spectrum.
 - **Fix:** Ignore identical band values and only rebuild spectrum-bearing pages; retain the latest values for later navigation.
-- **Retest:** Matched release comparison after ten seconds of warmup: baseline 225.98% CPU, spectrum fix 15.00%, over five seconds each; RSS about 298 MiB and 293 MiB. A further guard now ignores identical runtime snapshots while still allowing connection recovery. Final combined release measurement pending. Absolute CPU figures are environment-specific.
+- **Retest:** PASS: matched baseline/final release, same engine and isolated profiles, 20-second warmup and 10-second samples: CPU 226.19% → 2.10% of one core; RSS 294.8 → 284.8 MiB. Both close their owned engine processes. Software-renderer figures are environment-specific.
 
 ## BUG-010 — Preference validation does not identify the invalid field
 
@@ -307,4 +307,27 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Evidence:** Manual release `manual-final/imported.png`.
 - **Root cause / files:** `desktop/lib/src/app.dart`, plural suffixes embedded in count labels.
 - **Fix:** Choose singular for one track, play, playlist, artist or album in the library header and cards.
-- **Retest:** Pending final release and full native walkthrough.
+- **Retest:** PASS: independent final release shows “1 track in queue” and “1 track” on the reopened saved collection and cards. Full native walkthrough pending.
+
+## ENV-001 — Transient Flutter compositor resize timeout
+
+- **Area / severity:** Linux headless rendering; low observed impact, unresolved external verification.
+- **Reproduction:** Launch the baseline or final release under Xvfb/Mesa, with or without xfwm4. Repeatedly resize among 900×650, 640×480, 1280×940, 1600×500 and 640×1400, then open Add music.
+- **Expected:** The compositor receives each new-sized frame within its deadline.
+- **Actual:** Some transitions log `Timed out waiting for OpenGL frame of size …`; the next frame recovers and the inspected dialog remains correctly drawn and responsive.
+- **Evidence:** Baseline 7 warnings and final 3 warnings over equivalent 18-resize probes; also seen before the final probe. No associated Dart exception. The attempted release environment renderer switch was ignored and is not a verified workaround.
+- **Root cause / files:** Flutter SDK `engine/src/flutter/shell/platform/linux/fl_compositor_opengl.cc`, framebuffer dimensions differ when its 100 ms wait expires. Reproduced before and after application changes.
+- **Fix / blocker:** No application workaround or warning suppression applied. Resolving the renderer/driver timing requires upstream graphics-stack investigation and physical-GPU comparison unavailable on this headless cloud host. This remains explicitly unverified on native hardware.
+- **Retest:** Reproduced in both baseline and final; restored frame, dialog interaction, and native close work. Application layout assertions continue to pass.
+
+## BUG-031 — Queue navigation can retain a stale revision
+
+- **Area / severity:** Queue/play-next loading and batch actions; medium.
+- **Reproduction:** Load a saved playlist while playback state changes, navigate to Queue, select the visible rows and Append. A runtime revision event arriving during the normal list request leaves the old revision attached to the loaded rows.
+- **Expected:** Completed navigation reconciles with the latest queue state; subsequent actions use the displayed list's current revision.
+- **Actual:** Append can show “operation cannot be performed in the current state” and leave the two-track queue unchanged. The native failure screenshot captures the two selected rows and error.
+- **Evidence:** Final7 `batch-append-remove-replace-undo-failed.png`; a focused regression initially expected revision 84 but observed 41.
+- **Root cause / files:** `desktop/lib/src/app.dart`: revision changes during loading suppress a new fetch, and the completion-time reconciliation previously ran only for quiet refreshes, not normal navigation or pagination.
+- **Fix:** Reconcile revision changes after every queue/play-next load using a quiet follow-up. Keep the displayed revision while a refresh is pending; never replay a rejected stale mutation.
+- **Tests:** `desktop/test/app_test.dart` publishes a revision during pending queue navigation, completes the old response, and checks the next row action uses the reconciled revision. Existing stale-row/no-replay and 205-row selection regressions remain enabled.
+- **Retest:** Pending full Flutter suite, native library retest, and a new complete walkthrough after this application fix.
