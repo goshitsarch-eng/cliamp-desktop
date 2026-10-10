@@ -1,0 +1,1697 @@
+{
+  "application_commit": "f0bf2459455f886eb7c3f8dbc22fecea3e8ba763",
+  "platform": "Debian 13.6 Linux x86_64; Flutter 3.47.7, Dart 3.13.5, Go 1.26.6",
+  "release_sha256": {
+    "cliamp_desktop": "03d099b9527bb9a491a59d029111fd192b0fcc6242e1b0da2fb04b101f11dd6b",
+    "cliamp": "f7bccbd759296a6099075e8c3987fc63ecf724245f1e6767d8f2bb1a3598d98d",
+    "lib/libapp.so": "e16e9ee6e63e480c4c84ffc69ac29bb5662556a9e8871dbac39514e739f07ca2"
+  },
+  "go_make_check": {
+    "result": "PASS",
+    "test_packages": 59,
+    "process_reaping": "Linux child subreaper"
+  },
+  "flutter_unit_tests": {
+    "result": "PASS",
+    "tests": 114
+  },
+  "flutter_analyze": "PASS",
+  "native": {
+    "result": "PASS",
+    "recorded_entries": 3129,
+    "passing_stages": 266,
+    "unique_stage_names": 265,
+    "action_counts": {
+      "native-resize": 509,
+      "click": 1760,
+      "native-key": 63,
+      "key": 46,
+      "paste-text": 394,
+      "drag-band": 10
+    },
+    "stages": [
+      {
+        "stage": "fresh-launch",
+        "time": "2026-10-10T06:35:53.539581Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Queue-1280x940",
+        "time": "2026-10-10T06:35:55.856485Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Queue-900x650",
+        "time": "2026-10-10T06:35:56.931289Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Queue-640x480",
+        "time": "2026-10-10T06:35:57.947452Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Queue-400x300",
+        "time": "2026-10-10T06:35:58.851334Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Queue-1600x500",
+        "time": "2026-10-10T06:35:59.927010Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Queue-640x1400",
+        "time": "2026-10-10T06:36:01.013730Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Play-next-1280x940",
+        "time": "2026-10-10T06:36:03.240704Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Play-next-900x650",
+        "time": "2026-10-10T06:36:04.273342Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Play-next-640x480",
+        "time": "2026-10-10T06:36:05.263987Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Play-next-400x300",
+        "time": "2026-10-10T06:36:06.183706Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Play-next-1600x500",
+        "time": "2026-10-10T06:36:07.255388Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Play-next-640x1400",
+        "time": "2026-10-10T06:36:08.305465Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Providers-1280x940",
+        "time": "2026-10-10T06:36:10.765486Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Providers-900x650",
+        "time": "2026-10-10T06:36:11.796102Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Providers-640x480",
+        "time": "2026-10-10T06:36:12.775047Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Providers-400x300",
+        "time": "2026-10-10T06:36:13.685718Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Providers-1600x500",
+        "time": "2026-10-10T06:36:14.781830Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Providers-640x1400",
+        "time": "2026-10-10T06:36:15.839594Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Playlists-1280x940",
+        "time": "2026-10-10T06:36:18.043401Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Playlists-900x650",
+        "time": "2026-10-10T06:36:19.099425Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Playlists-640x480",
+        "time": "2026-10-10T06:36:20.119786Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Playlists-400x300",
+        "time": "2026-10-10T06:36:21.041994Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Playlists-1600x500",
+        "time": "2026-10-10T06:36:22.150558Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Playlists-640x1400",
+        "time": "2026-10-10T06:36:23.267850Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Favorites-1280x940",
+        "time": "2026-10-10T06:36:25.410064Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Favorites-900x650",
+        "time": "2026-10-10T06:36:26.445962Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Favorites-640x480",
+        "time": "2026-10-10T06:36:27.429614Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Favorites-400x300",
+        "time": "2026-10-10T06:36:28.331419Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Favorites-1600x500",
+        "time": "2026-10-10T06:36:29.390256Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Favorites-640x1400",
+        "time": "2026-10-10T06:36:30.439967Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-History-1280x940",
+        "time": "2026-10-10T06:36:32.508603Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-History-900x650",
+        "time": "2026-10-10T06:36:33.510889Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-History-640x480",
+        "time": "2026-10-10T06:36:34.483483Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-History-400x300",
+        "time": "2026-10-10T06:36:35.400197Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-History-1600x500",
+        "time": "2026-10-10T06:36:36.418172Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-History-640x1400",
+        "time": "2026-10-10T06:36:37.469804Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Lyrics-1280x940",
+        "time": "2026-10-10T06:36:39.516843Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Lyrics-900x650",
+        "time": "2026-10-10T06:36:40.505874Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Lyrics-640x480",
+        "time": "2026-10-10T06:36:41.482351Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Lyrics-400x300",
+        "time": "2026-10-10T06:36:42.398042Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Lyrics-1600x500",
+        "time": "2026-10-10T06:36:43.414549Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Lyrics-640x1400",
+        "time": "2026-10-10T06:36:44.444660Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Visualizer-1280x940",
+        "time": "2026-10-10T06:36:47.033334Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Visualizer-900x650",
+        "time": "2026-10-10T06:36:48.381996Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Visualizer-640x480",
+        "time": "2026-10-10T06:36:49.511303Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Visualizer-400x300",
+        "time": "2026-10-10T06:36:50.651871Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Visualizer-1600x500",
+        "time": "2026-10-10T06:36:51.956367Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Visualizer-640x1400",
+        "time": "2026-10-10T06:36:53.159481Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Equalizer-1280x940",
+        "time": "2026-10-10T06:36:55.441853Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Equalizer-900x650",
+        "time": "2026-10-10T06:36:56.426938Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Equalizer-640x480",
+        "time": "2026-10-10T06:36:57.395367Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Equalizer-400x300",
+        "time": "2026-10-10T06:36:58.297209Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Equalizer-1600x500",
+        "time": "2026-10-10T06:36:59.377062Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Equalizer-640x1400",
+        "time": "2026-10-10T06:37:00.486278Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Plugins-1280x940",
+        "time": "2026-10-10T06:37:02.687114Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Plugins-900x650",
+        "time": "2026-10-10T06:37:03.696948Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Plugins-640x480",
+        "time": "2026-10-10T06:37:04.683144Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Plugins-400x300",
+        "time": "2026-10-10T06:37:05.598167Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Plugins-1600x500",
+        "time": "2026-10-10T06:37:06.617661Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Plugins-640x1400",
+        "time": "2026-10-10T06:37:07.681347Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Settings-1280x940",
+        "time": "2026-10-10T06:37:09.875399Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Settings-900x650",
+        "time": "2026-10-10T06:37:10.898638Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Settings-640x480",
+        "time": "2026-10-10T06:37:11.934474Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Settings-400x300",
+        "time": "2026-10-10T06:37:12.850317Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Settings-1600x500",
+        "time": "2026-10-10T06:37:13.948243Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "layout-Settings-640x1400",
+        "time": "2026-10-10T06:37:15.049264Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "add-music-dialog",
+        "time": "2026-10-10T06:37:19.735582Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "command-palette-dialog",
+        "time": "2026-10-10T06:37:23.273649Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preferences-dialog",
+        "time": "2026-10-10T06:37:27.575368Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "setup-dialog",
+        "time": "2026-10-10T06:37:30.877484Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "plugin-manager-dialog",
+        "time": "2026-10-10T06:37:35.617131Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "empty-playlist-name-validation",
+        "time": "2026-10-10T06:37:42.582230Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "playlist-long-duplicate-and-invalid-names",
+        "time": "2026-10-10T06:38:00.167731Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "empty-plugin-source-validation",
+        "time": "2026-10-10T06:38:04.238880Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "source-empty-validation",
+        "time": "2026-10-10T06:38:10.825854Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "import-local-unicode-multiline",
+        "time": "2026-10-10T06:38:19.476168Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "queue-search-empty-unicode-clear",
+        "time": "2026-10-10T06:38:29.960284Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "queue-track-details-and-move",
+        "time": "2026-10-10T06:38:56.433143Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "favorites-add-open-remove",
+        "time": "2026-10-10T06:39:09.430879Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "queue-selection-cancel-and-resize",
+        "time": "2026-10-10T06:39:19.069900Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "play-pause-seek-controls",
+        "time": "2026-10-10T06:40:11.144292Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "equalizer-presets-and-bands",
+        "time": "2026-10-10T06:41:05.651546Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-volume",
+        "time": "2026-10-10T06:41:20.409212Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-volume_min",
+        "time": "2026-10-10T06:41:31.769442Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-repeat",
+        "time": "2026-10-10T06:41:42.697468Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-shuffle",
+        "time": "2026-10-10T06:41:48.258582Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-mono",
+        "time": "2026-10-10T06:41:54.768665Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-speed",
+        "time": "2026-10-10T06:42:07.718922Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-auto_play",
+        "time": "2026-10-10T06:42:13.919039Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-seek_large_step_sec",
+        "time": "2026-10-10T06:42:25.878523Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-lyrics_offset_ms",
+        "time": "2026-10-10T06:42:37.800434Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-provider",
+        "time": "2026-10-10T06:42:48.283106Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-initial_directory",
+        "time": "2026-10-10T06:43:00.061198Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-downloads.directory",
+        "time": "2026-10-10T06:43:09.291551Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-sample_rate",
+        "time": "2026-10-10T06:43:23.170599Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-buffer_ms",
+        "time": "2026-10-10T06:43:30.974768Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-resample_quality",
+        "time": "2026-10-10T06:43:38.528944Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-bit_depth",
+        "time": "2026-10-10T06:43:44.693766Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-audio_device",
+        "time": "2026-10-10T06:43:52.541051Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-eq_preset",
+        "time": "2026-10-10T06:44:00.690593Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-eq",
+        "time": "2026-10-10T06:44:08.928103Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-theme",
+        "time": "2026-10-10T06:44:17.773290Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-visualizer",
+        "time": "2026-10-10T06:44:27.086954Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-vis_rows",
+        "time": "2026-10-10T06:44:35.267716Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-vis_volume_linked",
+        "time": "2026-10-10T06:44:39.578240Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-simplified",
+        "time": "2026-10-10T06:44:43.987704Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-hide_help_bar",
+        "time": "2026-10-10T06:44:48.238768Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-hide_settings_pane",
+        "time": "2026-10-10T06:44:52.652308Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-show_metadata",
+        "time": "2026-10-10T06:44:56.887422Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-expanded",
+        "time": "2026-10-10T06:45:01.012342Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-padding_horizontal",
+        "time": "2026-10-10T06:45:09.035608Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-padding_vertical",
+        "time": "2026-10-10T06:45:17.214004Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-log_level",
+        "time": "2026-10-10T06:45:25.460746Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-low_power",
+        "time": "2026-10-10T06:45:29.764118Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-plugins.disabled",
+        "time": "2026-10-10T06:45:37.545017Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-plugins.allowed_binaries",
+        "time": "2026-10-10T06:45:45.637290Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-radio.country",
+        "time": "2026-10-10T06:45:53.505468Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-podcast.country",
+        "time": "2026-10-10T06:46:01.172652Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-navidrome.browse_sort",
+        "time": "2026-10-10T06:46:08.969613Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-navidrome.format",
+        "time": "2026-10-10T06:46:16.704149Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-navidrome.scrobble",
+        "time": "2026-10-10T06:46:20.945991Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-lyrion.show_unplayable",
+        "time": "2026-10-10T06:46:25.429750Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-spotify.enabled",
+        "time": "2026-10-10T06:46:29.607260Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-spotify.client_id",
+        "time": "2026-10-10T06:46:37.107031Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-spotify.bitrate",
+        "time": "2026-10-10T06:46:44.276338Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-qobuz.enabled",
+        "time": "2026-10-10T06:46:48.524575Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-qobuz.quality",
+        "time": "2026-10-10T06:46:56.848020Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-tidal.enabled",
+        "time": "2026-10-10T06:47:01.148991Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-tidal.client_id",
+        "time": "2026-10-10T06:47:09.398930Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-tidal.quality",
+        "time": "2026-10-10T06:47:18.582497Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-ytmusic.enabled",
+        "time": "2026-10-10T06:47:22.684060Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-ytmusic.client_id",
+        "time": "2026-10-10T06:47:30.315577Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-ytmusic.cookies_from",
+        "time": "2026-10-10T06:47:38.282424Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-ytmusic.expand_playlist",
+        "time": "2026-10-10T06:47:42.692851Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-soundcloud.enabled",
+        "time": "2026-10-10T06:47:47.077435Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-soundcloud.user",
+        "time": "2026-10-10T06:47:55.317030Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-soundcloud.cookies_from",
+        "time": "2026-10-10T06:48:03.063054Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-mixcloud.enabled",
+        "time": "2026-10-10T06:48:07.268397Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-mixcloud.username",
+        "time": "2026-10-10T06:48:16.730846Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-mixcloud.cookies_from",
+        "time": "2026-10-10T06:48:25.135332Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-mixcloud.styles",
+        "time": "2026-10-10T06:48:33.425337Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-mixcloud.max_items",
+        "time": "2026-10-10T06:48:42.997603Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-mixcloud.stream_creators",
+        "time": "2026-10-10T06:48:50.939289Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-netease.enabled",
+        "time": "2026-10-10T06:48:55.079830Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-netease.cookies_from",
+        "time": "2026-10-10T06:49:02.730425Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-netease.user_id",
+        "time": "2026-10-10T06:49:10.570900Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-yandex.enabled",
+        "time": "2026-10-10T06:49:14.764837Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-plex.libraries",
+        "time": "2026-10-10T06:49:22.602144Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-jellyfin.user_id",
+        "time": "2026-10-10T06:49:30.426593Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-emby.user_id",
+        "time": "2026-10-10T06:49:38.157039Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-audiobookshelf.libraries",
+        "time": "2026-10-10T06:49:47.334645Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preferences-validation-and-save",
+        "time": "2026-10-10T06:50:04.322911Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "setup-navidrome",
+        "time": "2026-10-10T06:50:23.605574Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "setup-lyrion",
+        "time": "2026-10-10T06:50:40.494407Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "setup-plex",
+        "time": "2026-10-10T06:50:57.230246Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "setup-jellyfin",
+        "time": "2026-10-10T06:51:23.818027Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "setup-emby",
+        "time": "2026-10-10T06:51:52.416457Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "setup-audiobookshelf",
+        "time": "2026-10-10T06:52:17.800996Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "setup-spotify",
+        "time": "2026-10-10T06:52:33.474801Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "setup-qobuz",
+        "time": "2026-10-10T06:52:42.225721Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "setup-tidal",
+        "time": "2026-10-10T06:52:58.686221Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "setup-netease",
+        "time": "2026-10-10T06:53:20.584405Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "setup-mixcloud",
+        "time": "2026-10-10T06:54:05.574661Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "setup-ytmusic",
+        "time": "2026-10-10T06:54:25.178104Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "setup-soundcloud",
+        "time": "2026-10-10T06:54:37.073131Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "setup-yandex",
+        "time": "2026-10-10T06:54:46.709037Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "save-queue-playlist",
+        "time": "2026-10-10T06:55:28.937837Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "playlist-create-rename-delete-undo",
+        "time": "2026-10-10T06:55:44.283085Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "batch-append-remove-replace-undo",
+        "time": "2026-10-10T06:56:03.337657Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "batch-save-and-prepend-destination",
+        "time": "2026-10-10T06:56:18.413471Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "play-next-batch-move-and-clear",
+        "time": "2026-10-10T06:56:28.485441Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "visualizer-all-modes-and-themes",
+        "time": "2026-10-10T06:59:03.601697Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "plugin-invalid-source",
+        "time": "2026-10-10T06:59:22.882764Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "plugin-install-local-http-fixture",
+        "time": "2026-10-10T06:59:35.241644Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "plugin-review-configure-toggle-remove",
+        "time": "2026-10-10T06:59:54.247334Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "native-multiple-file-selection",
+        "time": "2026-10-10T07:00:02.668261Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "native-file-picker-cancel",
+        "time": "2026-10-10T07:00:15.153429Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "native-file-picker-select",
+        "time": "2026-10-10T07:00:23.939374Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "native-folder-picker-cancel",
+        "time": "2026-10-10T07:00:28.486200Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "native-folder-picker-select",
+        "time": "2026-10-10T07:00:37.199657Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "native-maximize-restore",
+        "time": "2026-10-10T07:00:51.571335Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "linux-media-controls",
+        "time": "2026-10-10T07:00:56.273328Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "playback-speed-repeat-volume-and-keys",
+        "time": "2026-10-10T07:01:18.673887Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-open-Queue",
+        "time": "2026-10-10T07:01:22.826568Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-open-Play-next",
+        "time": "2026-10-10T07:01:26.746314Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-open-Providers",
+        "time": "2026-10-10T07:01:30.039586Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-open-Playlists",
+        "time": "2026-10-10T07:01:33.212180Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-open-Favorites",
+        "time": "2026-10-10T07:01:36.526230Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-open-History",
+        "time": "2026-10-10T07:01:39.735045Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-open-Lyrics",
+        "time": "2026-10-10T07:01:43.907065Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-open-Visualizer",
+        "time": "2026-10-10T07:01:47.162526Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-open-Equalizer",
+        "time": "2026-10-10T07:01:50.794262Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-open-Plugins",
+        "time": "2026-10-10T07:01:54.552932Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-open-Settings",
+        "time": "2026-10-10T07:01:57.668623Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "settings-mono-device-help-and-operations",
+        "time": "2026-10-10T07:05:07.357204Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "background-activity",
+        "time": "2026-10-10T07:05:12.144354Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "source-error-missing.wav",
+        "time": "2026-10-10T07:05:27.179699Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "source-error-broken.m3u",
+        "time": "2026-10-10T07:05:40.784865Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "source-error-not-audio.txt",
+        "time": "2026-10-10T07:05:54.430364Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "source-error-long-path",
+        "time": "2026-10-10T07:06:07.794436Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "playlist-file-import-replace-cancel",
+        "time": "2026-10-10T07:06:46.044551Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "corrupt-file-playback-error",
+        "time": "2026-10-10T07:07:02.218321Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "read-only-source-preserved",
+        "time": "2026-10-10T07:07:15.790203Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "large-queue-pagination-range-and-scroll",
+        "time": "2026-10-10T07:07:57.407184Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "large-saved-playlist-native-pagination",
+        "time": "2026-10-10T07:08:11.601344Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "synced-lyrics-seek-offset-follow",
+        "time": "2026-10-10T07:08:41.701669Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "browse-cliamp",
+        "time": "2026-10-10T07:09:24.026841Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "browse-radio",
+        "time": "2026-10-10T07:10:18.021859Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "browse-local",
+        "time": "2026-10-10T07:10:36.266335Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "browse-podcast",
+        "time": "2026-10-10T07:11:17.298912Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "podcast-feed-search-subscribe-open",
+        "time": "2026-10-10T07:11:31.308046Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "podcast-all-subscription-actions",
+        "time": "2026-10-10T07:11:49.297419Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "history-replay-cancel-clear-and-repopulate",
+        "time": "2026-10-10T07:12:25.109028Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "unsupported-local-track-actions",
+        "time": "2026-10-10T07:12:32.842722Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-enter-result",
+        "time": "2026-10-10T07:12:45.223362Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-Play-pause",
+        "time": "2026-10-10T07:12:49.578340Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-Previous-track",
+        "time": "2026-10-10T07:12:54.396053Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-Next-track",
+        "time": "2026-10-10T07:13:00.420710Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-Seek-back-seconds",
+        "time": "2026-10-10T07:13:04.550371Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-Seek-forward-seconds",
+        "time": "2026-10-10T07:13:08.888223Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-Volume-up-down",
+        "time": "2026-10-10T07:13:13.268998Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-Jump-to-time",
+        "time": "2026-10-10T07:13:19.355538Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-Add-files-folder-or-URL",
+        "time": "2026-10-10T07:13:23.505447Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-Search-this-view",
+        "time": "2026-10-10T07:13:27.433711Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-Download-playing-track",
+        "time": "2026-10-10T07:13:30.874916Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-Undo-playlist-queue-edit",
+        "time": "2026-10-10T07:13:34.843747Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-Compact-player",
+        "time": "2026-10-10T07:13:38.983357Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-Toggle-shuffle",
+        "time": "2026-10-10T07:13:42.995255Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "palette-Cycle-repeat",
+        "time": "2026-10-10T07:13:46.802307Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "keyboard-transport-and-text-editing",
+        "time": "2026-10-10T07:13:58.578327Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "save-downloaded-track-and-repeat",
+        "time": "2026-10-10T07:14:16.147289Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "owned-engine-exit-and-recovery",
+        "time": "2026-10-10T07:14:43.136251Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "cancel-running-source-job",
+        "time": "2026-10-10T07:15:01.717929Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "provider-save-failure-and-offline-save",
+        "time": "2026-10-10T07:15:13.739362Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Playback",
+        "time": "2026-10-10T07:15:21.664559Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Startup",
+        "time": "2026-10-10T07:15:27.300412Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Files",
+        "time": "2026-10-10T07:15:33.822127Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Audio",
+        "time": "2026-10-10T07:15:40.827896Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Appearance",
+        "time": "2026-10-10T07:15:46.671034Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Terminal appearance",
+        "time": "2026-10-10T07:15:52.615343Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-System",
+        "time": "2026-10-10T07:15:58.547011Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Plugins",
+        "time": "2026-10-10T07:16:04.395370Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Radio",
+        "time": "2026-10-10T07:16:10.794427Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Podcasts",
+        "time": "2026-10-10T07:16:16.778796Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Navidrome",
+        "time": "2026-10-10T07:16:22.666263Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Lyrion",
+        "time": "2026-10-10T07:16:28.460342Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Spotify",
+        "time": "2026-10-10T07:16:34.874314Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Qobuz",
+        "time": "2026-10-10T07:16:40.592687Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Tidal",
+        "time": "2026-10-10T07:16:46.607316Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-YouTube",
+        "time": "2026-10-10T07:16:52.196703Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-SoundCloud",
+        "time": "2026-10-10T07:16:57.948701Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Mixcloud",
+        "time": "2026-10-10T07:17:03.595372Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-NetEase",
+        "time": "2026-10-10T07:17:09.269488Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Yandex",
+        "time": "2026-10-10T07:17:15.065856Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Plex",
+        "time": "2026-10-10T07:17:20.844535Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Jellyfin",
+        "time": "2026-10-10T07:17:26.744160Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Emby",
+        "time": "2026-10-10T07:17:32.266944Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "preference-section-Audiobookshelf",
+        "time": "2026-10-10T07:17:37.913692Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "untimed-lyrics",
+        "time": "2026-10-10T07:18:03.424194Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "live-labelled-lyrics",
+        "time": "2026-10-10T07:18:19.070068Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "lyrics-offset-lower-bound",
+        "time": "2026-10-10T07:18:38.787643Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "lyrics-offset-upper-bound",
+        "time": "2026-10-10T07:18:47.042650Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "reopen-persisted-library-and-preferences",
+        "time": "2026-10-10T07:19:30.317978Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "fresh-launch",
+        "time": "2026-10-10T07:19:49.550716Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      },
+      {
+        "stage": "native-location-dismiss-and-allow",
+        "time": "2026-10-10T07:19:57.149017Z",
+        "status": "PASS",
+        "frameworkErrors": []
+      }
+    ],
+    "engine_sha256": "777abc060a525b10ea35778c4642b5965051fb0377feeb9551919ddd82224866",
+    "engine_build": "Local Go build; release smoke separately uses the bundled -trimpath build."
+  },
+  "performance": [
+    {
+      "build": "baseline",
+      "idle_cpu_percent": 229.74,
+      "rss": "VmRSS:\t  302108 kB",
+      "warmup_seconds": 20,
+      "sample_seconds": 10.003,
+      "engine_processes_after_native_close": []
+    },
+    {
+      "build": "final",
+      "idle_cpu_percent": 1.4,
+      "rss": "VmRSS:\t  290496 kB",
+      "warmup_seconds": 20,
+      "sample_seconds": 10.001,
+      "independent_resize_dialog_sizes": [
+        [
+          900,
+          650
+        ],
+        [
+          640,
+          480
+        ],
+        [
+          1280,
+          940
+        ],
+        [
+          1600,
+          500
+        ],
+        [
+          640,
+          1400
+        ],
+        [
+          1280,
+          940
+        ]
+      ],
+      "engine_processes_after_native_close": []
+    }
+  ],
+  "independent_release_smoke": {
+    "result": "PASS",
+    "checks": [
+      "bundled sidecar discovery",
+      "native keyboard/mouse import/playback/favorite/save",
+      "window close and no owned live engine",
+      "saved playlist/favorite relaunch",
+      "200% display scaling and minimum-size dialog",
+      "repeated resize and dialog reachability"
+    ]
+  },
+  "unresolved_observations": [
+    "ENV-001: transient Flutter OpenGL compositor timeout reproduced in baseline and final under Xvfb; recovered frames, physical GPU unverified"
+  ],
+  "not_verified": [
+    "Windows and macOS native runs",
+    "authenticated private providers and SSH",
+    "physical audio, hardware media keys and GPU",
+    "GitHub Actions execution: account billing lock"
+  ]
+}

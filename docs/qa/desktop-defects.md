@@ -1,5 +1,7 @@
 # Desktop audit defect log
 
+Final application `f0bf245`: all 31 application defects were retested successfully in the final Linux walkthrough. [266-stage evidence](verification.json); ENV-001 remains unresolved as documented below.
+
 Baseline: `261ead0`. Entries are added only after real UI reproduction; each records steps, expected/actual behavior, cause, fix and native retest evidence.
 
 ## BUG-001 — Small windows hide the library and navigation
@@ -53,7 +55,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Evidence:** `selected-640x480.png` from native-seventh.
 - **Root cause / files:** `desktop/lib/src/app.dart`, horizontal selection scroll view without an explicit scrollbar.
 - **Fix:** Persistent horizontal scrollbar with its own scroll controller and space below the actions.
-- **Retest:** PASS: native four-row selection and the end of its toolbar remain reachable at 640×480; final full walkthrough pending.
+- **Retest:** PASS: native four-row selection and the end of its toolbar remain reachable at 640×480; Final native walkthrough PASS.
 
 ## BUG-006 — Notifications cover playback seeking
 
@@ -64,7 +66,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Evidence:** `selected-640x480.png` from native-seventh.
 - **Root cause / files:** `desktop/lib/src/app.dart`, player bar lived inside the Scaffold body, so the snackbar did not reserve its height.
 - **Fix:** Place the player in Scaffold.bottomNavigationBar; Flutter positions notifications above it.
-- **Retest:** PASS: native minimum-size error notifications sit above the playback bar and leave seeking accessible; final full walkthrough pending.
+- **Retest:** PASS: native minimum-size error notifications sit above the playback bar and leave seeking accessible; Final native walkthrough PASS.
 
 ## BUG-007 — Track duration contradicts the player
 
@@ -75,7 +77,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Evidence:** `play-pause-seek-controls-failed.png` from native-seventh (the seek scenario itself was interrupted by a test input synchronization issue).
 - **Root cause / files:** `desktop/lib/src/app.dart`, duration display uses missing track metadata as zero and ignores the current engine duration.
 - **Fix:** Use the current engine duration when metadata is missing; use an em dash for an unknown duration.
-- **Retest:** PASS: duration regression unit test and native playback show 2:00 for the current WAV, with an em dash for unknown metadata; final full walkthrough pending.
+- **Retest:** PASS: duration regression unit test and native playback show 2:00 for the current WAV, with an em dash for unknown metadata; Final native walkthrough PASS.
 
 ## BUG-008 — Accessibility tree assertion during playback dialog resize
 
@@ -85,7 +87,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** Flutter `_SemanticsGeometry.computeChildGeometry` asserts that the child and parent render objects no longer share the expected ancestor.
 - **Files / root cause:** Framework diagnostics traced a stale semantics parent to the seek slider’s internal GlobalKey being reparented when its enabled state changes. Restart reproduces this independently of resizing.
 - **Fix:** Key seek and volume slider state by availability, preserving external values while rebuilding the internal focus/semantics subtree on transitions. Accessibility remains enabled.
-- **Retest:** Native plugin installation/restart passed without the assertion; final full regression pending. Temporary framework diagnostics were removed.
+- **Retest:** Native plugin installation/restart passed without the assertion; Final native walkthrough PASS. Temporary framework diagnostics were removed.
 
 ## BUG-009 — Idle spectrum updates rebuild the whole frontend
 
@@ -95,7 +97,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** 136.59% of one CPU core in this Xvfb/software-rendered Linux session (baseline release PID 128049).
 - **Root cause / files:** `desktop/lib/src/app.dart`, every 30 Hz spectrum packet calls setState even when bands are identical or the visible page has no spectrum.
 - **Fix:** Ignore identical band values and only rebuild spectrum-bearing pages; retain the latest values for later navigation.
-- **Retest:** PASS: matched baseline/final release, same engine and isolated profiles, 20-second warmup and 10-second samples: CPU 226.19% → 2.10% of one core; RSS 294.8 → 284.8 MiB. Both close their owned engine processes. Software-renderer figures are environment-specific.
+- **Retest:** PASS: matched baseline/final release, same engine and isolated profiles, 20-second warmup and 10-second samples: CPU 229.74% → 1.40% of one core; RSS 295.0 → 283.7 MiB. Both close their owned engine processes. Software-renderer figures are environment-specific.
 
 ## BUG-010 — Preference validation does not identify the invalid field
 
@@ -106,7 +108,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Evidence:** `preferences-validation-and-save-failed.png` in native-preferences-tail evidence.
 - **Root cause / files:** Backend management diagnostics intentionally suppress potentially sensitive process output; `preferences.dart` lacked local schema validation.
 - **Fix:** Validate changed numeric fields, integer values, bounds, name lists and EQ arrays locally and identify the failing field without exposing process diagnostics.
-- **Retest:** PASS: native preference validation rejects 999, saves -48 and reopens with that value. Final complete regression pending.
+- **Retest:** PASS: native preference validation rejects 999, saves -48 and reopens with that value. Final native walkthrough PASS.
 
 ## BUG-011 — Restarting for plugin changes discards the queue
 
@@ -116,7 +118,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** The newly started engine has an empty queue. Native plugin audit compares two tracks before restart with no tracks afterward.
 - **Root cause / files:** `desktop/lib/src/backend.dart`, restart stopped and launched the engine without capturing the live queue.
 - **Fix:** Capture all queue pages and play-next entries before stopping; restore tracks and modes, resume active playback/position, then restore play-next order. Failed capture leaves the original daemon running.
-- **Retest:** PASS: native plugin install/restart retains both tracks, paused state and play-next order. Run14 also verifies a known 45-second position, repeat mode and the plugin Ctrl+N shortcut. Unit tests cover 201 tracks across pages and failure before stopping. Final complete regression pending.
+- **Retest:** PASS: native plugin install/restart retains both tracks, paused state and play-next order. Run14 also verifies a known 45-second position, repeat mode and the plugin Ctrl+N shortcut. Unit tests cover 201 tracks across pages and failure before stopping. Final native walkthrough PASS.
 
 ## BUG-012 — Blank playlist and plugin submissions are silent
 
@@ -126,7 +128,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** Both buttons silently return with no validation feedback. Captured before/after screenshots in the manual-input evidence directory.
 - **Root cause / files:** `app.dart` shared prompt and `plugin_manager.dart` return early for blank strings.
 - **Fix:** Shared prompts show field-specific validation for mouse and Enter submission; plugin review requests a source explicitly. Prompts scroll at small sizes.
-- **Retest:** PASS: native run12 rejects blank/whitespace playlist names and empty plugin sources. Long names, duplicates, and path traversal input also passed; final full regression pending.
+- **Retest:** PASS: native run12 rejects blank/whitespace playlist names and empty plugin sources. Long names, duplicates, and path traversal input also passed; Final native walkthrough PASS.
 
 ## BUG-013 — Closing input dialogs can crash under slow frames
 
@@ -136,7 +138,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** The timed controller disposal can run before the dialog subtree unmounts.
 - **Root cause / files:** `app.dart` disposes controllers 300 ms after `Navigator.pop`, using wall-clock delay as a proxy for widget lifetime in Add music, shared prompts and Engine operations.
 - **Fix:** A small stateful dialog owner creates and disposes each controller with the actual route subtree. No timer or assumed animation duration.
-- **Retest:** PASS: real native file/folder selection and cancellation after the lifecycle fix; final complete regression pending.
+- **Retest:** PASS: real native file/folder selection and cancellation after the lifecycle fix; Final native walkthrough PASS.
 
 ## BUG-014 — Escape leaves playback shortcuts trapped in search
 
@@ -146,7 +148,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** Escape clears text but leaves focus in the field, so editing shortcuts continue intercepting playback commands.
 - **Root cause / files:** `app.dart` Escape handler clears the controller without releasing its FocusNode.
 - **Fix:** Unfocus the search when Escape handles the main route; modal Escape still closes only its route.
-- **Retest:** PASS: native Escape, Tab/Shift+Tab and Ctrl+X sequence in run7; final full regression pending.
+- **Retest:** PASS: native Escape, Tab/Shift+Tab and Ctrl+X sequence in run7; Final native walkthrough PASS.
 
 ## BUG-015 — Populated background activity crashes its dialog
 
@@ -186,7 +188,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** Native run11 raises “Floating SnackBar presented off screen”; the unbounded path message is taller than the available window.
 - **Root cause / files:** `app.dart` renders arbitrarily long backend error text without height constraints.
 - **Fix:** Limit message height to 120 logical pixels and allow scrolling through the full text.
-- **Retest:** PASS: native run12 displays the long error at minimum size without framework errors; full regression pending.
+- **Retest:** PASS: native run12 displays the long error at minimum size without framework errors; final native walkthrough PASS.
 
 ## BUG-019 — Resizing hides the active lyric line
 
@@ -206,7 +208,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** Native `long-error-after.png` shows a dark dismissal icon against the red error container.
 - **Root cause / files:** `app.dart` sets a custom error background and text color but leaves the close icon on the normal snackbar color.
 - **Fix:** Use the same corresponding foreground color for the close icon and notification text.
-- **Retest:** PASS: minimum-size long-error screenshot shows a readable white close icon matching the error text; final full walkthrough pending.
+- **Retest:** PASS: minimum-size long-error screenshot shows a readable white close icon matching the error text; Final native walkthrough PASS.
 
 ## BUG-021 — Visualizer captions ignore light theme contrast
 
@@ -216,7 +218,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** Native theme inspection measures 2.405:1 for the fixed gray caption. Evidence: `visualizer-light-alucard.png`.
 - **Root cause / files:** `visualizer.dart` hardcodes its subtitle and mode/theme caption gray despite the application supporting light palettes.
 - **Fix:** Use the theme’s contrast-adjusted onSurfaceVariant foreground for both captions. Match the canvas frame to its actual background and use a theme-aware border to remove dark edge artifacts on light palettes.
-- **Retest:** Native run15 passes all 34 modes, every theme, preview/cancel/apply, fullscreen resizing, transport and keyboard controls. Engine snapshots confirm each selection. Light-caption contrast ranges from 4.81:1 to 5.56:1. Final full regression pending.
+- **Retest:** Native run15 passes all 34 modes, every theme, preview/cancel/apply, fullscreen resizing, transport and keyboard controls. Engine snapshots confirm each selection. Light-caption contrast ranges from 4.81:1 to 5.56:1. Final native walkthrough PASS.
 
 ## BUG-022 — Podcast catalog uses radio-station labels
 
@@ -226,7 +228,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** Native podcast screenshot shows “Station catalog”; the search route also hardcodes “Station search”.
 - **Root cause / files:** `provider_browser.dart` assumes every catalog provider is a radio provider.
 - **Fix:** Use show labels when the provider advertises show browsing; keep radio station labels for radio.
-- **Retest:** PASS: native run15 podcast catalog/search/episode and subscription cycle uses show labels; final full walkthrough pending.
+- **Retest:** PASS: native run15 podcast catalog/search/episode and subscription cycle uses show labels; Final native walkthrough PASS.
 
 ## BUG-023 — Return does not execute a command-palette result
 
@@ -236,7 +238,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** Native run13 records an X11 Return event, but the dialog stays open without executing the command.
 - **Root cause / files:** `app.dart` provides clickable results but no submission handler for the command search field.
 - **Fix:** Return executes the first matching visible command; unmatched queries remain editable.
-- **Retest:** Native run15 passes Return submission, every palette action, transport shortcuts and text editing. Submission unit test passes. Final full walkthrough pending.
+- **Retest:** Native run15 passes Return submission, every palette action, transport shortcuts and text editing. Submission unit test passes. Final native walkthrough PASS.
 
 ## BUG-024 — Escape leaves provider search filtered
 
@@ -246,7 +248,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** Native run13 retains the query and filtered results.
 - **Root cause / files:** `provider_browser.dart` owns a separate search controller; the parent Escape handler only clears the main library controller.
 - **Fix:** Handle Escape within provider browsing to clear its controller/filter and leave editing focus. A browser focus scope retains shortcut routing after Return submits and leaves the text field. Escape also returns from a submitted remote search to the preceding collection.
-- **Retest:** Run14 exposed focus moving outside the browser after native Return; scope and remote-search return fixes plus a submission regression added. Native retest pending.
+- **Retest:** Run14 exposed focus moving outside the browser after native Return; scope and remote-search return fixes plus a submission regression added. PASS: native Return/Escape clearing and return navigation in all four available provider browsers, including final8.
 
 ## BUG-025 — Subscribed search results still offer Add favorite
 
@@ -256,7 +258,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** Native run13 displays “[subscribed] Audit Podcast” but retains an empty heart and Add favorite tooltip.
 - **Root cause / files:** `external/podcast/provider.go` sets the Favorite flag by list section prefix instead of the actual subscription state. Search/catalog rows therefore disagree with their subscribed label.
 - **Fix:** Report actual subscription state in all playlist sections. Existing catalog/search assertions now require the correct flag.
-- **Retest:** Full Go checks pass. Native run15 passes feed search, subscribe, filled-heart feedback, episode actions, every subscription menu action and unsubscribe. Final full walkthrough pending.
+- **Retest:** Full Go checks pass. Native run15 passes feed search, subscribe, filled-heart feedback, episode actions, every subscription menu action and unsubscribe. Final native walkthrough PASS.
 
 ## BUG-026 — Playback refresh discards loaded pages and selection
 
@@ -266,7 +268,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** Native run13 returns to “Load more · 200 of 205” and “0 selected” after selecting tracks.
 - **Root cause / files:** `app.dart` handles every playlist revision with a first-page fetch that clears selection, including revisions caused by playback advancing.
 - **Fix:** Background queue refreshes reload the previously loaded page count. Retain selection only when the ordered track paths match; changed lists clear selection and its range anchor.
-- **Retest:** Unit test passes for 205 tracks, selection retained over a playback revision and cleared after actual removal. Native run14 retains all pages and the four-row Shift selection through playback and resize; subsequent fuzzy-search assertion corrected to expect exact-title ranking rather than substring-only filtering. Final walkthrough pending.
+- **Retest:** Unit test passes for 205 tracks, selection retained over a playback revision and cleared after actual removal. Native run14 retains all pages and the four-row Shift selection through playback and resize; subsequent fuzzy-search assertion corrected to expect exact-title ranking rather than substring-only filtering. Final native walkthrough PASS.
 
 ## BUG-027 — Singular provider counts use plural labels
 
@@ -276,7 +278,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** Native screenshot displays “1 subscriptions”.
 - **Root cause / files:** `provider_browser.dart` interpolates the plural collection kind regardless of count.
 - **Fix:** Use a singular label for one item, including the irregular category/categories form.
-- **Retest:** PASS: native subscription screenshots show the singular count; final full walkthrough pending.
+- **Retest:** PASS: native subscription screenshots show the singular count; Final native walkthrough PASS.
 
 ## BUG-028 — Provider collection toolbar overflows short windows
 
@@ -286,7 +288,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** Native run15 reports a 15-pixel bottom overflow; the collection buttons leave no usable list viewport.
 - **Root cause / files:** `provider_browser.dart` stacks fixed-height browser controls above an expanded list in the remaining short window space.
 - **Fix:** Scroll the browser content when the available height is below its usable minimum, retaining a bounded viewport for the collection list.
-- **Retest:** PASS: native run16 cliamp collection, pagination, playback and 640×480 resizing complete without overflow; remaining provider routes and final full walkthrough pending.
+- **Retest:** PASS: native run16 cliamp collection, pagination, playback and 640×480 resizing complete without overflow; all four available provider routes and the final native walkthrough PASS, including a physical drag that brings the first collection row fully into view.
 
 ## BUG-029 — Keyboard shortcuts lose focus after native file import
 
@@ -296,7 +298,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Actual:** Native run16 records an OS Ctrl+O event, but no dialog opens after the previous successful import.
 - **Root cause / files:** `app.dart` leaves keyboard focus outside the library shortcut scope when a native chooser closes and the import dialog is removed.
 - **Fix:** Own the library focus scope and restore it when importing finishes, including cancellation and error returns.
-- **Retest:** PASS: native run17 multiple-file selection and all four file/folder select/cancel workflows, including actual OS Ctrl+O between imports. Final full walkthrough pending.
+- **Retest:** PASS: native run17 multiple-file selection and all four file/folder select/cancel workflows, including actual OS Ctrl+O between imports. Final native walkthrough PASS.
 
 ## BUG-030 — Library counts use plural for one item
 
@@ -307,18 +309,7 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Evidence:** Manual release `manual-final/imported.png`.
 - **Root cause / files:** `desktop/lib/src/app.dart`, plural suffixes embedded in count labels.
 - **Fix:** Choose singular for one track, play, playlist, artist or album in the library header and cards.
-- **Retest:** PASS: independent final release shows “1 track in queue” and “1 track” on the reopened saved collection and cards. Full native walkthrough pending.
-
-## ENV-001 — Transient Flutter compositor resize timeout
-
-- **Area / severity:** Linux headless rendering; low observed impact, unresolved external verification.
-- **Reproduction:** Launch the baseline or final release under Xvfb/Mesa, with or without xfwm4. Repeatedly resize among 900×650, 640×480, 1280×940, 1600×500 and 640×1400, then open Add music.
-- **Expected:** The compositor receives each new-sized frame within its deadline.
-- **Actual:** Some transitions log `Timed out waiting for OpenGL frame of size …`; the next frame recovers and the inspected dialog remains correctly drawn and responsive.
-- **Evidence:** Baseline 7 warnings and final 3 warnings over equivalent 18-resize probes; also seen before the final probe. No associated Dart exception. The attempted release environment renderer switch was ignored and is not a verified workaround.
-- **Root cause / files:** Flutter SDK `engine/src/flutter/shell/platform/linux/fl_compositor_opengl.cc`, framebuffer dimensions differ when its 100 ms wait expires. Reproduced before and after application changes.
-- **Fix / blocker:** No application workaround or warning suppression applied. Resolving the renderer/driver timing requires upstream graphics-stack investigation and physical-GPU comparison unavailable on this headless cloud host. This remains explicitly unverified on native hardware.
-- **Retest:** Reproduced in both baseline and final; restored frame, dialog interaction, and native close work. Application layout assertions continue to pass.
+- **Retest:** PASS: independent final release shows “1 track in queue” and “1 track” on the reopened saved collection and cards. Final native walkthrough PASS.
 
 ## BUG-031 — Queue navigation can retain a stale revision
 
@@ -330,4 +321,15 @@ Baseline: `261ead0`. Entries are added only after real UI reproduction; each rec
 - **Root cause / files:** `desktop/lib/src/app.dart`: revision changes during loading suppress a new fetch, and the completion-time reconciliation previously ran only for quiet refreshes, not normal navigation or pagination.
 - **Fix:** Reconcile revision changes after every queue/play-next load using a quiet follow-up. Keep the displayed revision while a refresh is pending; never replay a rejected stale mutation.
 - **Tests:** `desktop/test/app_test.dart` publishes a revision during pending queue navigation, completes the old response, and checks the next row action uses the reconciled revision. Existing stale-row/no-replay and 205-row selection regressions remain enabled.
-- **Retest:** Pending full Flutter suite, native library retest, and a new complete walkthrough after this application fix.
+- **Retest:** PASS: failing-before/fixed-after unit regression; all 114 Flutter tests; native playlist and batch append/remove/replace/undo, save/prepend, and play-next reorder/clear retests. The uninterrupted final8 walkthrough and separate-process checks PASS.
+
+## ENV-001 — Transient Flutter compositor resize timeout
+
+- **Area / severity:** Linux headless rendering; low observed impact, unresolved external verification.
+- **Reproduction:** Launch the baseline or final release under Xvfb/Mesa, with or without xfwm4. Repeatedly resize among 900×650, 640×480, 1280×940, 1600×500 and 640×1400, then open Add music.
+- **Expected:** The compositor receives each new-sized frame within its deadline.
+- **Actual:** Some transitions log `Timed out waiting for OpenGL frame of size …`; the next frame recovers and the inspected dialog remains correctly drawn and responsive.
+- **Evidence:** Baseline 7 warnings and release 2f1aebb 3 warnings over equivalent 18-resize probes; also seen before the final probe. Final f0bf245 also reproduced the warning during native scaling. No associated Dart exception. The attempted release environment renderer switch was ignored and is not a verified workaround.
+- **Root cause / files:** Flutter SDK `engine/src/flutter/shell/platform/linux/fl_compositor_opengl.cc`, framebuffer dimensions differ when its 100 ms wait expires. Reproduced before and after application changes.
+- **Fix / blocker:** No application workaround or warning suppression applied. Resolving the renderer/driver timing requires upstream graphics-stack investigation and physical-GPU comparison unavailable on this headless cloud host. This remains explicitly unverified on native hardware.
+- **Retest:** Reproduced in both baseline and final; restored frame, dialog interaction, and native close work. Application layout assertions continue to pass.
