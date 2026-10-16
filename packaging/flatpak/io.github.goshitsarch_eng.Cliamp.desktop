@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Cliamp
+GenericName=Music Player
+Comment=Unofficial desktop fork of cliamp
+Exec=cliamp-desktop
+Icon=io.github.goshitsarch_eng.Cliamp
+Terminal=false
+Type=Application
+Categories=Audio;AudioVideo;Player;
+Keywords=music;audio;player;radio;podcast;winamp;
+StartupNotify=true
+StartupWMClass=io.github.goshitsarch_eng.Cliamp

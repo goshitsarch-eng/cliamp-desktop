@@ -1,5 +1,6 @@
 /cliamp
 /cliamp.exe
+.flatpak-builder/
 /cliamp_windows.syso
 /result
 /mp3/

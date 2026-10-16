@@ -89,6 +89,16 @@ redistribution of codec libraries, platform signing, and macOS notarization
 are separate release work. The macOS app uses a non-sandboxed development
 entitlement so the engine can use its existing configuration and music files.
 
+## Flatpak
+
+The Linux package is an unofficial build of this fork, with the app id
+`io.github.goshitsarch_eng.Cliamp`. It is not published by the cliamp project.
+The manifest is `packaging/flatpak/io.github.goshitsarch_eng.Cliamp.yml`.
+A built bundle is attached to the `flatpak-0.1.0` GitHub release.
+
+The sandbox opens ALSA through PulseAudio, so audio follows the system default
+sink. The package does not include ffmpeg or yt-dlp.
+
 ## Validate
 
 ```sh

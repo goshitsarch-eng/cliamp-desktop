@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.goshitsarch_eng.Cliamp</id>
+  <name>Cliamp</name>
+  <summary>Unofficial desktop fork of the cliamp music player</summary>
+  <developer id="io.github.goshitsarch_eng">
+    <name>goshitsarch-eng</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>Unofficial fork of cliamp, the terminal music player by Bjarne Øverli. This package is not an official cliamp release. Official builds are published at https://cliamp.stream.</p>
+    <p>The desktop app plays local files, internet radio, podcasts, and the online sources the engine supports. Playback follows the system default audio output.</p>
+  </description>
+  <launchable type="desktop-id">io.github.goshitsarch_eng.Cliamp.desktop</launchable>
+  <url type="homepage">https://github.com/goshitsarch-eng/cliamp-desktop</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-10-15"/>
+  </releases>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/goshitsarch-eng/cliamp-desktop/main/docs/screenshots/desktop-library.png</image>
+    </screenshot>
+  </screenshots>
+</component>

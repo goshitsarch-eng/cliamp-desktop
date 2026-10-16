@@ -1,0 +1,46 @@
+app-id: io.github.goshitsarch_eng.Cliamp
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.llvm20
+command: cliamp-desktop
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  - --device=dri
+  # The player opens whatever library path the user picks.
+  - --filesystem=host
+  - --own-name=org.mpris.MediaPlayer2.cliamp
+  - --talk-name=org.freedesktop.Notifications
+  - --env=ALSA_CONFIG_PATH=/app/etc/asound.conf
+build-options:
+  append-path: /usr/lib/sdk/llvm20/bin
+  prepend-ld-library-path: /usr/lib/sdk/llvm20/lib
+  no-debuginfo: true
+  env:
+    PUB_CACHE: /run/build/pub-cache
+modules:
+  - name: cliamp
+    buildsystem: simple
+    build-options:
+      build-args:
+        - --share=network
+      no-debuginfo: true
+    build-commands:
+      - sh packaging/flatpak/build.sh
+    sources:
+      - type: git
+        path: ../..
+        branch: main
+      - type: archive
+        dest: sdk/go
+        url: https://go.dev/dl/go1.26.6.linux-amd64.tar.gz
+        sha256: 708effb774be8237570d0add163225abbdfaf4fca28b2611df167beba4feef89
+      - type: archive
+        dest: sdk/flutter
+        url: https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.47.7-stable.tar.xz
+        sha256: af7455f540df951184c7953fbe3cf884766e7541dacf8571f9f582db03dd6230

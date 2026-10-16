@@ -26,6 +26,20 @@ cliamp releases. See the [desktop guide](docs/desktop.md)
 for builds and the [feature checklist](docs/desktop-feature-parity.md) for coverage
 and platform validation status.
 
+## Flatpak
+
+This fork has a Linux Flatpak. It is not an official cliamp package. Playback
+follows the system default output through PulseAudio.
+
+```sh
+flatpak install --user https://github.com/goshitsarch-eng/cliamp-desktop/releases/download/flatpak-0.1.0/cliamp-desktop.flatpak
+```
+
+Build it from this repository with
+`packaging/flatpak/io.github.goshitsarch_eng.Cliamp.yml`. ffmpeg and yt-dlp are
+not inside the package, so AAC, Opus, YouTube, and the other formats that need
+those tools are unavailable in this Flatpak.
+
 ## Install
 
 The commands in this section install the official terminal player from the original project. They do not install this fork or its desktop app. To build the desktop app, follow the [desktop guide](docs/desktop.md).
