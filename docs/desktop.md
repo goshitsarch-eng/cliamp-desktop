@@ -49,7 +49,9 @@ On Windows, set `$env:CLIAMP_BINARY` in PowerShell to the absolute path of
 `cliamp.exe`, then run `flutter run -d windows`.
 
 The app attaches to a running cliamp instance using the same configuration
-folder. If none is running, it starts its own headless engine. Closing the app
+folder. If none is running, it starts its own headless engine with
+`--no-startup-channels`, so the queue starts empty. A plain `cliamp --daemon`
+still queues the built-in radio channels. Closing the app
 stops only an engine it started. Existing players keep running. Both frontends
 share the player's config and library; do not run two independent players
 against the same directory when editing settings.
@@ -138,7 +140,8 @@ command line or in the Flutter asset bundle.
 ## Library and playback workflows
 
 **Add music** accepts native file/folder selection or entered file, playlist,
-URL and SSH paths. Choose append or replace and whether to start playback. The
+URL and SSH paths. Choose append or replace and whether to start playback.
+Continue asks for a source when the field is empty. The
 engine resolves a selection before replacing the queue, so a failed source leaves
 the previous list intact.
 
@@ -181,7 +184,8 @@ hide track information, **V** to cycle visualizers and **Esc** to leave
 fullscreen. Ctrl/Cmd+Left/Right also changes track.
 
 The command palette lists desktop controls and registered plugin key actions.
-Common shortcuts are:
+Type to filter, press Up or Down to highlight a command, and press Enter to run it.
+Volume up and volume down are separate commands. Common shortcuts are:
 
 | Shortcut | Action |
 | --- | --- |

@@ -561,7 +561,7 @@ cliamp.fs.write(` + strconv.Quote(marker) + `, "loaded")`
 		t.Fatal(err)
 	}
 
-	err := run(config.Overrides{}, nil, true, false)
+	err := run(config.Overrides{}, nil, true, false, false)
 	if err == nil || !strings.Contains(err.Error(), "cliamp is already running") || !strings.Contains(err.Error(), ipc.DefaultSocketPath()) {
 		t.Fatalf("run error = %v, want the running instance and its socket", err)
 	}

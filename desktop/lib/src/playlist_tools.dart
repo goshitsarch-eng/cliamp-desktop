@@ -2,6 +2,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import 'backend.dart';
+import 'desktop_theme.dart';
 
 /// Saved-playlist edits use the engine's document-preserving operations.
 class PlaylistToolsDialog extends StatefulWidget {
@@ -189,8 +190,8 @@ class _PlaylistToolsDialogState extends State<PlaylistToolsDialog> {
   Widget build(BuildContext context) => AlertDialog(
     title: Text('Manage ${widget.playlist}'),
     content: SizedBox(
-      width: 720,
-      height: 520,
+      width: fittedDialogExtent(context, 720),
+      height: fittedDialogExtent(context, 520, width: false, margin: 160),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

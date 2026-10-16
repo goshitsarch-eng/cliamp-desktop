@@ -65,7 +65,24 @@ func checkTerminalOutput(headless bool, stdout *os.File) error {
 	return nil
 }
 
-func run(overrides config.Overrides, positional []string, headless, visualizer60FPS bool) error {
+// startupLiveChannels reports whether launch should queue the built-in
+// cliamp radio streams. An explicit radio provider still does. skipImplicit
+// is the desktop app's --no-startup-channels flag: a fresh window stays
+// empty instead of inheriting the headless radio preload.
+func startupLiveChannels(positional []string, provider string, headless, autoPlay, skipImplicit bool) bool {
+	if len(positional) != 0 {
+		return false
+	}
+	if provider == "radio" {
+		return true
+	}
+	if skipImplicit || provider != "cliamp" {
+		return false
+	}
+	return headless || autoPlay
+}
+
+func run(overrides config.Overrides, positional []string, headless, visualizer60FPS, skipStartupChannels bool) error {
 	if err := checkTerminalOutput(headless, os.Stdout); err != nil {
 		return err
 	}
@@ -109,12 +126,12 @@ func run(overrides config.Overrides, positional []string, headless, visualizer60
 	if defaultProvider == "" {
 		defaultProvider = "cliamp"
 	}
-	defaultRadio := len(positional) == 0 && defaultProvider == "radio"
 	// The cliamp radio view waits for the listener to pick a channel. Headless
 	// mode has no view, and auto-play expects sound without a keypress, so
-	// both start with the live channel streams instead.
-	liveChannels := defaultRadio ||
-		(len(positional) == 0 && defaultProvider == "cliamp" && (headless || cfg.AutoPlay))
+	// both start with the live channel streams instead. The desktop app skips
+	// that implicit preload so its first screen is an empty queue.
+	defaultRadio := len(positional) == 0 && defaultProvider == "radio"
+	liveChannels := startupLiveChannels(positional, defaultProvider, headless, cfg.AutoPlay, skipStartupChannels)
 	resumeState := resume.Load()
 
 	pl := playlist.New()

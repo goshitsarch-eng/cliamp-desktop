@@ -143,6 +143,8 @@ class _LibraryState extends State<_Library> {
   final _messenger = GlobalKey<ScaffoldMessengerState>();
   final _search = TextEditingController();
   final _searchFocus = FocusNode();
+  final _navScroll = ScrollController();
+  final _navKeys = List.generate(_Page.values.length, (_) => GlobalKey());
   StreamSubscription<Json>? _events;
   Timer? _positionTicker;
   final _positionClock = Stopwatch();
@@ -506,6 +508,7 @@ class _LibraryState extends State<_Library> {
       _loading = false;
       _loadGeneration++;
     });
+    _revealNav();
     if (!_connected) return;
     switch (page) {
       case _Page.queue:
@@ -533,7 +536,7 @@ class _LibraryState extends State<_Library> {
       case _Page.history:
         await _fetch('history', {}, kind: 'history');
       case _Page.lyrics:
-        await _fetch('lyrics', {}, kind: 'lyrics');
+        if (_track.isNotEmpty) await _fetch('lyrics', {}, kind: 'lyrics');
       case _Page.equalizer:
       case _Page.visualizer:
         break;
@@ -663,16 +666,32 @@ class _LibraryState extends State<_Library> {
   Future<void> _refreshList() =>
       _fetch(_request, _params, kind: _kind, quiet: true);
 
+  void _revealNav() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final target = _navKeys[_page.index].currentContext;
+      if (target == null) return;
+      Scrollable.ensureVisible(
+        target,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
   Future<void> _addSource() async {
     final controller = TextEditingController();
     var mode = 'append';
+    String? inputError;
     final paths = await showDialog<List<String>>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
+          scrollable: true,
           title: const Text('Add your music'),
           content: SizedBox(
-            width: 500,
+            width: fittedDialogExtent(context, 500),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -732,11 +751,17 @@ class _LibraryState extends State<_Library> {
                   autofocus: true,
                   minLines: 3,
                   maxLines: 6,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'File, folder, playlist, URL, or ssh:// path',
                     hintText: 'One source per line',
                     alignLabelWithHint: true,
+                    errorText: inputError,
                   ),
+                  onChanged: (_) {
+                    if (inputError != null) {
+                      setDialogState(() => inputError = null);
+                    }
+                  },
                 ),
               ],
             ),
@@ -753,7 +778,14 @@ class _LibraryState extends State<_Library> {
                     .map((s) => s.trim())
                     .where((s) => s.isNotEmpty)
                     .toList();
-                if (lines.isNotEmpty) Navigator.pop(context, lines);
+                if (lines.isEmpty) {
+                  setDialogState(
+                    () =>
+                        inputError = 'Enter a file, folder, playlist, or URL.',
+                  );
+                  return;
+                }
+                Navigator.pop(context, lines);
               },
               child: const Text('Continue'),
             ),
@@ -799,45 +831,53 @@ class _LibraryState extends State<_Library> {
     String action = 'Save',
   }) async {
     final controller = TextEditingController(text: initial);
+    String? inputError;
     final result = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: 460,
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            minLines: multiline ? 3 : 1,
-            maxLines: multiline ? 6 : 1,
-            decoration: InputDecoration(
-              labelText: label,
-              hintText: hint,
-              alignLabelWithHint: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          void submit() {
+            final value = controller.text.trim();
+            if (value.isEmpty) {
+              setDialogState(() => inputError = 'Enter a value to continue.');
+              return;
+            }
+            Navigator.pop(context, value);
+          }
+
+          return AlertDialog(
+            title: Text(title),
+            scrollable: true,
+            content: SizedBox(
+              width: fittedDialogExtent(context, 460),
+              child: TextField(
+                controller: controller,
+                autofocus: true,
+                minLines: multiline ? 3 : 1,
+                maxLines: multiline ? 6 : 1,
+                decoration: InputDecoration(
+                  labelText: label,
+                  hintText: hint,
+                  alignLabelWithHint: true,
+                  errorText: inputError,
+                ),
+                onChanged: (_) {
+                  if (inputError != null) {
+                    setDialogState(() => inputError = null);
+                  }
+                },
+                onSubmitted: multiline ? null : (_) => submit(),
+              ),
             ),
-            onSubmitted: multiline
-                ? null
-                : (value) {
-                    if (value.trim().isNotEmpty) {
-                      Navigator.pop(context, value.trim());
-                    }
-                  },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (controller.text.trim().isNotEmpty) {
-                Navigator.pop(context, controller.text.trim());
-              }
-            },
-            child: Text(action),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(onPressed: submit, child: Text(action)),
+            ],
+          );
+        },
       ),
     );
     // Dialog routes animate out after their result completes.
@@ -977,7 +1017,7 @@ class _LibraryState extends State<_Library> {
             builder: (context) => AlertDialog(
               title: Text(_text(track['title'], 'Track details')),
               content: SizedBox(
-                width: 520,
+                width: fittedDialogExtent(context, 520),
                 child: SingleChildScrollView(child: _trackDetails(track)),
               ),
               actions: [
@@ -1100,11 +1140,8 @@ class _LibraryState extends State<_Library> {
         'Alt+Right',
         () => _run('seek', {'value': 10}),
       ),
-      (
-        'Volume up / down',
-        'Ctrl+Up / Down',
-        () => _run('volume.adjust', {'value': 1}),
-      ),
+      ('Volume up', 'Ctrl+Up', () => _run('volume.adjust', {'value': 1})),
+      ('Volume down', 'Ctrl+Down', () => _run('volume.adjust', {'value': -1})),
       ('Add files, folder, or URL', 'Ctrl+O', _addSource),
       ('Search this view', 'Ctrl+F', _searchFocus.requestFocus),
       ('Download playing track', 'Ctrl+S', _download),
@@ -1125,52 +1162,9 @@ class _LibraryState extends State<_Library> {
       for (final page in _Page.values)
         ('Open ${_navLabels[page.index]}', '', () => _navigate(page)),
     ];
-    var filter = '';
     final chosen = await showDialog<VoidCallback>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Commands & keyboard shortcuts'),
-          content: SizedBox(
-            width: 560,
-            height: 450,
-            child: Column(
-              children: [
-                TextField(
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Find a command',
-                  ),
-                  onChanged: (value) => setDialogState(() => filter = value),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: ListView(
-                    children: [
-                      for (final action in actions)
-                        if (fuzzyScore(filter, action.$1) != null)
-                          ListTile(
-                            title: Text(action.$1),
-                            trailing: Text(
-                              action.$2,
-                              style: TextStyle(color: _muted, fontSize: 11),
-                            ),
-                            onTap: () => Navigator.pop(context, action.$3),
-                          ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      ),
+      builder: (context) => _CommandPalette(actions: actions, muted: _muted),
     );
     chosen?.call();
   }
@@ -1405,8 +1399,8 @@ class _LibraryState extends State<_Library> {
             'Save ${tracks.length} ${tracks.length == 1 ? 'track' : 'tracks'} to playlist',
           ),
           content: SizedBox(
-            width: 480,
-            height: 380,
+            width: fittedDialogExtent(context, 480),
+            height: fittedDialogExtent(context, 380, width: false, margin: 180),
             child: Column(
               children: [
                 SwitchListTile(
@@ -1496,6 +1490,7 @@ class _LibraryState extends State<_Library> {
     _spectrum?.cancel();
     _search.dispose();
     _searchFocus.dispose();
+    _navScroll.dispose();
     unawaited(widget.backend.close());
     super.dispose();
   }
@@ -1608,7 +1603,7 @@ class _LibraryState extends State<_Library> {
                           Expanded(
                             child: Column(
                               children: [
-                                _topbar(compact),
+                                _topbar(compact, constraints.maxWidth),
                                 if (_pending > 0 || _connecting)
                                   const LinearProgressIndicator(minHeight: 2)
                                 else
@@ -1679,20 +1674,20 @@ class _LibraryState extends State<_Library> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: EdgeInsets.fromLTRB(compact ? 19 : 26, 27, 20, 30),
+          padding: EdgeInsets.fromLTRB(compact ? 14 : 18, 14, 12, 10),
           child: Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
                   color: _accent,
-                  borderRadius: BorderRadius.circular(11),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
                   Icons.graphic_eq_rounded,
                   color: _palette.onAccent,
-                  size: 24,
+                  size: 20,
                 ),
               ),
               if (!compact) ...[
@@ -1703,7 +1698,7 @@ class _LibraryState extends State<_Library> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 25,
+                      fontSize: 22,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -1,
                     ),
@@ -1714,80 +1709,91 @@ class _LibraryState extends State<_Library> {
           ),
         ),
         Expanded(
-          child: ListView(
-            padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14),
-            children: [
-              if (!compact)
-                _eyebrow(
-                  'YOUR MUSIC',
-                  padding: const EdgeInsets.fromLTRB(14, 0, 0, 13),
-                ),
-              for (final page in _Page.values) ...[
-                if (page == _Page.lyrics)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    child: Divider(color: _foreground.withValues(alpha: .06)),
+          child: Scrollbar(
+            controller: _navScroll,
+            thumbVisibility: true,
+            thickness: 4,
+            radius: const Radius.circular(4),
+            child: ListView(
+              controller: _navScroll,
+              padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12),
+              children: [
+                if (!compact)
+                  _eyebrow(
+                    'YOUR MUSIC',
+                    padding: const EdgeInsets.fromLTRB(12, 0, 0, 6),
                   ),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Tooltip(
-                    message: compact ? _navLabels[page.index] : '',
-                    child: Material(
-                      color: page == _page
-                          ? _accent.withValues(alpha: .10)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(9),
-                      child: InkWell(
+                for (final page in _Page.values) ...[
+                  if (page == _Page.lyrics)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Divider(
+                        color: _foreground.withValues(alpha: .06),
+                        height: 1,
+                      ),
+                    ),
+                  Padding(
+                    key: _navKeys[page.index],
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Tooltip(
+                      message: compact ? _navLabels[page.index] : '',
+                      child: Material(
+                        color: page == _page
+                            ? _accent.withValues(alpha: .10)
+                            : Colors.transparent,
                         borderRadius: BorderRadius.circular(9),
-                        onTap: () => _navigate(page),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: compact ? 16 : 14,
-                            vertical: 12,
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _pageIcons[page.index],
-                                size: 21,
-                                color: page == _page ? _accent : _muted,
-                              ),
-                              if (!compact) ...[
-                                const SizedBox(width: 13),
-                                Expanded(
-                                  child: Text(
-                                    _navLabels[page.index],
-                                    style: TextStyle(
-                                      fontWeight: page == _page
-                                          ? FontWeight.w600
-                                          : FontWeight.w400,
-                                      color: page == _page ? _accent : _muted,
-                                    ),
-                                  ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(9),
+                          onTap: () => _navigate(page),
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: compact ? 18 : 12,
+                              vertical: 6,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _pageIcons[page.index],
+                                  size: 20,
+                                  color: page == _page ? _accent : _muted,
                                 ),
-                                if (page == _Page.queue &&
-                                    _number(_state['total']) > 0)
-                                  Text(
-                                    '${_state['total']}',
-                                    style: TextStyle(
-                                      color: _muted,
-                                      fontSize: 11,
+                                if (!compact) ...[
+                                  const SizedBox(width: 13),
+                                  Expanded(
+                                    child: Text(
+                                      _navLabels[page.index],
+                                      style: TextStyle(
+                                        fontWeight: page == _page
+                                            ? FontWeight.w600
+                                            : FontWeight.w400,
+                                        color: page == _page ? _accent : _muted,
+                                      ),
                                     ),
                                   ),
+                                  if (page == _Page.queue &&
+                                      _number(_state['total']) > 0)
+                                    Text(
+                                      '${_state['total']}',
+                                      style: TextStyle(
+                                        color: _muted,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
         Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
           child: compact
               ? Icon(
                   _connected
@@ -1822,7 +1828,7 @@ class _LibraryState extends State<_Library> {
     ),
   );
 
-  Widget _topbar(bool compact) => Padding(
+  Widget _topbar(bool compact, double width) => Padding(
     padding: EdgeInsets.fromLTRB(compact ? 20 : 32, 22, compact ? 20 : 32, 18),
     child: Row(
       children: [
@@ -1898,9 +1904,9 @@ class _LibraryState extends State<_Library> {
           _commandPalette,
         ),
         const SizedBox(width: 8),
-        if (!compact)
+        if (!compact && width >= 1120)
           Padding(
-            padding: EdgeInsets.only(right: 20),
+            padding: const EdgeInsets.only(right: 20),
             child: Text(
               'ALL YOUR MUSIC. ONE PLACE.',
               style: TextStyle(color: _muted, fontSize: 10, letterSpacing: 1.3),
@@ -2007,59 +2013,67 @@ class _LibraryState extends State<_Library> {
     if (_page == _Page.settings) return _settings();
     if (_page == _Page.plugins) return _plugins();
     if (_page == _Page.lyrics) return _lyrics();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _libraryHeader(width),
-        if (_page == _Page.providers || _page == _Page.playlists)
-          _providerToolbar(),
-        _listToolbar(),
-        if (_selecting) _selectionToolbar(),
-        if (_loading)
-          const LinearProgressIndicator(minHeight: 2)
-        else
-          const SizedBox(height: 2),
-        Expanded(
-          child: _loadError != null
-              ? _empty(
-                  Icons.wifi_off_rounded,
-                  'Couldn’t load this view',
-                  _loadError!,
-                  action: _refreshList,
-                  label: 'Try again',
-                )
-              : _items.isEmpty && !_loading
-              ? _emptyForPage()
-              : (_kind == 'tracks' || _kind == 'history')
-              ? _trackList(width)
-              : _collectionGrid(),
-        ),
-        if (_items.length < _total || _catalogMore)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: TextButton(
-              onPressed: _loading
-                  ? null
-                  : () => _fetch(_request, _params, kind: _kind, append: true),
-              child: Text(
-                _catalogMore
-                    ? 'Load more from catalog'
-                    : 'Load more · ${_items.length} of $_total',
+    return LayoutBuilder(
+      builder: (context, constraints) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _libraryHeader(width, compact: constraints.maxHeight < 340),
+          if (_page == _Page.providers || _page == _Page.playlists)
+            _providerToolbar(),
+          _listToolbar(),
+          if (_selecting) _selectionToolbar(),
+          if (_loading)
+            const LinearProgressIndicator(minHeight: 2)
+          else
+            const SizedBox(height: 2),
+          Expanded(
+            child: _loadError != null
+                ? _empty(
+                    Icons.wifi_off_rounded,
+                    'Couldn’t load this view',
+                    _loadError!,
+                    action: _refreshList,
+                    label: 'Try again',
+                  )
+                : _items.isEmpty && !_loading
+                ? _emptyForPage()
+                : (_kind == 'tracks' || _kind == 'history')
+                ? _trackList(width)
+                : _collectionGrid(),
+          ),
+          if (_items.length < _total || _catalogMore)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: TextButton(
+                onPressed: _loading
+                    ? null
+                    : () =>
+                          _fetch(_request, _params, kind: _kind, append: true),
+                child: Text(
+                  _catalogMore
+                      ? 'Load more from catalog'
+                      : 'Load more · ${_items.length} of $_total',
+                ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _libraryHeader(double width) {
+  Widget _libraryHeader(double width, {bool compact = false}) {
     final queue = _page == _Page.queue;
     final title = _collectionTitle.isNotEmpty
         ? _collectionTitle
         : _pageTitles[_page.index];
     return Container(
-      margin: const EdgeInsets.fromLTRB(32, 7, 32, 18),
-      padding: const EdgeInsets.all(25),
+      margin: EdgeInsets.fromLTRB(
+        compact ? 16 : 32,
+        compact ? 2 : 7,
+        compact ? 16 : 32,
+        compact ? 4 : 18,
+      ),
+      padding: EdgeInsets.all(compact ? 12 : 25),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
         gradient: LinearGradient(
@@ -2071,7 +2085,7 @@ class _LibraryState extends State<_Library> {
       ),
       child: Row(
         children: [
-          if (width > 730) ...[
+          if (!compact && width > 980) ...[
             SizedBox(
               width: 115,
               height: 115,
@@ -2087,40 +2101,45 @@ class _LibraryState extends State<_Library> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _eyebrow(
-                  queue
-                      ? 'LISTEN WITHOUT LIMITS'
-                      : _page == _Page.providers
-                      ? 'CONNECTED MUSIC'
-                      : 'YOUR COLLECTION',
-                ),
-                const SizedBox(height: 8),
+                if (!compact)
+                  _eyebrow(
+                    queue
+                        ? 'LISTEN WITHOUT LIMITS'
+                        : _page == _Page.providers
+                        ? 'CONNECTED MUSIC'
+                        : 'YOUR COLLECTION',
+                  ),
+                if (!compact) const SizedBox(height: 8),
                 Text(
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 31,
+                  style: TextStyle(
+                    fontSize: compact ? 20 : 31,
                     fontWeight: FontWeight.w700,
                     letterSpacing: -1,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  queue
-                      ? 'Your next favorite moment starts here.'
-                      : _page == _Page.providers
-                      ? 'Local collections, streaming services, radio & more.'
-                      : _page == _Page.next
-                      ? 'A little intention for what comes after this.'
-                      : _page == _Page.favorites
-                      ? 'The tracks you always come back to.'
-                      : _page == _Page.history
-                      ? 'Pick up where the music took you.'
-                      : 'Soundtracks for every part of your day.',
-                  style: TextStyle(color: _muted, fontSize: 12),
-                ),
-                const SizedBox(height: 14),
+                if (compact) const SizedBox(height: 4),
+                if (!compact) const SizedBox(height: 6),
+                if (!compact)
+                  Text(
+                    queue
+                        ? 'Your next favorite moment starts here.'
+                        : _page == _Page.providers
+                        ? 'Local collections, streaming services, radio & more.'
+                        : _page == _Page.next
+                        ? 'A little intention for what comes after this.'
+                        : _page == _Page.favorites
+                        ? 'The tracks you always come back to.'
+                        : _page == _Page.history
+                        ? 'Pick up where the music took you.'
+                        : 'Soundtracks for every part of your day.',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: _muted, fontSize: 12),
+                  ),
+                SizedBox(height: compact ? 0 : 14),
                 Row(
                   children: [
                     Container(
@@ -2132,11 +2151,15 @@ class _LibraryState extends State<_Library> {
                       ),
                     ),
                     const SizedBox(width: 7),
-                    Text(
-                      queue
-                          ? '${_state['total'] ?? 0} tracks in queue'
-                          : '$_total ${_kind == 'history' ? 'plays' : _kind}',
-                      style: TextStyle(fontSize: 11, color: _muted),
+                    Flexible(
+                      child: Text(
+                        queue
+                            ? '${_state['total'] ?? 0} tracks in queue'
+                            : '$_total ${_kind == 'history' ? 'plays' : _kind}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11, color: _muted),
+                      ),
                     ),
                     if (queue && _playing) ...[
                       const SizedBox(width: 18),
@@ -2152,7 +2175,7 @@ class _LibraryState extends State<_Library> {
               ],
             ),
           ),
-          if (width > 1100 && queue)
+          if (!compact && width > 1200 && queue && _playing)
             SizedBox(
               width: 160,
               height: 82,
@@ -2312,104 +2335,135 @@ class _LibraryState extends State<_Library> {
   );
 
   Widget _listToolbar() => Padding(
-    padding: const EdgeInsets.fromLTRB(32, 0, 24, 10),
+    padding: const EdgeInsets.fromLTRB(16, 0, 12, 6),
     child: Row(
       children: [
-        Text(
-          _kind == 'tracks'
-              ? 'Tracks'
-              : _kind == 'history'
-              ? 'Listening history'
-              : _kind == 'playlists'
-              ? 'Made for listening'
-              : _kind == 'albums'
-              ? 'Albums'
-              : 'Artists',
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        Flexible(
+          child: Text(
+            _kind == 'tracks'
+                ? 'Tracks'
+                : _kind == 'history'
+                ? 'Listening history'
+                : _kind == 'playlists'
+                ? 'Made for listening'
+                : _kind == 'albums'
+                ? 'Albums'
+                : 'Artists',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          ),
         ),
         const SizedBox(width: 9),
         Text('$_total', style: TextStyle(color: _muted, fontSize: 12)),
-        const Spacer(),
-        if (_kind == 'tracks' || _kind == 'history')
-          _icon(
-            Icons.checklist,
-            'Select tracks',
-            () => setState(() {
-              _selecting = !_selecting;
-              if (!_selecting) _marked.clear();
-            }),
-            active: _selecting,
+        const SizedBox(width: 8),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              reverse: true,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_kind == 'tracks' || _kind == 'history')
+                    _icon(
+                      Icons.checklist,
+                      'Select tracks',
+                      () => setState(() {
+                        _selecting = !_selecting;
+                        if (!_selecting) _marked.clear();
+                      }),
+                      active: _selecting,
+                    ),
+                  if ((_page == _Page.queue || _page == _Page.next) &&
+                      _supports('queue.undo'))
+                    _icon(Icons.undo, 'Undo last queue edit', _undo),
+                  if (_page == _Page.playlists &&
+                      _kind == 'playlists' &&
+                      _playlistListUndo.containsKey(_provider) &&
+                      _canPlaylist('undo'))
+                    _icon(Icons.undo, 'Undo last playlist edit', _undo),
+                  if (_page == _Page.playlists &&
+                      _kind == 'playlists' &&
+                      _canPlaylist('create'))
+                    TextButton.icon(
+                      onPressed: _createPlaylist,
+                      icon: const Icon(Icons.add, size: 17),
+                      label: const Text('New playlist'),
+                    ),
+                  if (_page == _Page.playlists &&
+                      _collection.isNotEmpty &&
+                      !['Favorites', 'Recently Played'].contains(_collection) &&
+                      [
+                        'directories',
+                        'undo',
+                        'sort',
+                        'move',
+                        'import',
+                      ].any(_canPlaylist))
+                    _icon(
+                      Icons.edit_note,
+                      'Playlist tools: files, directories, sorting and undo',
+                      _playlistTools,
+                    ),
+                  if (_page == _Page.queue && _items.isNotEmpty)
+                    _icon(
+                      Icons.save_outlined,
+                      'Save queue as playlist',
+                      _saveQueue,
+                    ),
+                  if ((_page == _Page.queue ||
+                          _page == _Page.next ||
+                          _page == _Page.history) &&
+                      _items.isNotEmpty)
+                    _icon(
+                      Icons.delete_sweep_outlined,
+                      'Clear ${_navLabels[_page.index].toLowerCase()}',
+                      () async {
+                        if (await _confirm(
+                          'Clear ${_navLabels[_page.index].toLowerCase()}?',
+                          'This removes the entries from this list. Your music files are kept.',
+                          'Clear',
+                        )) {
+                          await _run(
+                            _page == _Page.queue
+                                ? 'queue.clear'
+                                : _page == _Page.next
+                                ? 'playnext.clear'
+                                : 'history.clear',
+                            _page == _Page.history ? {} : _revision,
+                          );
+                          await _refreshList();
+                        }
+                      },
+                    ),
+                  if (_collection.isNotEmpty &&
+                      _kind == 'tracks' &&
+                      (_page == _Page.providers || _page == _Page.playlists))
+                    TextButton.icon(
+                      onPressed: () async {
+                        final album = _request == 'provider.album_tracks';
+                        if (await _run(
+                              album ? 'provider.load_album' : 'provider.load',
+                              {
+                                'provider': _provider,
+                                album ? 'album' : 'playlist': _collection,
+                              },
+                            ) !=
+                            null) {
+                          await _navigate(_Page.queue);
+                        }
+                      },
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: const Text('Load collection'),
+                    ),
+                  _icon(Icons.refresh_rounded, 'Refresh', _refreshList),
+                ],
+              ),
+            ),
           ),
-        if ((_page == _Page.queue || _page == _Page.next) &&
-            _supports('queue.undo'))
-          _icon(Icons.undo, 'Undo last queue edit', _undo),
-        if (_page == _Page.playlists &&
-            _kind == 'playlists' &&
-            _playlistListUndo.containsKey(_provider) &&
-            _canPlaylist('undo'))
-          _icon(Icons.undo, 'Undo last playlist edit', _undo),
-        if (_page == _Page.playlists &&
-            _kind == 'playlists' &&
-            _canPlaylist('create'))
-          TextButton.icon(
-            onPressed: _createPlaylist,
-            icon: const Icon(Icons.add, size: 17),
-            label: const Text('New playlist'),
-          ),
-        if (_page == _Page.playlists &&
-            _collection.isNotEmpty &&
-            !['Favorites', 'Recently Played'].contains(_collection) &&
-            ['directories', 'undo', 'sort', 'move', 'import'].any(_canPlaylist))
-          _icon(
-            Icons.edit_note,
-            'Playlist tools: files, directories, sorting and undo',
-            _playlistTools,
-          ),
-        if (_page == _Page.queue && _items.isNotEmpty)
-          _icon(Icons.save_outlined, 'Save queue as playlist', _saveQueue),
-        if ((_page == _Page.queue ||
-                _page == _Page.next ||
-                _page == _Page.history) &&
-            _items.isNotEmpty)
-          _icon(
-            Icons.delete_sweep_outlined,
-            'Clear ${_navLabels[_page.index].toLowerCase()}',
-            () async {
-              if (await _confirm(
-                'Clear ${_navLabels[_page.index].toLowerCase()}?',
-                'This removes the entries from this list. Your music files are kept.',
-                'Clear',
-              )) {
-                await _run(
-                  _page == _Page.queue
-                      ? 'queue.clear'
-                      : _page == _Page.next
-                      ? 'playnext.clear'
-                      : 'history.clear',
-                  _page == _Page.history ? {} : _revision,
-                );
-                await _refreshList();
-              }
-            },
-          ),
-        if (_collection.isNotEmpty &&
-            _kind == 'tracks' &&
-            (_page == _Page.providers || _page == _Page.playlists))
-          TextButton.icon(
-            onPressed: () async {
-              final album = _request == 'provider.album_tracks';
-              if (await _run(album ? 'provider.load_album' : 'provider.load', {
-                    'provider': _provider,
-                    album ? 'album' : 'playlist': _collection,
-                  }) !=
-                  null) {
-                await _navigate(_Page.queue);
-              }
-            },
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text('Load collection'),
-          ),
-        _icon(Icons.refresh_rounded, 'Refresh', _refreshList),
+        ),
       ],
     ),
   );
@@ -2641,14 +2695,19 @@ class _LibraryState extends State<_Library> {
                             size: 17,
                             active: track['bookmark'] == true,
                           ),
-                          SizedBox(
-                            width: 47,
-                            child: Text(
-                              track['realtime'] == true
-                                  ? 'LIVE'
-                                  : _duration(track['duration_secs']),
-                              textAlign: TextAlign.right,
-                              style: TextStyle(color: _muted, fontSize: 11),
+                          Text(
+                            track['realtime'] == true
+                                ? 'LIVE'
+                                : _duration(track['duration_secs']),
+                            textAlign: TextAlign.right,
+                            maxLines: 1,
+                            softWrap: false,
+                            style: TextStyle(
+                              color: _muted,
+                              fontSize: 11,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
                             ),
                           ),
                           PopupMenuButton<String>(
@@ -2946,48 +3005,67 @@ class _LibraryState extends State<_Library> {
     String description, {
     VoidCallback? action,
     String? label,
-  }) => Center(
-    child: SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: _accent.withValues(alpha: .06),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: _accent.withValues(alpha: .09)),
-            ),
-            child: Icon(icon, color: _accent, size: 30),
+  }) => LayoutBuilder(
+    builder: (context, constraints) {
+      final height = constraints.maxHeight;
+      final compact = height.isFinite && height < 230;
+      final pad = compact ? 8.0 : 24.0;
+      return SingleChildScrollView(
+        padding: EdgeInsets.all(pad),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: height.isFinite ? math.max(0, height - pad * 2) : 0,
           ),
-          const SizedBox(height: 19),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (!compact) ...[
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: _accent.withValues(alpha: .06),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: _accent.withValues(alpha: .09)),
+                  ),
+                  child: Icon(icon, color: _accent, size: 30),
+                ),
+                const SizedBox(height: 19),
+              ],
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: compact ? 16 : 19,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Text(
+                  description,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: _muted,
+                    fontSize: 12,
+                    height: compact ? 1.35 : 1.7,
+                  ),
+                ),
+              ),
+              if (action != null) ...[
+                SizedBox(height: compact ? 12 : 22),
+                FilledButton.icon(
+                  onPressed: action,
+                  icon: const Icon(Icons.add, size: 17),
+                  label: Text(label ?? 'Continue'),
+                ),
+              ],
+            ],
           ),
-          const SizedBox(height: 8),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
-            child: Text(
-              description,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: _muted, fontSize: 12, height: 1.7),
-            ),
-          ),
-          if (action != null) ...[
-            const SizedBox(height: 22),
-            FilledButton.icon(
-              onPressed: action,
-              icon: const Icon(Icons.add, size: 17),
-              label: Text(label ?? 'Continue'),
-            ),
-          ],
-        ],
-      ),
-    ),
+        ),
+      );
+    },
   );
 
   Widget _lyrics() => Column(
@@ -2998,11 +3076,19 @@ class _LibraryState extends State<_Library> {
         _track.isEmpty
             ? 'Play a track to find its lyrics.'
             : '$_title · ${_text(_track['artist'])}',
-        trailing: _icon(Icons.refresh, 'Refresh lyrics', _refreshList),
+        trailing: _track.isEmpty
+            ? null
+            : _icon(Icons.refresh, 'Refresh lyrics', _refreshList),
       ),
       if (_loading) const LinearProgressIndicator(minHeight: 2),
       Expanded(
-        child: _loadError != null
+        child: _track.isEmpty
+            ? _empty(
+                Icons.lyrics_outlined,
+                'Nothing is playing',
+                'Start a track and its lyrics will show up here.',
+              )
+            : _loadError != null
             ? _empty(
                 Icons.lyrics_outlined,
                 'Lyrics unavailable',
@@ -3089,16 +3175,24 @@ class _LibraryState extends State<_Library> {
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   const Spacer(),
-                  DropdownButton<String>(
-                    value: presets.contains(_state['eq_preset'])
-                        ? _state['eq_preset'] as String
-                        : 'Flat',
-                    items: presets
-                        .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) _run('eq', {'name': value});
-                    },
+                  Flexible(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: presets.contains(_state['eq_preset'])
+                          ? _state['eq_preset'] as String
+                          : 'Flat',
+                      items: presets
+                          .map(
+                            (p) => DropdownMenuItem(
+                              value: p,
+                              child: Text(p, overflow: TextOverflow.ellipsis),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) _run('eq', {'name': value});
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -3111,9 +3205,16 @@ class _LibraryState extends State<_Library> {
                     (index) => Expanded(
                       child: Column(
                         children: [
-                          Text(
-                            '${(index < values.length ? values[index] : 0).toStringAsFixed(0)} dB',
-                            style: TextStyle(color: _muted, fontSize: 10),
+                          SizedBox(
+                            height: 14,
+                            width: double.infinity,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                '${(index < values.length ? values[index] : 0).toStringAsFixed(0)} dB',
+                                style: TextStyle(color: _muted, fontSize: 10),
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Expanded(
@@ -3124,9 +3225,16 @@ class _LibraryState extends State<_Library> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          Text(
-                            labels[index],
-                            style: TextStyle(color: _muted, fontSize: 11),
+                          SizedBox(
+                            height: 14,
+                            width: double.infinity,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                labels[index],
+                                style: TextStyle(color: _muted, fontSize: 11),
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -3208,6 +3316,8 @@ class _LibraryState extends State<_Library> {
               title: const Text('Audio output'),
               subtitle: Text(
                 _text(_state['device'], 'System default'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(color: _muted, fontSize: 12),
               ),
               trailing: _icon(
@@ -3233,6 +3343,8 @@ class _LibraryState extends State<_Library> {
                 ),
                 title: Text(
                   _text(device['name']),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 13),
                 ),
                 onTap: () async {
@@ -3457,7 +3569,7 @@ class _LibraryState extends State<_Library> {
       builder: (context) => AlertDialog(
         title: Text(title),
         content: SizedBox(
-          width: 540,
+          width: fittedDialogExtent(context, 540),
           child: SingleChildScrollView(child: SelectableText(text)),
         ),
         actions: [
@@ -3481,7 +3593,7 @@ class _LibraryState extends State<_Library> {
         builder: (context, update) => AlertDialog(
           title: const Text('Engine operations'),
           content: SizedBox(
-            width: 540,
+            width: fittedDialogExtent(context, 540),
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3718,74 +3830,87 @@ class _LibraryState extends State<_Library> {
                 ),
                 if (!narrow)
                   _icon(
-                    Icons.favorite_border,
-                    'Favorite current track',
+                    _track['bookmark'] == true
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    _track['bookmark'] == true
+                        ? 'Remove favorite'
+                        : 'Favorite current track',
                     _track.isEmpty ? null : () => _favorite(_track),
                     size: 18,
+                    active: _track['bookmark'] == true,
                   ),
                 Expanded(
                   flex: narrow ? 5 : 7,
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (!narrow)
-                            _icon(
-                              Icons.shuffle_rounded,
-                              'Shuffle',
-                              _connected
-                                  ? () => _run('shuffle', {'name': 'toggle'})
-                                  : null,
-                              active: _state['shuffle'] == true,
-                              size: 18,
-                            ),
-                          _icon(
-                            Icons.skip_previous_rounded,
-                            'Previous track',
-                            _connected ? () => _run('prev') : null,
-                            size: 25,
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (!narrow)
+                                _icon(
+                                  Icons.shuffle_rounded,
+                                  'Shuffle',
+                                  _connected
+                                      ? () =>
+                                            _run('shuffle', {'name': 'toggle'})
+                                      : null,
+                                  active: _state['shuffle'] == true,
+                                  size: 18,
+                                ),
+                              _icon(
+                                Icons.skip_previous_rounded,
+                                'Previous track',
+                                _connected ? () => _run('prev') : null,
+                                size: 25,
+                              ),
+                              const SizedBox(width: 5),
+                              IconButton.filled(
+                                tooltip: _playing ? 'Pause' : 'Play',
+                                onPressed: _connected
+                                    ? () => _run('toggle')
+                                    : null,
+                                icon: Icon(
+                                  _playing
+                                      ? Icons.pause_rounded
+                                      : Icons.play_arrow_rounded,
+                                  size: 28,
+                                ),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: _accent,
+                                  foregroundColor: _palette.onAccent,
+                                  fixedSize: const Size(43, 43),
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              _icon(
+                                Icons.skip_next_rounded,
+                                'Next track',
+                                _connected ? () => _run('next') : null,
+                                size: 25,
+                              ),
+                              if (!narrow)
+                                _icon(
+                                  _text(_state['repeat']).toLowerCase() == 'one'
+                                      ? Icons.repeat_one_rounded
+                                      : Icons.repeat_rounded,
+                                  'Repeat: ${_text(_state['repeat'], 'off')}',
+                                  _connected
+                                      ? () => _run('repeat', {'name': 'cycle'})
+                                      : null,
+                                  active:
+                                      _state['repeat'] != null &&
+                                      _text(_state['repeat']).toLowerCase() !=
+                                          'off',
+                                  size: 18,
+                                ),
+                            ],
                           ),
-                          const SizedBox(width: 5),
-                          IconButton.filled(
-                            tooltip: _playing ? 'Pause' : 'Play',
-                            onPressed: _connected ? () => _run('toggle') : null,
-                            icon: Icon(
-                              _playing
-                                  ? Icons.pause_rounded
-                                  : Icons.play_arrow_rounded,
-                              size: 28,
-                            ),
-                            style: IconButton.styleFrom(
-                              backgroundColor: _accent,
-                              foregroundColor: _palette.onAccent,
-                              fixedSize: const Size(43, 43),
-                            ),
-                          ),
-                          const SizedBox(width: 5),
-                          _icon(
-                            Icons.skip_next_rounded,
-                            'Next track',
-                            _connected ? () => _run('next') : null,
-                            size: 25,
-                          ),
-                          if (!narrow)
-                            _icon(
-                              _text(_state['repeat']).toLowerCase() == 'one'
-                                  ? Icons.repeat_one_rounded
-                                  : Icons.repeat_rounded,
-                              'Repeat: ${_text(_state['repeat'], 'off')}',
-                              _connected
-                                  ? () => _run('repeat', {'name': 'cycle'})
-                                  : null,
-                              active:
-                                  _state['repeat'] != null &&
-                                  _text(_state['repeat']).toLowerCase() !=
-                                      'off',
-                              size: 18,
-                            ),
-                        ],
+                        ),
                       ),
                       if (!narrow) _seekBar(position, duration),
                     ],
@@ -3854,7 +3979,9 @@ class _LibraryState extends State<_Library> {
                   tooltip: 'Playback options',
                   icon: Icon(Icons.more_vert, color: _muted, size: 18),
                   onSelected: (action) {
-                    if (action == 'download') {
+                    if (action == 'favorite') {
+                      _favorite(_track);
+                    } else if (action == 'download') {
                       _download();
                     } else if (action == 'volume') {
                       _adjustVolume(volumeFloor);
@@ -3869,6 +3996,16 @@ class _LibraryState extends State<_Library> {
                     }
                   },
                   itemBuilder: (context) => [
+                    if (narrow)
+                      PopupMenuItem(
+                        value: 'favorite',
+                        enabled: _track.isNotEmpty,
+                        child: Text(
+                          _track['bookmark'] == true
+                              ? 'Remove favorite'
+                              : 'Favorite track',
+                        ),
+                      ),
                     const PopupMenuItem(
                       value: 'stop',
                       child: Text('Stop playback'),
@@ -3916,7 +4053,7 @@ class _LibraryState extends State<_Library> {
         builder: (context, update) => AlertDialog(
           title: const Text('Volume'),
           content: SizedBox(
-            width: 340,
+            width: fittedDialogExtent(context, 340),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -3964,24 +4101,27 @@ class _LibraryState extends State<_Library> {
     await _run('seek.absolute', {'value': position});
   }
 
+  Widget _seekTime(String text, {TextAlign align = TextAlign.left}) => Text(
+    text,
+    textAlign: align,
+    maxLines: 1,
+    softWrap: false,
+    style: TextStyle(
+      color: _muted,
+      fontSize: 10,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    ),
+  );
+
   Widget _seekBar(double position, double duration) => Row(
     children: [
-      SizedBox(
-        width: 42,
-        child: Tooltip(
-          message: 'Jump to time',
-          child: InkWell(
-            onTap: _connected && _state['seekable'] == true
-                ? _jumpToTime
-                : null,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                _duration(position),
-                textAlign: TextAlign.right,
-                style: TextStyle(color: _muted, fontSize: 10),
-              ),
-            ),
+      Tooltip(
+        message: 'Jump to time',
+        child: InkWell(
+          onTap: _connected && _state['seekable'] == true ? _jumpToTime : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: _seekTime(_duration(position), align: TextAlign.right),
           ),
         ),
       ),
@@ -4007,15 +4147,177 @@ class _LibraryState extends State<_Library> {
           ),
         ),
       ),
-      SizedBox(
-        width: 42,
-        child: Text(
-          _track['realtime'] == true ? 'LIVE' : _duration(duration),
-          style: TextStyle(color: _muted, fontSize: 10),
-        ),
-      ),
+      _seekTime(_track['realtime'] == true ? 'LIVE' : _duration(duration)),
     ],
   );
+}
+
+class _CommandPalette extends StatefulWidget {
+  const _CommandPalette({required this.actions, required this.muted});
+  final List<(String, String, VoidCallback)> actions;
+  final Color muted;
+
+  @override
+  State<_CommandPalette> createState() => _CommandPaletteState();
+}
+
+class _CommandPaletteState extends State<_CommandPalette> {
+  final _scroll = ScrollController();
+  var _filter = '';
+  var _selected = 0;
+
+  List<(String, String, VoidCallback)> get _visible => [
+    for (final action in widget.actions)
+      if (fuzzyScore(_filter, action.$1) != null) action,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  bool _onKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _move(1);
+      return true;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _move(-1);
+      return true;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      _activate();
+      return true;
+    }
+    return false;
+  }
+
+  void _move(int delta) {
+    final count = _visible.length;
+    if (count == 0) return;
+    setState(() => _selected = (_selected + delta) % count);
+    _reveal();
+  }
+
+  void _reveal() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scroll.hasClients || _visible.isEmpty) return;
+      const item = 56.0;
+      final position = _scroll.position;
+      final start = _selected * item;
+      final end = start + item;
+      final viewTop = position.pixels;
+      final viewBottom = viewTop + position.viewportDimension;
+      var target = viewTop;
+      if (start < viewTop) {
+        target = start;
+      } else if (end > viewBottom) {
+        target = end - position.viewportDimension;
+      } else {
+        return;
+      }
+      target = target.clamp(0.0, position.maxScrollExtent);
+      if ((target - viewTop).abs() < 1) return;
+      _scroll.animateTo(
+        target,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  void _activate() {
+    final visible = _visible;
+    if (visible.isEmpty || !mounted) return;
+    Navigator.pop(context, visible[_selected.clamp(0, visible.length - 1)].$3);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = _visible;
+    final viewport = MediaQuery.sizeOf(context);
+    // This cap is the whole content box, including the search field. A hard
+    // height keeps AlertDialog's intrinsic measurement working; shrinking to
+    // the match count avoids a tall empty pane for one result.
+    final cap = math.max(160.0, math.min(450.0, viewport.height - 200));
+    const searchBlock = 84.0;
+    final natural = visible.isEmpty ? 48.0 : visible.length * 56.0;
+    final height = math.min(cap, searchBlock + natural);
+    return AlertDialog(
+      title: const Text('Commands & keyboard shortcuts'),
+      content: SizedBox(
+        width: fittedDialogExtent(context, 560),
+        height: height,
+        child: Column(
+          children: [
+            TextField(
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'Find a command',
+                prefixIcon: Icon(Icons.search_rounded, size: 20),
+                isDense: true,
+              ),
+              onChanged: (value) => setState(() {
+                _filter = value;
+                _selected = 0;
+              }),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: visible.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No matching commands',
+                        style: TextStyle(color: widget.muted),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scroll,
+                      itemExtent: 56,
+                      itemCount: visible.length,
+                      itemBuilder: (context, index) {
+                        final action = visible[index];
+                        return ListTile(
+                          selected: index == _selected,
+                          selectedTileColor: Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: .12),
+                          title: Text(
+                            action.$1,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: Text(
+                            action.$2,
+                            style: TextStyle(color: widget.muted, fontSize: 11),
+                          ),
+                          onTap: () => Navigator.pop(context, action.$3),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
 }
 
 class _Artwork extends StatelessWidget {

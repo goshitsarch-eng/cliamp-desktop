@@ -11,7 +11,10 @@ cliamp --daemon                              # no TUI, IPC only
 cliamp -d                                    # short form
 cliamp --daemon --auto-play --playlist Lofi  # start playing on launch
 cliamp --daemon ~/Music --auto-play          # auto-play a directory
+cliamp --daemon --no-startup-channels        # empty queue; no radio preload
 ```
+
+With no files and the default `cliamp` provider, headless mode and `--auto-play` queue the built-in cliamp radio channels, because there is no radio view in which to pick one. `--no-startup-channels` skips that implicit preload. The desktop app passes it when it starts an engine, so a new window opens on an empty queue. An explicit `--provider radio` still loads the channels. A file, directory, or `--playlist` argument replaces the preload either way.
 
 To stop the daemon, press `Ctrl+C` or send `SIGINT`, `SIGTERM` or `SIGHUP`. The shell sends `SIGHUP` to a background daemon when its terminal closes. cliamp saves the resume position, as the `q` key does in the TUI. A second signal stops a daemon that does not exit.
 

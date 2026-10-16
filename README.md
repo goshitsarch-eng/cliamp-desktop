@@ -1,3 +1,5 @@
+> **Not an official build.** This repository is an unofficial fork of [cliamp](https://github.com/bjarneo/cliamp) by Bjarne Øverli. The Flutter desktop app in `desktop/` is part of this fork. Official releases are published at [cliamp.stream](https://cliamp.stream) and [github.com/bjarneo/cliamp](https://github.com/bjarneo/cliamp).
+
 [![Docs on contextowl.co](https://contextowl.co/uploads/_brand/badge-docs.svg)](https://contextowl.co)
 
 A retro terminal music player inspired by Winamp. Play local files, streams, podcasts, YouTube, YouTube Music, SoundCloud, Mixcloud, Bilibili, Spotify, Qobuz, Tidal, NetEase Cloud Music, Yandex Music, Xiaoyuzhou (小宇宙), Navidrome, Lyrion, Plex, Jellyfin, Emby, and Audiobookshelf. Use the spectrum visualizer, parametric EQ, and playlists.
@@ -16,14 +18,17 @@ https://github.com/user-attachments/assets/55e251f2-e13b-43d9-bb6a-7b1960e7d7d0
 
 ## Desktop app
 
-A modern Flutter desktop frontend lives in `desktop/`, with native projects for
-Linux, Windows, and macOS. It uses the existing Go player and adds provider
+This fork adds a Flutter desktop frontend in `desktop/`, with native projects for
+Linux, Windows, and macOS. It uses the original Go player and adds provider
 discovery and setup, playlist editing with undo, plugin management, preferences,
-synced lyrics, and the original visualizers. See the [desktop guide](docs/desktop.md)
+synced lyrics, and the original visualizers. It is not part of the official
+cliamp releases. See the [desktop guide](docs/desktop.md)
 for builds and the [feature checklist](docs/desktop-feature-parity.md) for coverage
 and platform validation status.
 
 ## Install
+
+The commands in this section install the official terminal player from the original project. They do not install this fork or its desktop app. To build the desktop app, follow the [desktop guide](docs/desktop.md).
 
 ```sh
 curl -fsSL https://cliamp.stream/install.sh | sh
@@ -149,7 +154,10 @@ hotkeys on Windows.
 Run `cliamp --daemon` to play without a TUI. Headless mode runs the same
 player as the TUI. It loads your Lua plugins, reports plays to Navidrome,
 Jellyfin, and the other providers that take play reports, and adds each track
-to Recently Played when the track starts. See
+to Recently Played when the track starts. With no files and the default
+provider, that start queues the built-in cliamp radio channels.
+`--no-startup-channels` skips the preload. The desktop app passes that flag
+when it starts an engine. See
 [docs/headless.md](docs/headless.md) and
 [docs/remote-control.md](docs/remote-control.md).
 

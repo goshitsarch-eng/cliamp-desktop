@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'backend.dart';
+import 'desktop_theme.dart';
 
 /// Plugin approvals are tied to the source, hash and permissions displayed in
 /// a separate review. The CLI rejects stale or changed reviews.
@@ -166,8 +167,13 @@ class _PluginManagerDialogState extends State<PluginManagerDialog> {
   Widget build(BuildContext context) => AlertDialog(
     title: const Text('Plugins'),
     content: SizedBox(
-      width: 740,
-      height: MediaQuery.sizeOf(context).height * .6,
+      width: fittedDialogExtent(context, 740),
+      height: fittedDialogExtent(
+        context,
+        MediaQuery.sizeOf(context).height * .6,
+        width: false,
+        margin: 180,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -340,8 +346,13 @@ class _PluginReviewDialogState extends State<_PluginReviewDialog> {
     return AlertDialog(
       title: Text('Review ${review['name']}'),
       content: SizedBox(
-        width: 780,
-        height: MediaQuery.sizeOf(context).height * .68,
+        width: fittedDialogExtent(context, 780),
+        height: fittedDialogExtent(
+          context,
+          MediaQuery.sizeOf(context).height * .68,
+          width: false,
+          margin: 180,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -434,7 +445,7 @@ class _PluginConfigurationDialogState
   Widget build(BuildContext context) => AlertDialog(
     title: Text('${widget.plugin['name']} settings'),
     content: SizedBox(
-      width: 520,
+      width: fittedDialogExtent(context, 520),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

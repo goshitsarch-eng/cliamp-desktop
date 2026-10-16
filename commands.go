@@ -55,6 +55,7 @@ func buildApp() *cli.Command {
 		&cli.BoolWithInverseFlag{Name: "expand-playlist", Usage: "expand YouTube and YouTube Music list= URLs to the full playlist", Value: true},
 		&cli.BoolWithInverseFlag{Name: "low-power", Usage: "low-power mode: reduce CPU by lowering UI cadence and disabling visualization"},
 		&cli.BoolFlag{Name: "daemon", Aliases: []string{"d"}, Usage: "run headless (no TUI), serving IPC for scripts/Waybar"},
+		&cli.BoolFlag{Name: "no-startup-channels", Usage: "do not queue built-in cliamp radio channels on a headless or auto-play start"},
 	}
 
 	return &cli.Command{
@@ -71,7 +72,7 @@ func buildApp() *cli.Command {
 			if err != nil {
 				return err
 			}
-			return run(ov, c.Args().Slice(), c.Bool("daemon"), c.Bool("visualizer-60fps"))
+			return run(ov, c.Args().Slice(), c.Bool("daemon"), c.Bool("visualizer-60fps"), c.Bool("no-startup-channels"))
 		},
 		Commands: []*cli.Command{
 			upgradeCommand(),

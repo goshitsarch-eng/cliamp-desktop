@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'backend.dart';
+import 'desktop_theme.dart';
 
 class ProviderSignIn extends StatefulWidget {
   const ProviderSignIn({
@@ -211,7 +212,7 @@ class _ProviderSignInState extends State<ProviderSignIn> {
   Widget build(BuildContext context) => AlertDialog(
     title: Text('Connect ${widget.name}'),
     content: SizedBox(
-      width: 470,
+      width: fittedDialogExtent(context, 470),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,

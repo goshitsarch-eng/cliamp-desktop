@@ -798,4 +798,173 @@ void main() {
     await tester.pump();
     expect(backend.closed, isTrue);
   });
+
+  testWidgets('sidebar keeps every destination on screen at 1280 by 640', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    await _open(tester, backend, size: const Size(1280, 640));
+    const labels = [
+      'Queue',
+      'Play next',
+      'Providers',
+      'Playlists',
+      'Favorites',
+      'History',
+      'Lyrics',
+      'Visualizer',
+      'Equalizer',
+      'Plugins',
+      'Settings',
+    ];
+    for (final label in labels) {
+      final rect = tester.getRect(find.text(label));
+      expect(rect.top, greaterThanOrEqualTo(0), reason: label);
+      expect(rect.bottom, lessThanOrEqualTo(640), reason: label);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'command palette runs the highlighted command from the keyboard',
+    (tester) async {
+      final backend = _FakeBackend();
+      await _open(tester, backend);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f1);
+      await tester.pumpAndSettle();
+      expect(find.text('Commands & keyboard shortcuts'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      final next = tester.widget<ListTile>(
+        find.widgetWithText(ListTile, 'Next track'),
+      );
+      expect(next.selected, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.text('Commands & keyboard shortcuts'), findsNothing);
+      expect(backend.mutations('next'), isNotEmpty);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.f1);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'equalizer');
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.text('Fine-tune your listening.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('empty Add music explains what to enter', (tester) async {
+    final backend = _FakeBackend();
+    await _open(tester, backend);
+    await tester.tap(find.text('Add music'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Enter a file, folder, playlist, or URL.'),
+      findsOneWidget,
+    );
+    expect(find.text('Add your music'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('player favorite follows the track and long times stay visible', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    backend.tracks.first['duration_secs'] = 999999;
+    backend.tracks.first['bookmark'] = true;
+    backend.state['track'] = Map<String, dynamic>.from(backend.tracks.first);
+    backend.state['duration'] = 999999;
+    backend.state['position'] = 3700;
+    await _open(tester, backend);
+    expect(find.text('277:46:39'), findsWidgets);
+    expect(find.text('1:01:40'), findsOneWidget);
+    expect(find.byIcon(Icons.favorite_rounded), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(700, 800);
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
+    await tester.tap(find.byTooltip('Playback options'));
+    await tester.pumpAndSettle();
+    expect(find.text('Remove favorite'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('lyrics stays quiet when nothing is playing', (tester) async {
+    final backend = _FakeBackend();
+    backend.state = {
+      ...backend.state,
+      'track': <String, dynamic>{},
+      'total': 0,
+      'index': -1,
+      'state': 'stopped',
+    };
+    backend.tracks.clear();
+    backend.failures['lyrics'] = const BackendException(
+      'operation failed: no current track',
+    );
+    await _open(tester, backend);
+    await _navigate(tester, 'Lyrics');
+    expect(find.text('Nothing is playing'), findsOneWidget);
+    expect(find.textContaining('operation failed'), findsNothing);
+    expect(backend.mutations('lyrics'), isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('short empty queue keeps its message on screen', (tester) async {
+    final backend = _FakeBackend();
+    backend.state = {
+      ...backend.state,
+      'track': <String, dynamic>{},
+      'total': 0,
+      'index': -1,
+    };
+    backend.tracks.clear();
+    await _open(tester, backend, size: const Size(1100, 500));
+    final title = find.text('Your music belongs here');
+    expect(title, findsOneWidget);
+    final rect = tester.getRect(title);
+    expect(rect.top, greaterThanOrEqualTo(0));
+    expect(rect.bottom, lessThanOrEqualTo(500));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('small and short windows do not overflow', (tester) async {
+    final backend = _FakeBackend();
+    await _open(tester, backend, size: const Size(1280, 720));
+    for (final size in const [
+      Size(480, 420),
+      Size(700, 640),
+      Size(900, 500),
+      Size(1600, 420),
+    ]) {
+      tester.view.physicalSize = size;
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: '$size queue');
+      await tester.sendKeyEvent(LogicalKeyboardKey.f1);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: '$size palette');
+      if (size == const Size(480, 420)) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        final play = find.text('Play / pause');
+        expect(play, findsOneWidget);
+        final rect = tester.getRect(play);
+        expect(rect.top, greaterThanOrEqualTo(0));
+        expect(rect.bottom, lessThanOrEqualTo(size.height));
+      }
+      await tester.enterText(find.byType(TextField).last, 'equalizer');
+      await tester.pumpAndSettle();
+      expect(tester.getSize(find.byType(ListView).last).height, lessThan(120));
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.text('Fine-tune your listening.'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: '$size equalizer');
+    }
+  });
 }

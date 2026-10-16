@@ -1,4 +1,19 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
+/// Shrinks a dialog edge so it stays inside the window.
+double fittedDialogExtent(
+  BuildContext context,
+  double preferred, {
+  bool width = true,
+  double margin = 48,
+}) {
+  final viewport = width
+      ? MediaQuery.sizeOf(context).width
+      : MediaQuery.sizeOf(context).height;
+  return math.min(preferred, math.max(0, viewport - margin));
+}
 
 /// Resolves engine theme colors into readable desktop surfaces. The terminal's
 /// default ANSI theme has no RGB colors, so it keeps the desktop's own palette.

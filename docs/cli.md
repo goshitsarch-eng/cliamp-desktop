@@ -72,7 +72,7 @@ cliamp --daemon --auto-play --playlist Lofi  # start playing on launch
 cliamp -d ~/Music --auto-play                # short flag form
 ```
 
-Run cliamp without a UI. It runs the same player as the TUI and listens on the Unix socket that the TUI uses. All `cliamp <subcommand>` IPC clients work. Plugins, scrobbling, and Recently Played work as in the TUI. `cliamp theme <name>` and `cliamp vis <name|next>` return an error. The `list` forms still work. See [Headless Daemon Mode](headless.md) for use cases and configuration examples for Waybar, Hyprland, systemd, and cron.
+Run cliamp without a UI. It runs the same player as the TUI and listens on the Unix socket that the TUI uses. All `cliamp <subcommand>` IPC clients work. Plugins, scrobbling, and Recently Played work as in the TUI. `cliamp theme <name>` and `cliamp vis <name|next>` return an error. The `list` forms still work. With no files and the default `cliamp` provider, a headless or auto-play start queues the built-in cliamp radio channels. `--no-startup-channels` skips that preload. `--provider radio` still loads the channels. See [Headless Daemon Mode](headless.md) for use cases and configuration examples for Waybar, Hyprland, systemd, and cron.
 
 ## Search
 
@@ -158,6 +158,7 @@ cliamp track.mp3 --repeat all --mono ~/Music
 | `--expand-playlist` / `--no-expand-playlist` | bool | true | expand YouTube and YouTube Music `list=` URLs to the full playlist. `--no-expand-playlist` plays only the video. |
 | `--low-power` / `--no-low-power` | bool | false | lower UI cadence; disable visualization |
 | `--daemon` / `-d` | bool | false | run headless; IPC only, no TUI |
+| `--no-startup-channels` | bool | false | skip the built-in cliamp radio preload on a headless or auto-play start. `--provider radio` still loads the channels |
 
 CLI flags override config file values for the current session only. Persisted boolean options accept matching `--no-*` flags, such as `--no-shuffle` and `--no-low-power`. cliamp does not save them.
 

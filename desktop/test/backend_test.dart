@@ -293,6 +293,10 @@ void main() {
     final backend = runner.backend();
     await backend.connect();
     expect(runner.daemons, hasLength(1));
+    expect(runner.commands.singleWhere((args) => args.contains('--daemon')), [
+      '--daemon',
+      '--no-startup-channels',
+    ]);
     expect(runner.daemons.single.killed, isFalse);
     await Future.wait([backend.close(), backend.close()]);
     expect(runner.daemons.single.killed, isFalse);

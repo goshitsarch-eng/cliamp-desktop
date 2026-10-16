@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'backend.dart';
+import 'desktop_theme.dart';
 
 /// Edits the engine's persisted preferences from its bounded, nonsecret schema.
 class PreferencesDialog extends StatefulWidget {
@@ -197,8 +198,13 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     return AlertDialog(
       title: const Text('Preferences'),
       content: SizedBox(
-        width: 720,
-        height: MediaQuery.sizeOf(context).height * .62,
+        width: fittedDialogExtent(context, 720),
+        height: fittedDialogExtent(
+          context,
+          MediaQuery.sizeOf(context).height * .62,
+          width: false,
+          margin: 180,
+        ),
         child: Column(
           children: [
             TextField(

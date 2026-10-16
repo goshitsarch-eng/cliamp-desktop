@@ -818,7 +818,7 @@ class _TrackedProcess implements InputBackendProcess {
   final Process process;
   final List<String> arguments;
   bool exited = false;
-  bool get isDaemon => arguments.length == 1 && arguments.single == '--daemon';
+  bool get isDaemon => arguments.isNotEmpty && arguments.first == '--daemon';
   @override
   Stream<List<int>> get stdout => process.stdout;
   @override

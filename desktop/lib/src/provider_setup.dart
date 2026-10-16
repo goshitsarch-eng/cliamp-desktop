@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'backend.dart';
+import 'desktop_theme.dart';
 
 /// Uses the engine's existing setup schema and credential store. Secret values
 /// stay in editable fields and are sent by the adapter over stdin only.
@@ -175,7 +176,7 @@ class _ProviderSetupDialogState extends State<ProviderSetupDialog> {
       ),
       scrollable: true,
       content: SizedBox(
-        width: 540,
+        width: fittedDialogExtent(context, 540),
         child: _saved
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

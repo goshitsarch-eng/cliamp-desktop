@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'desktop_theme.dart';
+
 /// Returns an absolute target in seconds only after valid confirmation.
 /// Cancelling the dialog returns null; the caller owns the playback mutation.
 Future<double?> showSeekDialog(
@@ -67,7 +69,7 @@ class _SeekDialogState extends State<_SeekDialog> {
   Widget build(BuildContext context) => AlertDialog(
     title: const Text('Jump to time'),
     content: SizedBox(
-      width: 420,
+      width: fittedDialogExtent(context, 420),
       child: Form(
         key: _form,
         child: TextFormField(

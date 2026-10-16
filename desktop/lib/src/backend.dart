@@ -322,7 +322,7 @@ class CliampBackend
         _publishJobs();
         _daemonLog = '';
         _daemonExit = null;
-        final daemon = await _start(['--daemon']);
+        final daemon = await _start(['--daemon', '--no-startup-channels']);
         _daemon = daemon;
         void capture(List<int> bytes) {
           _daemonLog += utf8.decode(bytes, allowMalformed: true);

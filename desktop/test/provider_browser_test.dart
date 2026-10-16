@@ -480,6 +480,47 @@ void main() {
     },
   );
 
+  testWidgets('an empty collection is not described as a failed search', (
+    tester,
+  ) async {
+    final backend = _ProviderBackend();
+    backend.responses['provider.browse'] = {
+      'browse': {'modes': <String>[], 'entries': <Map>[], 'refreshable': true},
+    };
+    backend.responses['provider.playlists'] = {
+      'playlists': <Map>[],
+      'total': 0,
+    };
+    await _mount(tester, backend);
+    expect(find.text('This collection is empty'), findsOneWidget);
+    expect(find.text('No matching items'), findsNothing);
+    expect(find.textContaining('pinned filter'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a search with no matches does not blame the pinned filter', (
+    tester,
+  ) async {
+    final backend = _ProviderBackend();
+    backend.responses['provider.browse'] = {
+      'browse': {'modes': <String>[], 'entries': <Map>[], 'refreshable': true},
+    };
+    backend.responses['provider.playlists'] = {
+      'playlists': [
+        {'id': 'Favorites', 'name': 'Favorites'},
+      ],
+      'total': 1,
+    };
+    await _mount(tester, backend);
+    expect(find.text('Favorites'), findsWidgets);
+    await tester.enterText(find.byType(TextField), 'zzzz-no-such');
+    await tester.pumpAndSettle();
+    expect(find.text('No matching items'), findsOneWidget);
+    expect(find.text('Try another search.'), findsOneWidget);
+    expect(find.textContaining('pinned filter'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'provider refresh invalidates source caches rather than just rereading a view',
     (tester) async {

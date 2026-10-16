@@ -882,7 +882,9 @@ class _ProviderBrowserState extends State<ProviderBrowser> {
       if (_subscriptions) _subscriptionToolbar(),
       if (_genres || _rows(_response['sorts']).isNotEmpty) _filterToolbar(),
       Expanded(
-        child: _items.isEmpty && !_loading
+        child: _loading
+            ? const SizedBox.shrink()
+            : _items.isEmpty
             ? _empty()
             : _tracks
             ? _trackRows()
@@ -1178,9 +1180,11 @@ class _ProviderBrowserState extends State<ProviderBrowser> {
     _filter,
   );
 
+  bool get _narrowed => _filter.trim().isNotEmpty || _pinnedOnly;
+
   Widget _collectionRows() {
     final items = _visible;
-    if (items.isEmpty) return _empty(filtered: true);
+    if (items.isEmpty) return _empty(filtered: _narrowed);
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
       itemCount: items.length,
@@ -1386,7 +1390,7 @@ class _ProviderBrowserState extends State<ProviderBrowser> {
   Widget _trackRows() {
     final items = _visible;
     final listening = _map(_response['listening']);
-    if (items.isEmpty) return _empty(filtered: true);
+    if (items.isEmpty) return _empty(filtered: _narrowed);
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
       itemCount: items.length,
@@ -1632,7 +1636,11 @@ class _ProviderBrowserState extends State<ProviderBrowser> {
           const SizedBox(height: 8),
           Text(
             filtered
-                ? 'Try another search or turn off the pinned filter.'
+                ? _filter.trim().isNotEmpty && _pinnedOnly
+                      ? 'Nothing in the pinned filter matches that search.'
+                      : _pinnedOnly
+                      ? 'Turn off the pinned filter to see this collection.'
+                      : 'Try another search.'
                 : _subscriptions
                 ? 'Favorite a show to keep its episodes here.'
                 : 'Refresh or choose another collection.',
