@@ -115,6 +115,7 @@ $GODOT --headless res://tests/logic_test.tscn
 $GODOT --headless res://tests/run_tests.tscn
 CLIAMP_BINARY=/absolute/path/to/cliamp $GODOT --headless res://tests/engine_smoke.tscn
 CLIAMP_BINARY=/absolute/path/to/cliamp $GODOT --headless res://tests/engine_dialogs.tscn
+PLUGIN_URL=http://127.0.0.1:8765/name.lua CLIAMP_BINARY=/absolute/path/to/cliamp $GODOT --headless res://tests/engine_plugins.tscn
 ```
 
 `make desktop-test` runs the fake-process suites. The engine smoke starts the
@@ -124,7 +125,9 @@ connection, capabilities, playback, position, spectrum, visualizer frames, seek,
 pause, queue edits and revision conflicts, lyrics, preferences, plugins and
 provider setup schemas. `engine_dialogs` presses the buttons of the save-to-playlist
 chooser, name prompt, playlist tools and provider setup dialogs against the engine.
-On Linux CI both use an ALSA null sink. It is not an
+`engine_plugins` installs a plugin served over local HTTP through the review
+dialog (decline, then tick the exact-content approval), lists, configures and
+removes it. On Linux CI they use an ALSA null sink. It is not an
 audible playback test. The Go tests remain necessary when changing the shared engine.
 
 `godot/tests/screenshots.tscn` opens the shell against a real engine and saves a

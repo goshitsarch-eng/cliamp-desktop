@@ -106,6 +106,12 @@ jobs:
           mkdir -p "$HOME" "$CLIAMP_CONFIG_DIR"
           "$GODOT" --headless --path godot res://tests/engine_smoke.tscn
           "$GODOT" --headless --path godot res://tests/engine_dialogs.tscn
+          mkdir -p "$RUNNER_TEMP/plugins" && cp plugins/auto-eq.lua "$RUNNER_TEMP/plugins/hello-eq.lua"
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory "$RUNNER_TEMP/plugins" &
+          server=$!
+          sleep 1
+          PLUGIN_URL=http://127.0.0.1:8765/hello-eq.lua "$GODOT" --headless --path godot res://tests/engine_plugins.tscn
+          kill "$server"
       - name: Save native development bundle
         uses: actions/upload-artifact@v7.0.1
         with:

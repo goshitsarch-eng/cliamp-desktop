@@ -66,8 +66,11 @@ in a [headless test](../godot/tests/dialogs_test.gd) (19 checks). The save-to-pl
 chooser with its name prompt, playlist tools and provider setup dialogs are driven
 against the real engine in [engine_dialogs](../godot/tests/engine_dialogs.gd)
 (13 checks), including creating a playlist and writing a track to it. The plugin
-review, configuration and command dialogs were exercised only through their content
-builders and basic open/close.
+review and configuration dialogs are driven against the real engine in
+[engine_plugins](../godot/tests/engine_plugins.gd) (16 checks): declining installs
+nothing, approval needs the exact-content checkbox, and the reviewed token installs
+and removes the plugin. The plugin command dialog was exercised only through its
+content builder and basic open/close.
 The Flutter application's widget tests have no Godot counterpart yet beyond the
 suites above; migrating them to GdUnit4 is open work.
 
