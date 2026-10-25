@@ -42,8 +42,11 @@ def main():
         sidecar = out / 'cliamp.exe'
         preset = 'Windows'
     else:
-        executable = out / 'Cliamp-Desktop.app'
-        sidecar = executable / 'Contents/MacOS/cliamp'
+        # Godot names the bundle and its executable after the project. The sidecar goes in
+        # Resources, where the app looks, because Contents/MacOS/Cliamp and cliamp are one
+        # file on a case-insensitive volume.
+        executable = out / 'Cliamp.app'
+        sidecar = executable / 'Contents/Resources/cliamp'
         preset = 'macOS'
     flag = '--export-debug' if options.debug else '--export-release'
     # macOS exports a zip of the app; the other platforms export the executable.

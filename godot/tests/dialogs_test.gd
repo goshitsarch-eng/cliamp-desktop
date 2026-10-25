@@ -18,6 +18,7 @@ func _ready() -> void:
 	await _prompt()
 	await _confirm()
 	await _custom_content()
+	await _seek()
 	print("dialogs_test: %d checks, %d failure(s)" % [_checks, _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -103,3 +104,35 @@ func _custom_content() -> void:
 	await get_tree().create_timer(0.3).timeout
 	ok(result[0] == "Done", "open returns the pressed button")
 	ok(not is_instance_valid(label) or label.is_queued_for_deletion(), "content is freed with the dialog")
+
+
+func _seek() -> void:
+	var result := [null, false]
+	var run := func() -> void:
+		result[0] = await SeekDialog.open(self, 10.0, 100.0)
+		result[1] = true
+	run.call()
+	var d := await _dialog()
+	ok(d != null, "seek dialog opens")
+	var edit := _find(d, "LineEdit") as LineEdit
+	ok(edit != null and edit.text == "0:10", "seek starts at the current position (%s)" % (edit.text if edit else ""))
+	edit.text = "nonsense"
+	edit.text_changed.emit(edit.text)
+	d.get_ok_button().pressed.emit()
+	await get_tree().create_timer(0.3).timeout
+	ok(not result[1], "invalid time keeps the dialog going")
+	d = await _dialog()
+	edit = _find(d, "LineEdit") as LineEdit
+	ok(edit != null and edit.text == "nonsense", "invalid input is kept for editing")
+	edit.text = "2:00"
+	edit.text_changed.emit(edit.text)
+	d.get_ok_button().pressed.emit()
+	await get_tree().create_timer(0.3).timeout
+	ok(not result[1], "a time beyond the track is refused")
+	d = await _dialog()
+	edit = _find(d, "LineEdit") as LineEdit
+	edit.text = "1:05"
+	edit.text_changed.emit(edit.text)
+	d.get_ok_button().pressed.emit()
+	await get_tree().create_timer(0.3).timeout
+	ok(result[1] and is_equal_approx(result[0], 65.0), "valid time returns seconds (%s)" % str(result[0]))

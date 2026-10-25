@@ -61,18 +61,23 @@ Windows arguments, and whole numbers must be sent as integers.
 The Go suite independently exercises the shared engine and added contracts.
 The smoke does not validate audible output, every codec/stream, live account
 credentials, remote service availability, or native file-dialog interaction on
-each operating system. The generic dialogs (prompt, confirm, custom content) are driven by button
-presses in a [headless test](../godot/tests/dialogs_test.gd) (13 checks). The
-provider, plugin, playlist and seek dialogs were exercised only through their
-content builders and basic open/close.
+each operating system. The prompt, confirm, custom-content and seek dialogs are driven by button presses
+in a [headless test](../godot/tests/dialogs_test.gd) (19 checks). The save-to-playlist
+chooser with its name prompt, playlist tools and provider setup dialogs are driven
+against the real engine in [engine_dialogs](../godot/tests/engine_dialogs.gd)
+(13 checks), including creating a playlist and writing a track to it. The plugin
+review, configuration and command dialogs were exercised only through their content
+builders and basic open/close.
 The Flutter application's widget tests have no Godot counterpart yet beyond the
 suites above; migrating them to GdUnit4 is open work.
 
 ## Remaining release acceptance
 
-- Export and launch the macOS and Linux bundles on those operating systems and
-  the Windows export with the real export templates. The presets and CI jobs
-  exist but have not been run; the development used the editor runtime on Windows.
+- Launch the macOS and Linux bundles on those operating systems. The Windows
+  export was built and launched here, and the Linux and macOS presets export
+  cleanly from the Windows machine (the macOS export caught a missing
+  ETC2/ASTC setting and an invalid bundle identifier, both fixed), but neither
+  bundle has been run, and the CI workflow and Flatpak recipe have not been run.
 - Exercise actual service accounts: initial authentication, cancellation,
   expired credentials, representative searches/collections, subscription actions,
   playback reports and resume. Providers may impose account or API restrictions.

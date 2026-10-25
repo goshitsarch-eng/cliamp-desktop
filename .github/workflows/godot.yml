@@ -105,6 +105,7 @@ jobs:
           export HOME="$RUNNER_TEMP/home" CLIAMP_CONFIG_DIR="$RUNNER_TEMP/cfg" XDG_CONFIG_HOME="$RUNNER_TEMP/xdg" XDG_DATA_HOME="$RUNNER_TEMP/data"
           mkdir -p "$HOME" "$CLIAMP_CONFIG_DIR"
           "$GODOT" --headless --path godot res://tests/engine_smoke.tscn
+          "$GODOT" --headless --path godot res://tests/engine_dialogs.tscn
       - name: Save native development bundle
         uses: actions/upload-artifact@v7.0.1
         with:

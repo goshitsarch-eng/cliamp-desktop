@@ -82,7 +82,7 @@ This exports the Godot app with an embedded PCK (the presets are in
 whole directory together:
 
 - Linux: `godot/build/linux/` (`Cliamp-Desktop.x86_64` and `cliamp`)
-- macOS: `godot/build/macos/Cliamp-Desktop.app`
+- macOS: `godot/build/macos/Cliamp.app` (the engine is in `Contents/Resources`)
 - Windows: `godot/build/windows/` (`Cliamp-Desktop.exe` and `cliamp.exe`)
 
 These are development bundles; macOS bundles are re-signed ad hoc after the
@@ -114,6 +114,7 @@ $GODOT --headless res://tests/dialogs_test.tscn  # native dialogs driven by butt
 $GODOT --headless res://tests/logic_test.tscn
 $GODOT --headless res://tests/run_tests.tscn
 CLIAMP_BINARY=/absolute/path/to/cliamp $GODOT --headless res://tests/engine_smoke.tscn
+CLIAMP_BINARY=/absolute/path/to/cliamp $GODOT --headless res://tests/engine_dialogs.tscn
 ```
 
 `make desktop-test` runs the fake-process suites. The engine smoke starts the
@@ -121,7 +122,9 @@ real engine with the current configuration folder: set `CLIAMP_CONFIG_DIR`
 and `HOME` to temporary directories first. It generates a WAV file and checks
 connection, capabilities, playback, position, spectrum, visualizer frames, seek,
 pause, queue edits and revision conflicts, lyrics, preferences, plugins and
-provider setup schemas. On Linux CI it uses an ALSA null sink. It is not an
+provider setup schemas. `engine_dialogs` presses the buttons of the save-to-playlist
+chooser, name prompt, playlist tools and provider setup dialogs against the engine.
+On Linux CI both use an ALSA null sink. It is not an
 audible playback test. The Go tests remain necessary when changing the shared engine.
 
 `godot/tests/screenshots.tscn` opens the shell against a real engine and saves a
