@@ -70,9 +70,10 @@ install: build
 	install -d $(HOME)/.local/bin
 	install -m 755 $(BINARY) $(HOME)/.local/bin/$(BINARY)
 
+GODOT ?= godot
 .PHONY: desktop desktop-test
 desktop:
-	python3 desktop/tool/build.py
+	python3 godot/tool/build.py
 
 desktop-test:
-	cd desktop && flutter analyze && flutter test
+	cd godot && $(GODOT) --headless --import --quit && $(GODOT) --headless res://tools/check.tscn && $(GODOT) --headless res://tests/backend_test.tscn && $(GODOT) --headless res://tests/dialogs_test.tscn && $(GODOT) --headless res://tests/logic_test.tscn && $(GODOT) --headless res://tests/run_tests.tscn

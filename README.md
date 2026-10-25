@@ -1,4 +1,4 @@
-> **Not an official build.** This repository is an unofficial fork of [cliamp](https://github.com/bjarneo/cliamp) by Bjarne Øverli. The Flutter desktop app in `desktop/` is part of this fork. Official releases are published at [cliamp.stream](https://cliamp.stream) and [github.com/bjarneo/cliamp](https://github.com/bjarneo/cliamp).
+> **Not an official build.** This repository is an unofficial fork of [cliamp](https://github.com/bjarneo/cliamp) by Bjarne Øverli. The Godot desktop app in `godot/` is part of this fork. Official releases are published at [cliamp.stream](https://cliamp.stream) and [github.com/bjarneo/cliamp](https://github.com/bjarneo/cliamp).
 
 [![Docs on contextowl.co](https://contextowl.co/uploads/_brand/badge-docs.svg)](https://contextowl.co)
 
@@ -18,7 +18,7 @@ https://github.com/user-attachments/assets/55e251f2-e13b-43d9-bb6a-7b1960e7d7d0
 
 ## Desktop app
 
-This fork adds a Flutter desktop frontend in `desktop/`, with native projects for
+This fork adds a Godot desktop frontend in `godot/`, with exports for
 Linux, Windows, and macOS. It uses the original Go player and adds provider
 discovery and setup, playlist editing with undo, plugin management, preferences,
 synced lyrics, and the original visualizers. It is not part of the official

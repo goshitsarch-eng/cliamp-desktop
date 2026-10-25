@@ -1,26 +1,31 @@
-# Flutter desktop app
+# Desktop app
 
-Cliamp Desktop is a modern Flutter frontend for the existing Go player, with
-native projects for Linux, Windows, and macOS. The Go engine keeps audio decoding,
-providers, playlists, history, EQ, plugins, and remote control in one place.
-The terminal player remains available. See [feature parity](desktop-feature-parity.md)
-for implemented workflows and remaining platform/account acceptance checks.
+Cliamp Desktop is a Godot 4 frontend for the existing Go player, with builds for
+Linux, Windows, and macOS. The Go engine keeps audio decoding, providers,
+playlists, history, EQ, plugins, and remote control in one place. The terminal
+player remains available. See [feature parity](desktop-feature-parity.md) for
+implemented workflows and remaining platform/account acceptance checks.
 
-![Cliamp Desktop library with three local tracks and playback controls](screenshots/desktop-library.png)
+![Cliamp Desktop queue with a playing track](screenshots/desktop-library.png)
 
-*Linux release using generated local audio.*
+*Windows build playing a generated local tone.*
+
+The app follows Godot's [guidance for non-game applications](https://docs.godotengine.org/en/stable/tutorials/ui/creating_applications.html):
+the Compatibility renderer, low-processor mode (frames are drawn only when
+something changes), dummy audio and physics drivers (the Go engine plays the
+audio), native dialog windows, a saved window position and size in `user://window.ini`,
+a manual interface-scale setting, and an embedded PCK in exported builds.
 
 ## Prerequisites
 
-Use Flutter 3.47.7 and Go 1.26.6 from `mise.toml`. Flutter desktop builds must run
-on their target operating system; a Linux build does not validate Windows or
-macOS. Run `flutter doctor` and resolve the desktop toolchain for your platform.
+Use Godot 4.7.2 and Go 1.26.6 (`mise.toml`). Native builds must run on their
+target operating system; a Linux build does not validate Windows or macOS.
 
 | Platform | Build and runtime prerequisites |
 | --- | --- |
-| Linux | Clang, CMake, Ninja, pkg-config, GTK 3 development files, ALSA, FLAC, Vorbis, Ogg, and mpg123 development files |
-| macOS | Xcode and command-line tools, CocoaPods when required by Flutter, Homebrew `flac libvorbis libogg mpg123 pkg-config` |
-| Windows | Visual Studio with Desktop development with C++; MSYS2 MinGW64 GCC, pkg-config, FLAC, Vorbis, Ogg, and mpg123; put the MinGW64 `bin` directory on PATH when building and running |
+| Linux | ALSA, FLAC, Vorbis, Ogg, and mpg123 development files for the engine; Godot export templates |
+| macOS | Xcode command-line tools, Homebrew `flac libvorbis libogg mpg123 pkg-config`; Godot export templates |
+| Windows | MSYS2 MinGW64 GCC, pkg-config, FLAC, Vorbis, Ogg, and mpg123 with the MinGW64 `bin` directory on PATH when building and running; Godot export templates |
 
 The [source build instructions](../README.md#building-from-source) list the
 codec packages. FFmpeg and yt-dlp remain optional, with the same format and
@@ -29,24 +34,16 @@ PATH when those features are used.
 
 ## Develop
 
-Build the engine from the repository root:
+Build the engine from the repository root and open the project:
 
 ```sh
 go build -o cliamp .
-cd desktop
-flutter pub get --enforce-lockfile
+godot --path godot          # run the app
+godot --path godot --editor # edit it
 ```
 
-Set `CLIAMP_BINARY` to the absolute path of the built engine, then run the target:
-
-```sh
-# Linux/macOS example, from desktop/
-CLIAMP_BINARY="$(pwd)/../cliamp" flutter run -d linux
-# On macOS, replace linux with macos.
-```
-
-On Windows, set `$env:CLIAMP_BINARY` in PowerShell to the absolute path of
-`cliamp.exe`, then run `flutter run -d windows`.
+Set `CLIAMP_BINARY` to the absolute path of the built engine when it is not
+beside the app. In PowerShell, set `$env:CLIAMP_BINARY` to the path of `cliamp.exe`.
 
 The app attaches to a running cliamp instance using the same configuration
 folder. If none is running, it starts its own headless engine with
@@ -62,32 +59,38 @@ The form masks credentials and passes them privately to the engine over stdin.
 After saving, choose **Restart player** to reload an app-owned engine; the app
 asks before stopping playback. For an attached engine, restart it where it was
 started. Browser sign-in is available on providers that support it. Provider
-setup and credentials remain in the existing cliamp configuration. Never put credentials in build
-scripts or Flutter assets.
+setup and credentials remain in the existing cliamp configuration. Never put
+credentials in build scripts or project resources.
+
+The client talks to the engine by running `cliamp remote ...`, `cliamp visstream`,
+`cliamp preferences ...`, `cliamp setup ...` and `cliamp plugins desktop ...` as
+child processes. Godot has no Unix-socket client, so it does not open the IPC
+socket itself. On Windows the client escapes quotes in arguments, because Godot
+does not.
 
 ## Build a development bundle
 
-From the repository root:
+From the repository root, with `godot` on PATH or `GODOT` set:
 
 ```sh
-python3 desktop/tool/build.py
+python3 godot/tool/build.py
 ```
 
-This runs the native Flutter release build and places the Go executable beside
-the desktop executable. Add `--debug` for a debug bundle. `make desktop` invokes
-the same script. Bundles keep the complete Material icon font so incremental
-builds cannot reuse an outdated icon subset. Keep the whole bundle together:
+This exports the Godot app with an embedded PCK (the presets are in
+`godot/export_presets.cfg`) and places the Go executable beside it. Add
+`--debug` for a debug export. `make desktop` invokes the same script. Keep the
+whole directory together:
 
-- Linux: `desktop/build/linux/<architecture>/release/bundle/`
-- macOS: `desktop/build/macos/Build/Products/Release/Cliamp.app`
-- Windows: `desktop/build/windows/<architecture>/runner/Release/`
+- Linux: `godot/build/linux/` (`Cliamp-Desktop.x86_64` and `cliamp`)
+- macOS: `godot/build/macos/Cliamp-Desktop.app`
+- Windows: `godot/build/windows/` (`Cliamp-Desktop.exe` and `cliamp.exe`)
 
 These are development bundles; macOS bundles are re-signed ad hoc after the
 sidecar is staged. The Go sidecar links to the codec libraries
 listed above, which must be installed on the target machine. Installers,
 redistribution of codec libraries, platform signing, and macOS notarization
-are separate release work. The macOS app uses a non-sandboxed development
-entitlement so the engine can use its existing configuration and music files.
+are separate release work. `godot/tool/make_icons.py` regenerates the Windows and
+macOS icons from `godot/icon/icon.svg`.
 
 ## Flatpak
 
@@ -101,32 +104,28 @@ sink. The package does not include ffmpeg or yt-dlp.
 
 ## Validate
 
-```sh
-cd desktop
-flutter analyze
-flutter test
-CLIAMP_BINARY=/absolute/path/to/cliamp dart run tool/backend_smoke.dart
-```
-
-The smoke check creates isolated temporary configuration and generated WAV
-audio, uses an ALSA null sink on Linux, and exercises real playback, atomic source
-and queue edits, saved playlist ordering/undo, directory sources, lyrics timing,
-direct visualizer frames, preferences, reviewed plugin trust, provider setup,
-ownership, restart and shutdown. It is not an audible playback test.
-The Go tests remain necessary when changing the shared engine.
-
-The cloud development machine has local toolchains and native libraries:
+From `godot/`, with `GODOT` pointing at the Godot executable:
 
 ```sh
-source /workspace/.cliamp-env/activate.sh
-source /workspace/.flutter-env/activate.sh
-cd /workspace/cliamp-desktop/desktop
+$GODOT --headless --import --quit
+$GODOT --headless res://tools/check.tscn         # every script and scene loads
+$GODOT --headless res://tests/backend_test.tscn  # adapter lifecycle and protocol, fake processes
+$GODOT --headless res://tests/dialogs_test.tscn  # native dialogs driven by button presses
+$GODOT --headless res://tests/logic_test.tscn
+$GODOT --headless res://tests/run_tests.tscn
+CLIAMP_BINARY=/absolute/path/to/cliamp $GODOT --headless res://tests/engine_smoke.tscn
 ```
 
-The Flutter activation must follow the Go activation; it selects the merged
-native library metadata used by the desktop runner and Go sidecar. The cloud
-machine uses a null audio sink for smoke checks and needs a virtual display
-for window validation; regular desktop machines use their actual sound and display.
+`make desktop-test` runs the fake-process suites. The engine smoke starts the
+real engine with the current configuration folder: set `CLIAMP_CONFIG_DIR`
+and `HOME` to temporary directories first. It generates a WAV file and checks
+connection, capabilities, playback, position, spectrum, visualizer frames, seek,
+pause, queue edits and revision conflicts, lyrics, preferences, plugins and
+provider setup schemas. On Linux CI it uses an ALSA null sink. It is not an
+audible playback test. The Go tests remain necessary when changing the shared engine.
+
+`godot/tests/screenshots.tscn` opens the shell against a real engine and saves a
+PNG of each page; it needs a window, so run it without `--headless`.
 
 ## Provider setup protocol
 
@@ -138,14 +137,16 @@ cliamp setup apply --provider KEY [--save-without-check]
 ```
 
 Both read a JSON object of string values from stdin, limited to 64 KiB, and
-return JSON. Close stdin after writing. An unsuccessful request exits nonzero.
+return JSON. They stop reading at the first newline, or at end of input, so a
+client that cannot close its pipe can send one line. An unsuccessful request
+exits nonzero.
 Schema responses describe provider choices, conditional fields, and defaults;
 they never return stored or submitted credentials. Apply uses the existing
 validation and section writer, preserving unrelated keys/comments. A successful
 save returns `restart_required: true`. The explicit `--save-without-check`
 option skips the live server probe only; required fields, URLs, environment
 references, and provider limits still apply. Never put credentials on the
-command line or in the Flutter asset bundle.
+command line or in the app's resources.
 
 ## Library and playback workflows
 
@@ -249,11 +250,11 @@ cliamp plugins desktop remove
 cliamp plugins desktop configure
 ```
 
-`preferences apply` reads a JSON object of string values on stdin. Its schema
+`preferences apply` reads a JSON object of string values on stdin (one line is enough). Its schema
 returns only explicitly listed nonsecret fields with types, limits and choices;
 invalid or unknown fields reject the change before writing.
 
-Plugin commands read one JSON object on stdin, bounded at 64 KiB. `prepare`
+Plugin commands read one JSON object on stdin (one line), bounded at 64 KiB. `prepare`
 takes `source`; `review` takes the installed `name`. They return a `review` with
 `token`, `source`, `sha256`, `permissions`, `code` and implicit-access information.
 `apply` or `trust` must echo the reviewed token, source, digest and permissions.

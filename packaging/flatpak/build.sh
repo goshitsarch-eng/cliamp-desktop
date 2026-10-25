@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build the Go engine and the Flutter Linux bundle inside the Flatpak SDK.
+# Build the Go engine and export the Godot Linux app inside the Flatpak SDK.
 set -eu
 
 cd "$(dirname "$0")/../.."
@@ -10,42 +10,34 @@ fi
 
 if [ -x "$PWD/sdk/go/bin/go" ]; then
   export GOROOT="$PWD/sdk/go"
-  export PATH="/usr/lib/sdk/llvm20/bin:$PWD/sdk/go/bin:$PWD/sdk/flutter/bin:${PATH}"
+  export PATH="/usr/lib/sdk/llvm20/bin:$PWD/sdk/go/bin:${PATH}"
 else
   export GOROOT=/app/go
-  export PATH="/usr/lib/sdk/llvm20/bin:/app/go/bin:/app/flutter/bin:${PATH}"
+  export PATH="/usr/lib/sdk/llvm20/bin:/app/go/bin:${PATH}"
 fi
-export PUB_CACHE="${PUB_CACHE:-/run/build/pub-cache}"
 export GOPROXY="${GOPROXY:-https://proxy.golang.org,direct}"
-
-flutter config --no-analytics --enable-linux-desktop
-flutter precache --linux
 
 go build -trimpath -ldflags='-s -w -X main.version=0.1.0-flatpak' -o /tmp/cliamp-engine .
 
-cd desktop
-flutter pub get --enforce-lockfile
-flutter build linux --release --no-tree-shake-icons
-cd ..
+# Godot reads export templates from its data directory, named by version.
+godot_bin=$(set -- sdk/godot/Godot_v*_linux.x86_64; echo "$1")
+chmod +x "$godot_bin"
+export HOME="${HOME:-/tmp}"
+templates="${XDG_DATA_HOME:-$HOME/.local/share}/godot/export_templates/4.7.2.stable"
+mkdir -p "$templates" sdk/templates
+unzip -q -o sdk/Godot_v4.7.2-stable_export_templates.tpz -d sdk/templates
+cp -a sdk/templates/templates/. "$templates/"
 
-# shellcheck disable=SC2086
-set -- desktop/build/linux/*/release/bundle
-if [ "$#" -ne 1 ] || [ ! -d "$1" ]; then
-  echo "expected one Linux bundle, found: $*" >&2
-  exit 1
-fi
+"$godot_bin" --headless --path godot --import --quit
+mkdir -p godot/build/linux
+"$godot_bin" --headless --path godot --export-release Linux build/linux/Cliamp-Desktop.x86_64
 
-install -d /app/cliamp /app/bin /app/etc \
-  /app/share/applications /app/share/metainfo \
-  /app/share/icons/hicolor/scalable/apps
-cp -a "$1"/. /app/cliamp/
+install -d /app/cliamp /app/bin /app/etc   /app/share/applications /app/share/metainfo   /app/share/icons/hicolor/scalable/apps
+install -m 755 godot/build/linux/Cliamp-Desktop.x86_64 /app/cliamp/Cliamp-Desktop.x86_64
 install -m 755 /tmp/cliamp-engine /app/cliamp/cliamp
 install -m 755 packaging/flatpak/cliamp-desktop.sh /app/bin/cliamp-desktop
 install -m 644 packaging/flatpak/asound.conf /app/etc/asound.conf
-install -m 644 packaging/flatpak/io.github.goshitsarch_eng.Cliamp.desktop \
-  /app/share/applications/io.github.goshitsarch_eng.Cliamp.desktop
-install -m 644 packaging/flatpak/io.github.goshitsarch_eng.Cliamp.metainfo.xml \
-  /app/share/metainfo/io.github.goshitsarch_eng.Cliamp.metainfo.xml
-install -m 644 Cliamp.svg \
-  /app/share/icons/hicolor/scalable/apps/io.github.goshitsarch_eng.Cliamp.svg
+install -m 644 packaging/flatpak/io.github.goshitsarch_eng.Cliamp.desktop   /app/share/applications/io.github.goshitsarch_eng.Cliamp.desktop
+install -m 644 packaging/flatpak/io.github.goshitsarch_eng.Cliamp.metainfo.xml   /app/share/metainfo/io.github.goshitsarch_eng.Cliamp.metainfo.xml
+install -m 644 Cliamp.svg   /app/share/icons/hicolor/scalable/apps/io.github.goshitsarch_eng.Cliamp.svg
 install -m 644 LICENSE /app/cliamp/CLIAMP-LICENSE.txt

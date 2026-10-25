@@ -1,0 +1,113 @@
+name: Godot desktop
+on:
+  push:
+    paths: ['godot/**', '**.go', 'go.mod', 'go.sum', '.github/workflows/godot.yml']
+  pull_request:
+    paths: ['godot/**', '**.go', 'go.mod', 'go.sum', '.github/workflows/godot.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GODOT_VERSION: '4.7.2'
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            godot: Godot_v4.7.2-stable_linux.x86_64
+            templates_dir: ~/.local/share/godot/export_templates
+          - os: macos-26
+            godot: Godot_v4.7.2-stable_macos.universal
+            templates_dir: ~/Library/Application Support/Godot/export_templates
+          - os: windows-2025
+            godot: Godot_v4.7.2-stable_win64
+            templates_dir: ~/AppData/Roaming/Godot/export_templates
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Install Godot and export templates
+        run: |
+          base="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
+          mkdir -p "$RUNNER_TEMP/godot"
+          curl -fsSL -o "$RUNNER_TEMP/godot.zip" "$base/${{ matrix.godot }}.zip"
+          curl -fsSL -o "$RUNNER_TEMP/templates.tpz" "$base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
+          templates="${{ matrix.templates_dir }}"
+          templates="${templates/#\~/$HOME}/${GODOT_VERSION}.stable"
+          mkdir -p "$templates"
+          unzip -q "$RUNNER_TEMP/templates.tpz" -d "$RUNNER_TEMP/templates"
+          mv "$RUNNER_TEMP/templates/templates/"* "$templates/"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            godot="$RUNNER_TEMP/godot/Godot.app/Contents/MacOS/Godot"
+          elif [ "$RUNNER_OS" = "Windows" ]; then
+            godot="$RUNNER_TEMP/godot/${{ matrix.godot }}_console.exe"
+          else
+            godot="$RUNNER_TEMP/godot/${{ matrix.godot }}"
+            chmod +x "$godot"
+          fi
+          echo "GODOT=$godot" >> "$GITHUB_ENV"
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libflac-dev libvorbis-dev libogg-dev libmpg123-dev
+      - name: macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install flac libvorbis libogg mpg123 pkg-config
+      - name: Windows codec toolchain
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          path-type: inherit
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-libogg
+            mingw-w64-x86_64-libvorbis
+            mingw-w64-x86_64-flac
+            mingw-w64-x86_64-mpg123
+      - name: Frontend checks
+        run: |
+          "$GODOT" --headless --path godot --import --quit
+          "$GODOT" --headless --path godot res://tools/check.tscn
+          for t in backend_test dialogs_test logic_test run_tests pages_smoke ui_smoke; do
+            "$GODOT" --headless --path godot "res://tests/$t.tscn"
+          done
+      - name: Build Linux/macOS bundle
+        if: runner.os != 'Windows'
+        run: python3 godot/tool/build.py --godot "$GODOT"
+      - name: Build Windows bundle
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        env:
+          CGO_ENABLED: '1'
+          CGO_LDFLAGS: '-Wl,-Bstatic -logg -Wl,-Bdynamic'
+        run: python godot/tool/build.py --godot "$(cygpath -u "$GODOT")"
+      - name: Linux engine integration
+        if: runner.os == 'Linux'
+        env:
+          CLIAMP_BINARY: ${{ github.workspace }}/godot/build/linux/cliamp
+        run: |
+          export HOME="$RUNNER_TEMP/home" CLIAMP_CONFIG_DIR="$RUNNER_TEMP/cfg" XDG_CONFIG_HOME="$RUNNER_TEMP/xdg" XDG_DATA_HOME="$RUNNER_TEMP/data"
+          mkdir -p "$HOME" "$CLIAMP_CONFIG_DIR"
+          "$GODOT" --headless --path godot res://tests/engine_smoke.tscn
+      - name: Save native development bundle
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: cliamp-godot-${{ runner.os }}-${{ runner.arch }}
+          path: godot/build/**
+          if-no-files-found: error

@@ -1,6 +1,6 @@
-# Flutter desktop feature parity
+# Desktop feature parity
 
-The Flutter application controls the existing Go engine. Audio decoding,
+The Godot application controls the existing Go engine. Audio decoding,
 provider integrations, playback reports, resume, media controls, and Lua execution
 remain in that engine. The desktop adds graphical workflows and bounded IPC or
 stdin APIs for capabilities previously exposed only through terminal controls.
@@ -30,7 +30,7 @@ system has been tested.
 | Plugins | Installed list, source/permission/hash review, exact-content approval, remove, enable/disable, private configuration, commands and registered key actions | `plugins desktop`, `plugin.commands`, `plugin.call`, `plugin.keys`, `plugin.key` |
 | Preferences | Searchable grouped nonsecret settings, validation, preservation of unrelated config, explicit owned-engine restart | `preferences schema/apply` |
 | Long operations | Running/completed/failed/canceled jobs and cancellation controls | `job.get`, `job.cancel`, runtime events |
-| Desktop interaction | Command palette, keyboard shortcuts protected while editing text, native file dialogs, selection, metadata, compact player and responsive pages | Flutter controls backed by the same engine operations |
+| Desktop interaction | Command palette, keyboard shortcuts protected while editing text, native file dialogs, selection, metadata, compact player and responsive pages | Godot controls backed by the same engine operations |
 
 Provider-specific controls depend on `provider.browse` and playlist capabilities.
 Unsupported provider writes are not implied by a globally registered operation.
@@ -39,47 +39,40 @@ sections. Other providers expose only the capabilities they actually implement.
 
 ## Validation evidence
 
-The Linux release bundle has been built and launched with its adjacent Go
-sidecar. Native keyboard seeking, fullscreen volume and track-information
-controls, and complete icon rendering have been checked. Closing the window
-exits successfully, reaps all three owned engine/stream processes, and removes
-the IPC socket. The
-repeatable [real-engine smoke](../desktop/tool/backend_smoke.dart) uses a generated
-WAV, temporary HOME/config/data directories, and an ALSA null sink. It covers:
+The Godot client was ported from the Flutter application page by page. On
+Windows 11 it has been run against a freshly built engine (MSYS2 MinGW64 codecs)
+with the repeatable [engine smoke](../godot/tests/engine_smoke.gd), which uses a
+generated WAV, an isolated config directory and the machine's audio output. It
+covers connection and capability discovery, playback, pause, seek, volume, EQ
+presets, shuffle, queue edits and revision conflicts, streamed spectrum bands,
+direct visualizer frames, lyrics, history, local playlists, preference, plugin
+and provider-setup schemas, and graceful shutdown. All 29 checks passed. The
+fake-process [adapter tests](../godot/tests/backend_test.gd) (66 checks) port the
+Flutter adapter's lifecycle and protocol tests: attaching versus owning a daemon,
+shutdown fallbacks, startup diagnostics and deadlines, polling without replaying
+mutations, conflicts, hostile path characters, overflow resynchronization,
+provider sign-in events, bounded command waits, protocol versions, idempotent
+close, secrets only over stdin, and frames without jobs. The pure-logic suites
+cover ANSI parsing, lyric timing, EQ values, preference schema forms and plugin
+payloads. Every page was screenshotted against the engine with the screenshot
+harness. Defects found this way are fixed, among them: Godot does not escape quotes in
+Windows arguments, and whole numbers must be sent as integers.
 
-- Playback, pause/resume, seek, volume and custom volume floor, EQ, queue conflicts,
-  real event/spectrum streams, attachment, graceful shutdown and owned restart.
-- Atomic multi-source resolution, batch removal/undo, saved ordering/prepend,
-  complete queue capture without overwriting an existing playlist, provider
-  metadata, atomic saved-file imports without touching playback, directory
-  sources, recursive scanning and document undo.
-- Lyrics timing, direct visualizer reads without job creation, preference
-  read/write, appearance previews without persisting preferences, offline plugin
-  review/trust/configuration/removal, private provider setup over stdin, and
-  registration after restart.
-
-Flutter tests cover adapter lifecycle/protocol failures, provider setup,
-preferences and plugin approval, provider navigation/consent/subscription routing,
-appearance preview, frames and fullscreen controls, queue revision races,
-filtering/selection, shared themes, listening markers, keyboard text focus and
-popup dismissal, exact-time seek validation and track-change guards, saved
-playlist deletion/undo, errors/retry, and all library pages at 900×650.
-On 2026-10-09, all 96 Flutter tests passed and `flutter analyze` reported no
-issues. All 59 Go packages passed, along with formatting, vet and staticcheck.
 The Go suite independently exercises the shared engine and added contracts.
-Run the commands in [the desktop guide](desktop.md#validate) against
-the current checkout; test totals change as regression coverage expands.
-
-The smoke uses silent audio and fixture providers. It does not validate audible
-output, every codec/stream, live account credentials, remote service availability,
-or native file-dialog interaction on each operating system.
+The smoke does not validate audible output, every codec/stream, live account
+credentials, remote service availability, or native file-dialog interaction on
+each operating system. The generic dialogs (prompt, confirm, custom content) are driven by button
+presses in a [headless test](../godot/tests/dialogs_test.gd) (13 checks). The
+provider, plugin, playlist and seek dialogs were exercised only through their
+content builders and basic open/close.
+The Flutter application's widget tests have no Godot counterpart yet beyond the
+suites above; migrating them to GdUnit4 is open work.
 
 ## Remaining release acceptance
 
-- Build and launch the native macOS and Windows bundles on those operating
-  systems. Their projects and CI jobs exist; this Linux environment cannot
-  establish native launch, media keys, audio-device behavior, signing or socket
-  access there.
+- Export and launch the macOS and Linux bundles on those operating systems and
+  the Windows export with the real export templates. The presets and CI jobs
+  exist but have not been run; the development used the editor runtime on Windows.
 - Exercise actual service accounts: initial authentication, cancellation,
   expired credentials, representative searches/collections, subscription actions,
   playback reports and resume. Providers may impose account or API restrictions.
