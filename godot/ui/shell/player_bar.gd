@@ -169,6 +169,7 @@ func _init() -> void:
 
 	_more = MenuButton.new()
 	_more.flat = true
+	_more.theme_type_variation = "IconButton"
 	_more.text = Icons.glyph("more_vert")
 	_more.add_theme_font_override("font", Icons.font())
 	_more.add_theme_font_size_override("font_size", 18)
@@ -335,7 +336,7 @@ func _refresh() -> void:
 	var seekable: bool = s.get("seekable") == true
 	_seek.editable = connected and seekable
 	_seek_time.disabled = not (connected and seekable)
-	_duration.text = "LIVE" if track.get("realtime") == true else Util.duration(s.get("duration"))
+	_duration.text = "LIVE" if track.get("realtime") == true else Util.duration_or_unknown(s.get("duration"))
 	if playing and seekable:
 		if _ticker.is_stopped():
 			_ticker.start()

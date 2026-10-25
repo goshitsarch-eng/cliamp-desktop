@@ -220,11 +220,15 @@ func _device_row(device: Dictionary) -> Control:
 	button.clip_text = true
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.accessibility_name = "Use %s for audio output" % name
-	button.pressed.connect(func() -> void:
-		await Store.run("device", {"name": name})
-		_load_devices())
+	button.pressed.connect(_use_device.bind(name))
 	row.add_child(button)
 	return row
+
+
+func _use_device(name: String) -> void:
+	await Store.run("device", {"name": name})
+	if is_inside_tree():
+		_load_devices()
 
 
 # Appearance

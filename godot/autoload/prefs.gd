@@ -7,6 +7,7 @@ const MIN_SIZE := Vector2i(960, 600)
 const SAVE_INTERVAL := 30.0
 
 var ui_scale := 1.0
+var _last_visible_mode := Window.MODE_WINDOWED
 ## Async callbacks the shell registers; awaited in order before the engine closes.
 var before_close: Array[Callable] = []
 
@@ -39,13 +40,22 @@ func set_ui_scale(value: float) -> void:
 func save() -> void:
 	var win := get_window()
 	var cfg := ConfigFile.new()
-	cfg.set_value("window", "mode", win.mode)
+	_last_visible_mode = persisted_mode(win.mode, _last_visible_mode)
+	cfg.set_value("window", "mode", _last_visible_mode)
 	cfg.set_value("window", "screen", win.current_screen)
 	if win.mode == Window.MODE_WINDOWED:
 		cfg.set_value("window", "position", win.position)
 		cfg.set_value("window", "size", win.size)
 	cfg.set_value("ui", "scale", ui_scale)
 	cfg.save(PATH)
+
+
+## A window closed while minimized must not reopen minimized: keep the mode it
+## had before, so a maximized window comes back maximized.
+static func persisted_mode(current: int, previous: int) -> int:
+	if current == Window.MODE_MINIMIZED:
+		return previous if previous != Window.MODE_MINIMIZED else Window.MODE_WINDOWED
+	return current
 
 
 func _restore() -> void:
@@ -59,7 +69,8 @@ func _restore() -> void:
 			win.size = cfg.get_value("window", "size")
 		if cfg.has_section_key("window", "position"):
 			win.position = _on_screen(cfg.get_value("window", "position"), win.size)
-		win.mode = cfg.get_value("window", "mode", Window.MODE_WINDOWED)
+		win.mode = persisted_mode(cfg.get_value("window", "mode", Window.MODE_WINDOWED), Window.MODE_WINDOWED)
+		_last_visible_mode = win.mode
 	_apply_scale()
 
 

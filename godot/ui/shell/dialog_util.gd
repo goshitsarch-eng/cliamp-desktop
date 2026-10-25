@@ -17,6 +17,6 @@ static func focus(control: Control) -> void:
 
 static func error_label() -> Label:
 	var error := Label.new()
-	error.add_theme_color_override("font_color", Color("ff8a80"))
+	error.add_theme_color_override("font_color", ThemeBuilder.palette.error)
 	error.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return error

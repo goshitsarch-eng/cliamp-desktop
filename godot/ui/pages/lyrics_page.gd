@@ -326,7 +326,7 @@ func _update_controls() -> void:
 	else:
 		_status.text = "Lyrics"
 	var track := Store.track()
-	_subtitle.text = "Play a track to find its lyrics." if track.is_empty() else "%s · %s" % [Store.title(), Util.text(track.get("artist"))]
+	_subtitle.text = "Play a track to find its lyrics." if track.is_empty() else LibraryLogic.title_with_artist(Store.title(), Util.text(track.get("artist")))
 	_refresh_btn.visible = not track.is_empty()
 
 

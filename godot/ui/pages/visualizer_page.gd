@@ -439,7 +439,7 @@ func _open_fullscreen() -> void:
 	col.add_theme_constant_override("separation", 0)
 	root.add_child(col)
 
-	var top := PanelContainer.new()
+	var top := _fs_bar(16, 8)
 	col.add_child(top)
 	var top_row := HBoxContainer.new()
 	top_row.add_theme_constant_override("separation", 8)
@@ -462,7 +462,7 @@ func _open_fullscreen() -> void:
 	_fs_view.custom_minimum_size = Vector2(320, 160)
 	col.add_child(_fs_view)
 
-	var bottom := PanelContainer.new()
+	var bottom := _fs_bar(16, 10)
 	col.add_child(bottom)
 	var bcol := VBoxContainer.new()
 	bcol.add_theme_constant_override("separation", 6)
@@ -509,7 +509,7 @@ func _open_fullscreen() -> void:
 	bcol.add_child(hint)
 	_fs_error = Label.new()
 	_fs_error.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_fs_error.add_theme_color_override("font_color", Color("ff8a80"))
+	_fs_error.add_theme_color_override("font_color", ThemeBuilder.palette.error)
 	_fs_error.visible = false
 	bcol.add_child(_fs_error)
 
@@ -518,6 +518,20 @@ func _open_fullscreen() -> void:
 	_fs.popup_centered()
 	_update_fullscreen_player()
 	_update_chrome()
+
+
+## A full-width bar with square corners and breathing room, instead of the
+## default rounded panel that has no content margins.
+func _fs_bar(side: int, vertical: int) -> PanelContainer:
+	var bar := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = ThemeBuilder.palette.surface
+	style.content_margin_left = side
+	style.content_margin_right = side
+	style.content_margin_top = vertical
+	style.content_margin_bottom = vertical
+	bar.add_theme_stylebox_override("panel", style)
+	return bar
 
 
 func _transport_button(parent: Control, icon: String, tip: String, operation: String, params := {}) -> void:

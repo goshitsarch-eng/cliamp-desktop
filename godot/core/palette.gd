@@ -11,6 +11,8 @@ var muted := Color("9da4b6")
 var accent := Color("81e6cd")
 var secondary := Color("a29bfe")
 var dark := true
+## Text color for validation errors, readable on this theme's surfaces.
+var error := Color("ff8a80")
 
 
 static func from_engine(theme: Dictionary) -> Palette:
@@ -19,7 +21,8 @@ static func from_engine(theme: Dictionary) -> Palette:
 	if bg == null:
 		return p
 	p.background = bg
-	p.dark = bg.get_luminance() < 0.179
+	p.dark = relative_luminance(bg) < 0.179
+	p.error = Color("ff8a80") if p.dark else Color("b3261e")
 	var fallback := Color.WHITE if p.dark else Color.BLACK
 	var fg = _hex(theme.get("bright_fg"))
 	if fg == null:
@@ -47,7 +50,7 @@ static func from_engine(theme: Dictionary) -> Palette:
 
 
 func on_accent() -> Color:
-	return Color.BLACK if accent.get_luminance() > 0.179 else Color.WHITE
+	return Color.BLACK if relative_luminance(accent) > 0.179 else Color.WHITE
 
 
 static func _hex(value: Variant) -> Variant:
@@ -58,9 +61,16 @@ static func _hex(value: Variant) -> Variant:
 
 
 static func _contrast(a: Color, b: Color) -> float:
-	var la := a.get_luminance()
-	var lb := b.get_luminance()
+	var la := relative_luminance(a)
+	var lb := relative_luminance(b)
 	return (maxf(la, lb) + 0.05) / (minf(la, lb) + 0.05)
+
+
+## WCAG relative luminance (linear light). Color.get_luminance works on the
+## gamma-encoded values, which overstates contrast thresholds.
+static func relative_luminance(c: Color) -> float:
+	var lin := func(v: float) -> float: return v / 12.92 if v <= 0.04045 else pow((v + 0.055) / 1.055, 2.4)
+	return 0.2126 * lin.call(c.r) + 0.7152 * lin.call(c.g) + 0.0722 * lin.call(c.b)
 
 
 static func _readable(color: Color, background: Color, fallback: Color, ratio: float) -> Color:

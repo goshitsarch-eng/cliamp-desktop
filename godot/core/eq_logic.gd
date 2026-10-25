@@ -45,4 +45,13 @@ static func db_text(db: float) -> String:
 
 static func preset_or_flat(state: Dictionary) -> String:
 	var name := str(state.get("eq_preset", ""))
+	if name == "Custom" and _is_flat(band_values(state)):
+		return "Flat"
 	return name if name in PRESETS else "Flat"
+
+
+static func _is_flat(values: PackedFloat32Array) -> bool:
+	for v in values:
+		if not is_zero_approx(v):
+			return false
+	return true

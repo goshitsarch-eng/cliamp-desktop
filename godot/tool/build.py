@@ -57,6 +57,10 @@ def main():
         export_path.unlink()
 
     build_env = dict(os.environ, CGO_ENABLED='1')
+    if target == 'windows':
+        # The MSYS2 libogg exports ogg_stream_iovecin only from the static archive;
+        # the release workflow links it the same way.
+        build_env.setdefault('CGO_LDFLAGS', '-Wl,-Bstatic -logg -Wl,-Bdynamic')
     run(go, 'build', '-trimpath', '-o', str(sidecar), '.', cwd=repo, env=build_env)
     license_dir = executable / 'Contents/Resources' if target == 'macos' else out
     license_dir.mkdir(parents=True, exist_ok=True)

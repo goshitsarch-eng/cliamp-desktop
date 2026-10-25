@@ -37,6 +37,7 @@ static func label(icon_name: String, size := 20, color: Variant = null) -> Label
 static func button(icon_name: String, tooltip: String, callback: Callable = Callable(), size := 20, toggled := false) -> Button:
 	var b := Button.new()
 	b.flat = true
+	b.theme_type_variation = "IconButton"
 	b.text = glyph(icon_name)
 	b.tooltip_text = tooltip
 	b.accessibility_name = tooltip

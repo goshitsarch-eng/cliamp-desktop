@@ -101,6 +101,7 @@ func _init() -> void:
 	row.add_child(_duration)
 
 	_menu.flat = true
+	_menu.theme_type_variation = "IconButton"
 	_menu.text = Icons.glyph("more_horiz")
 	_menu.add_theme_font_override("font", Icons.font())
 	_menu.add_theme_font_size_override("font_size", 19)
@@ -176,8 +177,10 @@ func apply(d: Dictionary) -> void:
 	UiKit.tint(_play, p.muted)
 	_art.set_track(d["art"])
 	_title.text = d["track_title"]
+	_title.tooltip_text = d["track_title"]
 	_title.add_theme_color_override("font_color", p.muted if _disabled else (p.accent if current else p.foreground))
 	_artist.text = d["artist"]
+	_artist.tooltip_text = d["artist"]
 	_artist.add_theme_color_override("font_color", p.muted)
 	var listening: String = d["listening"]
 	_listening.visible = not listening.is_empty()

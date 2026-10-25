@@ -2,7 +2,6 @@ class_name FormKit
 extends RefCounted
 ## Small builders shared by the settings and plugin pages.
 
-const ERROR_COLOR := Color("ff8a80")
 
 
 ## A Label in the muted text color. Register it with `track` so a theme change
@@ -21,7 +20,7 @@ static func muted(text: String, size := 12, wrap := true) -> Label:
 
 static func error_label() -> Label:
 	var l := Label.new()
-	l.add_theme_color_override("font_color", ERROR_COLOR)
+	l.add_theme_color_override("font_color", ThemeBuilder.palette.error)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.custom_minimum_size.x = 120
 	l.visible = false

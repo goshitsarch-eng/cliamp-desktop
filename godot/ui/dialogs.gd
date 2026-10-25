@@ -24,6 +24,7 @@ static func open(host: Node, title: String, content: Control, buttons: Array[Str
 	else:
 		cancel.text = buttons[buttons.size() - 1]
 	dialog.add_child(content)
+	_bound_wrapping_labels(content, float(min_size.x) - 40.0)
 	var result := Result.new()
 	var done := [false]
 	var finish := func(value: Variant) -> void:
@@ -48,6 +49,17 @@ static func open(host: Node, title: String, content: Control, buttons: Array[Str
 	return value
 
 
+## A wrapping Label with no minimum width reports the height of one word per line
+## the first time the dialog is sized, which makes the window absurdly tall.
+static func _bound_wrapping_labels(node: Node, width: float) -> void:
+	if node is Label and (node as Label).autowrap_mode != TextServer.AUTOWRAP_OFF:
+		var label := node as Label
+		if label.custom_minimum_size.x <= 0.0:
+			label.custom_minimum_size.x = maxf(width, 160.0)
+	for child in node.get_children():
+		_bound_wrapping_labels(child, width)
+
+
 static func confirm(host: Node, title: String, message: String, action := "OK") -> bool:
 	var label := Label.new()
 	label.text = message
@@ -66,7 +78,7 @@ static func message(host: Node, title: String, text: String) -> void:
 
 
 ## Asks for one non-empty text value. Returns the trimmed text, or null.
-static func prompt(host: Node, title: String, label_text: String, initial := "", hint := "", multiline := false, action := "Save") -> Variant:
+static func prompt(host: Node, title: String, label_text: String, initial := "", hint := "", multiline := false, action := "Save", validator := Callable()) -> Variant:
 	var box := VBoxContainer.new()
 	box.custom_minimum_size = Vector2(440, 0)
 	var label := Label.new()
@@ -87,7 +99,7 @@ static func prompt(host: Node, title: String, label_text: String, initial := "",
 	edit.accessibility_name = label_text
 	box.add_child(edit)
 	var error := Label.new()
-	error.add_theme_color_override("font_color", Color("ff8a80"))
+	error.add_theme_color_override("font_color", ThemeBuilder.palette.error)
 	box.add_child(error)
 	edit.call_deferred("grab_focus")
 	while true:
@@ -96,10 +108,13 @@ static func prompt(host: Node, title: String, label_text: String, initial := "",
 			box.queue_free()
 			return null
 		var value: String = edit.text.strip_edges()
-		if not value.is_empty():
+		var problem := "Enter a value to continue." if value.is_empty() else ""
+		if problem.is_empty() and validator.is_valid():
+			problem = validator.call(value)
+		if problem.is_empty():
 			box.queue_free()
 			return value
-		error.text = "Enter a value to continue."
+		error.text = problem
 	return null
 
 

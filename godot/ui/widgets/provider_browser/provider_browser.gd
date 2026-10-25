@@ -47,7 +47,7 @@ func _init() -> void:
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var toolbar := MarginContainer.new()
-	_margins(toolbar, 28, 6, 28, 12)
+	_margins(toolbar, 32, 6, 32, 12)
 	var tools := VBoxContainer.new()
 	toolbar.add_child(tools)
 	var top := HBoxContainer.new()
@@ -79,7 +79,7 @@ func _init() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	var pad := MarginContainer.new()
-	_margins(pad, 28, 0, 28, 20)
+	_margins(pad, 32, 0, 32, 20)
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_list = VBoxContainer.new()
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -778,9 +778,9 @@ func _chip(label: String, icon: String) -> PressPanel:
 
 func _message(text: String, is_error: bool) -> Control:
 	var p := _palette()
-	var tint := Color("ff8a80") if is_error else p.accent
+	var tint := ThemeBuilder.palette.error if is_error else p.accent
 	var holder := MarginContainer.new()
-	_margins(holder, 28, 5, 28, 5)
+	_margins(holder, 32, 5, 32, 5)
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", _box(_alpha(tint, 0.14), 9, 14, 8))
 	var row := HBoxContainer.new()
@@ -801,7 +801,7 @@ func _message(text: String, is_error: bool) -> Control:
 func _breadcrumbs() -> Control:
 	var p := _palette()
 	var holder := MarginContainer.new()
-	_margins(holder, 28, 10, 28, 12)
+	_margins(holder, 32, 10, 32, 12)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	if not _trail.is_empty():
@@ -845,7 +845,7 @@ func _go_back() -> void:
 
 func _subscription_toolbar() -> Control:
 	var holder := MarginContainer.new()
-	_margins(holder, 28, 0, 28, 14)
+	_margins(holder, 32, 0, 32, 14)
 	var flow := HFlowContainer.new()
 	flow.add_theme_constant_override("h_separation", 8)
 	flow.add_theme_constant_override("v_separation", 8)
@@ -862,7 +862,7 @@ func _subscription_toolbar() -> Control:
 
 func _filter_toolbar(sorts: Array[Dictionary]) -> Control:
 	var holder := MarginContainer.new()
-	_margins(holder, 28, 0, 28, 12)
+	_margins(holder, 32, 0, 32, 12)
 	var flow := HFlowContainer.new()
 	flow.add_theme_constant_override("h_separation", 18)
 	flow.add_theme_constant_override("v_separation", 8)
@@ -996,6 +996,7 @@ func _toggle_album_favorite(item: Dictionary) -> void:
 func _menu_button(tooltip: String) -> MenuButton:
 	var m := MenuButton.new()
 	m.flat = true
+	m.theme_type_variation = "IconButton"
 	m.text = Icons.glyph("more_vert")
 	m.add_theme_font_override("font", Icons.font())
 	m.add_theme_font_size_override("font_size", 20)
@@ -1061,7 +1062,7 @@ func _track_row(track: Dictionary, listening: Dictionary) -> Control:
 			bar.accessibility_name = "Listening progress"
 			texts.add_child(bar)
 	line.add_child(texts)
-	line.add_child(_text("LIVE" if track.get("realtime") == true else ProviderBrowse.time(duration), 11, p.muted))
+	line.add_child(_text("LIVE" if track.get("realtime") == true else Util.duration_or_unknown(duration), 11, p.muted))
 	if album.is_empty():
 		var bookmarked: bool = track.get("bookmark") == true
 		var heart := Icons.button("favorite" if bookmarked else "favorite_border", "Remove track favorite" if bookmarked else "Favorite track", _track_action.bind("favorite", track), 18)

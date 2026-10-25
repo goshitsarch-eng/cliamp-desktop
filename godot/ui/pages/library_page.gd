@@ -362,7 +362,6 @@ func _build() -> void:
 	_list_bar = HBoxContainer.new()
 	_list_bar.add_theme_constant_override("separation", 9)
 	_list_title = UiKit.label("", 15, null, true)
-	_list_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_list_bar.add_child(_list_title)
 	_list_total = UiKit.label("", 12)
 	_list_bar.add_child(_list_total)
@@ -529,8 +528,7 @@ func _update_header() -> void:
 	var queue := page_id == "queue"
 	var width := _width()
 	var playing := Store.is_playing()
-	var count := "%d tracks in queue" % int(Util.number(Store.state.get("total"))) if queue \
-		else "%d %s" % [_total, "plays" if _kind == "history" else _kind]
+	var count := LibraryLogic.count_line(queue, _kind, _total, Util.number(Store.state.get("total")))
 	var margin := 16 if _compact else 32
 	_header_margin.add_theme_constant_override("margin_left", margin)
 	_header_margin.add_theme_constant_override("margin_right", margin)
@@ -769,7 +767,7 @@ func _bind_row(row: Control, k: int) -> void:
 		"artist": LibraryLogic.artist_of(track),
 		"album": LibraryLogic.history_date(item.get("played_at")) if _kind == "history" else Util.text(track.get("album"), "—"),
 		"listening": LibraryLogic.listening_text(Util.object(_listening.get(Util.text(track.get("path"))))),
-		"duration": "LIVE" if track.get("realtime") == true else Util.duration(track.get("duration_secs")),
+		"duration": "LIVE" if track.get("realtime") == true else Util.duration_or_unknown(track.get("duration_secs")),
 		"bookmark": track.get("bookmark") == true,
 		"current": current,
 		"playing": Store.is_playing(),
@@ -1045,12 +1043,16 @@ func _save_queue() -> void:
 	await _run("playlist.save_queue", params, "Queue saved as %s" % playlist_name)
 
 
+func _name_validator() -> Callable:
+	return LibraryLogic.playlist_name_error if Store.provider == "local" else Callable()
+
+
 func _create_playlist() -> void:
 	if not _can_playlist("create"):
 		return
 	var provider := Store.provider
 	var undoable := _can_playlist("undo")
-	var playlist_name: Variant = await Dialogs.prompt(self, "Create a playlist", "Playlist name", "", "", false, "Create")
+	var playlist_name: Variant = await Dialogs.prompt(self, "Create a playlist", "Playlist name", "", "", false, "Create", _name_validator())
 	if playlist_name == null:
 		return
 	var result: Variant = await _run("playlist.create", {"provider": provider, "playlist": playlist_name}, "Playlist created")
@@ -1081,7 +1083,7 @@ func _playlist_action(action: String, item: Dictionary) -> void:
 			await _run("provider.favorite", params)
 			await _refresh_list()
 		"rename":
-			var new_name: Variant = await Dialogs.prompt(self, "Rename playlist", "Playlist name", Util.text(item.get("name")))
+			var new_name: Variant = await Dialogs.prompt(self, "Rename playlist", "Playlist name", Util.text(item.get("name")), "", false, "Save", _name_validator())
 			if new_name == null:
 				return
 			var renamed := params.duplicate()

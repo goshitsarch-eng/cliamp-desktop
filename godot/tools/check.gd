@@ -22,6 +22,8 @@ func _walk(dir_path: String) -> void:
 	for file in dir.get_files():
 		var path := dir_path.path_join(file)
 		if file.ends_with(".gd") or file.ends_with(".tscn"):
-			if ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_REPLACE) == null:
+			var loaded := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_REPLACE)
+			# A script with a parse error still loads; it just cannot be instantiated.
+			if loaded == null or (loaded is GDScript and not (loaded as GDScript).can_instantiate()):
 				printerr("FAIL: ", path)
 				_failures += 1

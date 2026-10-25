@@ -45,7 +45,7 @@ func _init() -> void:
 	_progress.show_percentage = false
 	_progress.indeterminate = true
 	add_child(_progress)
-	_error_label.add_theme_color_override("font_color", Color("ff8a80"))
+	_error_label.add_theme_color_override("font_color", ThemeBuilder.palette.error)
 	_error_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(_error_label)
 	_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -213,7 +213,7 @@ func _render_directories() -> void:
 func _render_tracks(muted: Color) -> void:
 	var head := HBoxContainer.new()
 	var count := Label.new()
-	count.text = "%d tracks" % _total
+	count.text = Util.count_of(_total, "track")
 	count.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(count)
 	var sort := OptionButton.new()

@@ -36,7 +36,7 @@ static func _content(track: Dictionary) -> Control:
 		field.add_child(_selectable(value, entry[1]))
 		box.add_child(field)
 	var duration := Label.new()
-	duration.text = "Duration: %s" % Util.duration(track.get("duration_secs"))
+	duration.text = "Duration: %s" % Util.duration_or_unknown(track.get("duration_secs"))
 	box.add_child(duration)
 	var notes := {
 		"dir_sourced": "Included by a directory source",

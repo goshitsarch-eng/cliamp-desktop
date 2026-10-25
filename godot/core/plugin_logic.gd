@@ -103,3 +103,32 @@ static func parse_args(text: String) -> Dictionary:
 		if not (item is String):
 			return {"error": "Arguments must be a JSON array of strings."}
 	return {"args": parsed}
+
+
+## Why a plugin source cannot be installed, "" when it looks usable. Mirrors
+## pluginmgr resolveSource so the page can explain it before a round trip.
+static func source_error(source: String) -> String:
+	var text := source.strip_edges()
+	if text.is_empty():
+		return "Enter a plugin source: owner/repo, gitlab:owner/repo, codeberg:owner/repo or a link ending in .lua."
+	if text.contains(" ") or text.contains("
+"):
+		return "A plugin source cannot contain spaces."
+	if text.begins_with("http://") or text.begins_with("https://"):
+		var rest := text.get_slice("://", 1).split("?")[0].split("#")[0]
+		var slash := rest.find("/")
+		var file := rest.substr(slash + 1).trim_suffix("/").get_file() if slash >= 0 else ""
+		if file.trim_suffix(".lua").is_empty():
+			return "The link should end in <name>.lua."
+		return ""
+	var repo := text
+	if ":" in text:
+		var prefix := text.get_slice(":", 0)
+		if not prefix in ["gitlab", "codeberg"]:
+			return "Unknown prefix \"%s\". Use gitlab: or codeberg:, or leave it out for GitHub." % prefix
+		repo = text.substr(prefix.length() + 1)
+	repo = repo.get_slice("@", 0)
+	var parts := repo.split("/")
+	if parts.size() != 2 or parts[0].is_empty() or parts[1].is_empty():
+		return "Use the form owner/repo, for example bjarneo/cliamp-plugin-lastfm."
+	return ""

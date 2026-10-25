@@ -229,8 +229,11 @@ func _review(name: String) -> void:
 	if _busy:
 		return
 	var source := _source.text.strip_edges()
-	if name.is_empty() and source.is_empty():
-		return
+	if name.is_empty():
+		var problem := PluginLogic.source_error(source)
+		if not problem.is_empty():
+			_show_error(problem)
+			return
 	_show_error("")
 	_set_busy(true)
 	var result := await Backend.plugin_action("prepare" if name.is_empty() else "review", {"source": source} if name.is_empty() else {"name": name})

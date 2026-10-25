@@ -42,6 +42,14 @@ godot --path godot          # run the app
 godot --path godot --editor # edit it
 ```
 
+On Windows, build the engine from an MSYS2 MinGW64 shell (or with its `bin`
+directory on PATH) and link libogg statically, as the release workflow does.
+Without this the link fails with `undefined reference to ogg_stream_iovecin`:
+
+```sh
+CGO_ENABLED=1 CGO_LDFLAGS="-Wl,-Bstatic -logg -Wl,-Bdynamic" go build -o cliamp.exe .
+```
+
 Set `CLIAMP_BINARY` to the absolute path of the built engine when it is not
 beside the app. In PowerShell, set `$env:CLIAMP_BINARY` to the path of `cliamp.exe`.
 
@@ -73,7 +81,7 @@ does not.
 From the repository root, with `godot` on PATH or `GODOT` set:
 
 ```sh
-python3 godot/tool/build.py
+python3 godot/tool/build.py   # `python` on Windows
 ```
 
 This exports the Godot app with an embedded PCK (the presets are in
@@ -130,6 +138,23 @@ chooser, name prompt, playlist tools and provider setup dialogs against the engi
 dialog (decline, then tick the exact-content approval), lists, configures and
 removes it. On Linux CI they use an ALSA null sink. It is not an
 audible playback test. The Go tests remain necessary when changing the shared engine.
+
+`godot/tests/audit/` holds interactive audit scenarios for a real engine and a
+window (not `--headless`): `walk_shell`, `library`, `playlists`, `providers`,
+`forms`, `settings` (run twice with `PHASE=1`, then `PHASE=2` on the same
+profile), `themes`, `dialogs_audit`, `click_all`, `resize_audit` and
+`disconnect`. Each extends `tests/audit_kit.gd`, which mounts the shell on the
+root window, drives it with mouse and key events, lints layout (clipped or
+overflowing text) and writes screenshots to `SHOT_DIR`. Set `CLIAMP_BINARY`,
+`CLIAMP_CONFIG_DIR` and `SHOT_DIR`, and `MUSIC` to a folder of audio files:
+
+```sh
+SHOT_DIR=/tmp/shots MUSIC=/path/to/music CLIAMP_BINARY=/path/to/cliamp   $GODOT --path godot res://tests/audit/library.tscn
+```
+
+A window that cannot take OS focus (for example one placed off-screen with
+`--position`) gets no real hover, so the kit falls back to triggering the
+control's handler and prints `synthetic click`.
 
 `godot/tests/screenshots.tscn` opens the shell against a real engine and saves a
 PNG of each page; it needs a window, so run it without `--headless`.
@@ -215,14 +240,23 @@ Volume up and volume down are separate commands. Common shortcuts are:
 | Ctrl+F | Search |
 | Ctrl+J | Jump to an exact playback time |
 | Ctrl+Z | Undo queue or saved-playlist edit |
+| Ctrl+R | Refresh the current page |
 | Ctrl+S | Download playing track |
 | Ctrl+K or F1 | Command palette |
 | Ctrl+X | Compact player |
+| Esc | Clear the search box, then leave the compact player |
 
-Click the current playback time or use **Jump to time** to enter seconds,
+Jump to time needs a track that can seek; otherwise the app says so instead of
+doing nothing. Click the current playback time or use **Jump to time** to enter seconds,
 `MM:SS`, or `HH:MM:SS`. On macOS, Cmd+J also opens this dialog. The app checks
 the track again before seeking so a track change cannot apply the old target
 to the next song.
+
+Playlist names for the Local provider cannot be empty, `.` or `..`, or contain
+`/ \ : < > " | ? *`; the name dialog says so before anything is sent. A plugin
+source must be `owner/repo[@tag]`, `gitlab:` or `codeberg:` followed by the same,
+or a link ending in `<name>.lua`. Queue and playlist rows show `--:--` while a
+track's length is not known yet (local files report it once they play).
 
 Playback/edit shortcuts do not fire while typing in a text field. Long
 operations appear in the activity view, with cancellation when supported.

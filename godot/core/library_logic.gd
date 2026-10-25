@@ -91,9 +91,9 @@ static func collection_subtitle(item: Dictionary, provider: String) -> String:
 	if not artist.is_empty():
 		return artist
 	if item.get("track_count") != null:
-		return "%s tracks" % str(item["track_count"])
+		return Util.count_of(item["track_count"], "track")
 	if item.get("album_count") != null:
-		return "%s albums" % str(item["album_count"])
+		return Util.count_of(item["album_count"], "album")
 	return Util.text(item.get("section"), provider)
 
 
@@ -129,3 +129,34 @@ static func history_date(value: Variant, bias_minutes: Variant = null) -> String
 		unix += bias * 60
 	var d := Time.get_datetime_dict_from_unix_time(unix)
 	return "%04d-%02d-%02d %02d:%02d" % [d["year"], d["month"], d["day"], d["hour"], d["minute"]]
+
+
+## Why a local playlist name cannot be used, "" when it can. Mirrors the engine
+## (external/local validateNewName) so the dialog explains it before a round trip.
+static func playlist_name_error(name: String) -> String:
+	var trimmed := name.strip_edges()
+	if trimmed.is_empty():
+		return "Enter a value to continue."
+	if trimmed == "." or trimmed == "..":
+		return "A playlist cannot be named \".\" or \"..\"."
+	for ch in ["/", "\\", ":", "<", ">", "\"", "|", "?", "*"]:
+		if name.contains(ch):
+			return "Playlist names cannot contain any of: / \\ : < > \" | ? *"
+	return ""
+
+
+## The count line of a page header: "1 track in queue", "5 playlists", "1 play".
+static func count_line(queue: bool, kind: String, total: int, queued: float) -> String:
+	if queue:
+		return "%s in queue" % Util.count_of(queued, "track")
+	match kind:
+		"history":
+			return Util.count_of(total, "play")
+		"tracks", "playlists", "albums", "artists":
+			return Util.count_of(total, kind.trim_suffix("s"))
+	return "%d %s" % [total, kind]
+
+
+## "Title · Artist", or just the title when the artist is unknown.
+static func title_with_artist(title: String, artist: String) -> String:
+	return title if artist.strip_edges().is_empty() else "%s · %s" % [title, artist]

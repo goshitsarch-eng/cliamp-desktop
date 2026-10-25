@@ -19,7 +19,10 @@ static func download() -> void:
 
 
 static func jump_to_time(host: Node) -> void:
-	if not Store.connected or Store.state.get("seekable") != true:
+	if not Store.connected:
+		return
+	if Store.state.get("seekable") != true:
+		Store.notify("Jump to time needs a seekable track that is playing or paused.")
 		return
 	var path := Util.text(Store.track().get("path"))
 	var target: Variant = await SeekDialog.open(host, Store.position(), Util.number(Store.state.get("duration")))

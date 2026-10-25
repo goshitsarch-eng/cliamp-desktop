@@ -28,6 +28,17 @@ static func text(value: Variant, fallback := "") -> String:
 	return fallback if s.is_empty() else s
 
 
+## "1 track", "2 tracks". JSON numbers arrive as floats, so the count is rounded.
+static func count_of(value: Variant, singular: String, plural := "") -> String:
+	var n := roundi(number(value))
+	return "%d %s" % [n, singular if n == 1 else (plural if not plural.is_empty() else singular + "s")]
+
+
+## Like `duration`, but "--:--" when the length is not known yet.
+static func duration_or_unknown(value: Variant) -> String:
+	return "--:--" if number(value) <= 0.0 else duration(value)
+
+
 ## 3725 -> "1:02:05", 75 -> "1:15".
 static func duration(value: Variant) -> String:
 	var seconds := clampi(roundi(number(value)), 0, 999999)

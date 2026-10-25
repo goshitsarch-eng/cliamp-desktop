@@ -185,7 +185,7 @@ func _render() -> void:
 		_render_form()
 	if not _error.is_empty():
 		_body.add_child(_spacer(14))
-		_body.add_child(_label(_error, 12, Color("ff8a80")))
+		_body.add_child(_label(_error, 12, ThemeBuilder.palette.error))
 	if _saving:
 		_body.add_child(_spacer(14))
 		_body.add_child(_progress())
@@ -262,7 +262,7 @@ func _render_form() -> void:
 		if not help.is_empty():
 			_body.add_child(_label(help, 11, ThemeBuilder.palette.muted))
 		if _field_errors.has(key):
-			_body.add_child(_label(_field_errors[key], 11, Color("ff8a80")))
+			_body.add_child(_label(_field_errors[key], 11, ThemeBuilder.palette.error))
 	_body.add_child(_spacer(14))
 	_body.add_child(_label("Saving replaces this provider's connection details and credentials. Existing secrets are never shown here; enter the credentials you want to use.", 11, ThemeBuilder.palette.muted))
 

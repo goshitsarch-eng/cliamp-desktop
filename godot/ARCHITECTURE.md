@@ -64,6 +64,21 @@ From `godot/`:
     "$GODOT" --headless --path . --quit-after 30         # the app starts without script errors
 
 Pages that need a running engine can be tried against a real `cliamp` build: set
-`CLIAMP_BINARY`. The root Go package needs cgo audio codecs and does not build on
-this Windows machine, so a binary may be unavailable; unit-test logic in `core/`
-instead and keep UI code defensive.
+`CLIAMP_BINARY`. On Windows the engine builds from an MSYS2 MinGW64 shell with
+`CGO_LDFLAGS="-Wl,-Bstatic -logg -Wl,-Bdynamic"` (see `docs/desktop.md`). The
+interactive scenarios in `tests/audit/` drive the real shell with `AuditKit`.
+Mount the shell on the root window (`get_tree().root`) like the real main scene:
+under a plain `Node` Godot skips the window theme and renders the default one.
+
+## Theme notes
+
+- `ThemeBuilder.build` styles every control type the app uses, including dialogs,
+  popup menus, tooltips, option/check/text controls, from the `Palette`. A new
+  control type that is left out silently falls back to Godot's dark default theme
+  and breaks on light engine themes.
+- Icon-only buttons use the `IconButton` theme variation (`Icons.button` sets it);
+  set it on icon `MenuButton`s too. Text buttons keep the 14/8 px padding.
+- Use `ThemeBuilder.palette.error` for validation text, not a fixed color.
+- A wrapping `Label` inside a dialog needs a minimum width or the window opens
+  absurdly tall; `Dialogs.open` bounds the ones present at open time, so set
+  `custom_minimum_size.x` on labels added later.

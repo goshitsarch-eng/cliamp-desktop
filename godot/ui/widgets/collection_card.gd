@@ -57,6 +57,7 @@ func _init(data: Dictionary, kind: String, subtitle: String, connected: bool, ha
 	if has_menu:
 		_menu = MenuButton.new()
 		_menu.flat = true
+		_menu.theme_type_variation = "IconButton"
 		_menu.text = Icons.glyph("more_horiz")
 		_menu.add_theme_font_override("font", Icons.font())
 		_menu.add_theme_font_size_override("font_size", 19)

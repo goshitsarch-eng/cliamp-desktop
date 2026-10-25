@@ -192,6 +192,7 @@ func _render() -> void:
 		_body.add_child(_spacer(12))
 		var link := RichTextLabel.new()
 		link.fit_content = true
+		link.custom_minimum_size.x = 430
 		link.selection_enabled = true
 		link.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 		link.bbcode_enabled = false
@@ -211,7 +212,7 @@ func _render() -> void:
 	if not String(_flow["error"]).is_empty():
 		_body.add_child(_spacer(12))
 		var err := _label(_flow["error"])
-		err.add_theme_color_override("font_color", Color("ff8a80"))
+		err.add_theme_color_override("font_color", ThemeBuilder.palette.error)
 		_body.add_child(err)
 	if state == "authenticating":
 		_body.add_child(_spacer(12))
@@ -234,6 +235,7 @@ func _label(text: String) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size.x = 430
 	return l
 
 

@@ -218,9 +218,9 @@ static func item_icon(kind: String) -> String:
 static func item_subtitle(item: Dictionary) -> String:
 	var fallback := Util.text(item.get("section"))
 	if item.get("album_count") != null:
-		fallback = "%s albums" % item["album_count"]
+		fallback = Util.count_of(item["album_count"], "album")
 	if item.get("track_count") != null:
-		fallback = "%s tracks" % item["track_count"]
+		fallback = Util.count_of(item["track_count"], "track")
 	return Util.text(item.get("author"), Util.text(item.get("artist"), fallback))
 
 
