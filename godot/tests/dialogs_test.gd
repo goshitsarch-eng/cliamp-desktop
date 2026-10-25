@@ -19,6 +19,7 @@ func _ready() -> void:
 	await _confirm()
 	await _custom_content()
 	await _seek()
+	await _plugin_command()
 	print("dialogs_test: %d checks, %d failure(s)" % [_checks, _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -136,3 +137,48 @@ func _seek() -> void:
 	d.get_ok_button().pressed.emit()
 	await get_tree().create_timer(0.3).timeout
 	ok(result[1] and is_equal_approx(result[0], 65.0), "valid time returns seconds (%s)" % str(result[0]))
+
+
+func _edits(d: Node) -> Array:
+	var out: Array = []
+	var walk := func(n: Node, self_ref: Callable) -> void:
+		if n is LineEdit:
+			out.append(n)
+		for c in n.get_children():
+			self_ref.call(c, self_ref)
+	walk.call(d, walk)
+	return out
+
+
+func _plugin_command() -> void:
+	var result := [null, false]
+	var run := func() -> void:
+		result[0] = await PluginCommandDialog.open(self, "")
+		result[1] = true
+	run.call()
+	var d := await _dialog()
+	ok(d != null, "plugin command dialog opens")
+	var edits := _edits(d)
+	ok(edits.size() == 3, "name, command and arguments fields (%d)" % edits.size())
+	d.get_ok_button().pressed.emit()
+	await get_tree().create_timer(0.3).timeout
+	ok(not result[1] and d.visible, "empty plugin name and command are refused, dialog stays open")
+	edits[0].text = "now-playing"
+	edits[1].text = "toggle"
+	edits[2].text = "not json"
+	d.get_ok_button().pressed.emit()
+	await get_tree().create_timer(0.3).timeout
+	ok(not result[1], "malformed arguments are refused")
+	edits[2].text = '["a", "b"]'
+	d.get_ok_button().pressed.emit()
+	await get_tree().create_timer(0.3).timeout
+	var value: Variant = result[0]
+	ok(result[1] and value is Dictionary and value.get("name") == "now-playing" and value.get("sub") == "toggle" and value.get("args") == ["a", "b"], "valid command is returned (%s)" % str(value))
+
+	result[0] = null
+	result[1] = false
+	run.call()
+	d = await _dialog()
+	d.canceled.emit()
+	await get_tree().create_timer(0.3).timeout
+	ok(result[1] and result[0] == null, "cancel returns null")

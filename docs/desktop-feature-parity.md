@@ -61,16 +61,15 @@ Windows arguments, and whole numbers must be sent as integers.
 The Go suite independently exercises the shared engine and added contracts.
 The smoke does not validate audible output, every codec/stream, live account
 credentials, remote service availability, or native file-dialog interaction on
-each operating system. The prompt, confirm, custom-content and seek dialogs are driven by button presses
-in a [headless test](../godot/tests/dialogs_test.gd) (19 checks). The save-to-playlist
+each operating system. The prompt, confirm, custom-content, seek and plugin command dialogs are driven by
+button presses in a [headless test](../godot/tests/dialogs_test.gd) (25 checks). The save-to-playlist
 chooser with its name prompt, playlist tools and provider setup dialogs are driven
 against the real engine in [engine_dialogs](../godot/tests/engine_dialogs.gd)
 (13 checks), including creating a playlist and writing a track to it. The plugin
 review and configuration dialogs are driven against the real engine in
 [engine_plugins](../godot/tests/engine_plugins.gd) (16 checks): declining installs
 nothing, approval needs the exact-content checkbox, and the reviewed token installs
-and removes the plugin. The plugin command dialog was exercised only through its
-content builder and basic open/close.
+and removes the plugin.
 The Flutter application's widget tests have no Godot counterpart yet beyond the
 suites above; migrating them to GdUnit4 is open work.
 
