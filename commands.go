@@ -345,14 +345,14 @@ func pluginsCommand() *cli.Command {
 func preferencesCommand() *cli.Command {
 	return &cli.Command{Name: "preferences", Usage: "read and save desktop preferences as JSON", Commands: []*cli.Command{
 		{Name: "schema", Aliases: []string{"read"}, Usage: "read nonsecret preferences and field constraints", Action: func(ctx context.Context, c *cli.Command) error { return cmd.PreferencesSchema(c.Writer) }},
-		{Name: "apply", Usage: "save a JSON object of preferences from stdin", Action: func(ctx context.Context, c *cli.Command) error { return cmd.PreferencesApply(c.Reader, c.Writer) }},
+		{Name: "apply", Usage: "save a JSON object of preferences from stdin", Action: func(ctx context.Context, c *cli.Command) error { return cmd.PreferencesApply(firstLine(c.Reader), c.Writer) }},
 	}}
 }
 
 func pluginsDesktopCommand() *cli.Command {
 	command := &cli.Command{Name: "desktop", Usage: "manage plugins with exact-content review and JSON stdin"}
 	for _, action := range []string{"list", "prepare", "review", "apply", "trust", "remove", "configure"} {
-		command.Commands = append(command.Commands, &cli.Command{Name: action, Action: func(ctx context.Context, c *cli.Command) error { return pluginmgr.Desktop(action, c.Reader, c.Writer) }})
+		command.Commands = append(command.Commands, &cli.Command{Name: action, Action: func(ctx context.Context, c *cli.Command) error { return pluginmgr.Desktop(action, firstLine(c.Reader), c.Writer) }})
 	}
 	return command
 }
@@ -437,7 +437,7 @@ func setupCommand() *cli.Command {
 				Usage: "describe provider setup as JSON; read form values from stdin",
 				Flags: []cli.Flag{&cli.StringFlag{Name: "provider", Usage: "provider key (omit to list providers)"}},
 				Action: func(ctx context.Context, c *cli.Command) error {
-					return cmd.SetupSchema(c.String("provider"), c.Reader, c.Writer)
+					return cmd.SetupSchema(c.String("provider"), firstLine(c.Reader), c.Writer)
 				},
 			},
 			{
@@ -448,7 +448,7 @@ func setupCommand() *cli.Command {
 					&cli.BoolFlag{Name: "save-without-check", Usage: "save after local validation without checking the provider connection"},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
-					return cmd.SetupApply(c.String("provider"), c.Reader, c.Writer, !c.Bool("save-without-check"))
+					return cmd.SetupApply(c.String("provider"), firstLine(c.Reader), c.Writer,!c.Bool("save-without-check"))
 				},
 			},
 		},
