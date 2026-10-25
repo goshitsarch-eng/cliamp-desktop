@@ -100,6 +100,25 @@ redistribution of codec libraries, platform signing, and macOS notarization
 are separate release work. `godot/tool/make_icons.py` regenerates the Windows and
 macOS icons from `godot/icon/icon.svg`.
 
+## Windows installer
+
+`packaging/windows/build.py` wraps the development bundle in an
+[Inno Setup](https://jrsoftware.org/isinfo.php) installer. Install Inno Setup 6
+(`winget install JRSoftware.InnoSetup`), then from an MSYS2 MinGW64 shell:
+
+```sh
+python godot/tool/build.py
+python packaging/windows/build.py --version 0.1.0
+```
+
+The script copies the engine's MinGW codec DLLs (libFLAC, libvorbis, libvorbisenc,
+libogg, libmpg123 and libwinpthread) beside `cliamp.exe`, so the installed app
+does not need MSYS2, and writes
+`godot/build/installer/Cliamp-Desktop-<version>-windows-x64-setup.exe`. It installs per
+user by default (no administrator prompt), adds a Start menu entry and an optional
+desktop icon, and uninstalls from Settings. The installer is not code-signed, so
+Windows SmartScreen may warn on first run. FFmpeg and yt-dlp are not included.
+
 ## Flatpak
 
 The Linux package is an unofficial build of this fork, with the app id
