@@ -53,7 +53,8 @@ shutdown fallbacks, startup diagnostics and deadlines, polling without replaying
 mutations, conflicts, hostile path characters, overflow resynchronization,
 provider sign-in events, bounded command waits, protocol versions, idempotent
 close, secrets only over stdin, and frames without jobs. The pure-logic suites
-cover ANSI parsing, lyric timing, EQ values, preference schema forms and plugin
+(plus a first [GdUnit4](../godot/tests/unit/core_test.gd) suite, 8 tests, with the
+addon vendored under `godot/addons/gdUnit4`) cover ANSI parsing, lyric timing, EQ values, preference schema forms and plugin
 payloads. Every page was screenshotted against the engine with the screenshot
 harness. Defects found this way are fixed, among them: Godot does not escape quotes in
 Windows arguments, and whole numbers must be sent as integers.
@@ -70,8 +71,9 @@ review and configuration dialogs are driven against the real engine in
 [engine_plugins](../godot/tests/engine_plugins.gd) (16 checks): declining installs
 nothing, approval needs the exact-content checkbox, and the reviewed token installs
 and removes the plugin.
-The Flutter application's widget tests have no Godot counterpart yet beyond the
-suites above; migrating them to GdUnit4 is open work.
+The Flutter widget tests were not ported one for one. The suites above cover the same
+behaviors (adapter lifecycle, dialogs, list logic, forms, playback), and the GdUnit4
+suite is the place for further unit tests.
 
 ## Remaining release acceptance
 

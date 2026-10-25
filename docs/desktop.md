@@ -113,6 +113,7 @@ $GODOT --headless res://tests/backend_test.tscn  # adapter lifecycle and protoco
 $GODOT --headless res://tests/dialogs_test.tscn  # native dialogs driven by button presses
 $GODOT --headless res://tests/logic_test.tscn
 $GODOT --headless res://tests/run_tests.tscn
+GODOT_BIN=$GODOT $GODOT --headless -s res://addons/gdUnit4/bin/GdUnitCmdTool.gd --ignoreHeadlessMode -a res://tests/unit  # GdUnit4
 CLIAMP_BINARY=/absolute/path/to/cliamp $GODOT --headless res://tests/engine_smoke.tscn
 CLIAMP_BINARY=/absolute/path/to/cliamp $GODOT --headless res://tests/engine_dialogs.tscn
 PLUGIN_URL=http://127.0.0.1:8765/name.lua CLIAMP_BINARY=/absolute/path/to/cliamp $GODOT --headless res://tests/engine_plugins.tscn

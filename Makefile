@@ -76,4 +76,4 @@ desktop:
 	python3 godot/tool/build.py
 
 desktop-test:
-	cd godot && $(GODOT) --headless --import --quit && $(GODOT) --headless res://tools/check.tscn && $(GODOT) --headless res://tests/backend_test.tscn && $(GODOT) --headless res://tests/dialogs_test.tscn && $(GODOT) --headless res://tests/logic_test.tscn && $(GODOT) --headless res://tests/run_tests.tscn
+	cd godot && $(GODOT) --headless --import --quit && $(GODOT) --headless res://tools/check.tscn && $(GODOT) --headless res://tests/backend_test.tscn && $(GODOT) --headless res://tests/dialogs_test.tscn && $(GODOT) --headless res://tests/logic_test.tscn && $(GODOT) --headless res://tests/run_tests.tscn && GODOT_BIN=$(GODOT) $(GODOT) --headless -s res://addons/gdUnit4/bin/GdUnitCmdTool.gd --ignoreHeadlessMode -a res://tests/unit

@@ -84,6 +84,7 @@ jobs:
         run: |
           "$GODOT" --headless --path godot --import --quit
           "$GODOT" --headless --path godot res://tools/check.tscn
+          GODOT_BIN="$GODOT" "$GODOT" --headless --path godot -s res://addons/gdUnit4/bin/GdUnitCmdTool.gd --ignoreHeadlessMode -a res://tests/unit
           for t in backend_test dialogs_test logic_test run_tests pages_smoke ui_smoke; do
             "$GODOT" --headless --path godot "res://tests/$t.tscn"
           done
