@@ -5,15 +5,21 @@ extends RefCounted
 ## Shared by the library pages and the provider browser.
 
 
+static var _open := false
+
+
 ## Runs the whole flow. Returns true when a playlist was updated.
 static func save(host: Node, tracks: Array) -> bool:
-	if tracks.is_empty():
+	if tracks.is_empty() or _open:
 		return false
+	_open = true
 	var destinations := await collect_destinations()
 	if not is_instance_valid(host) or not host.is_inside_tree():
+		_open = false
 		return false
 	var picked := await _choose(host, tracks.size(), destinations)
 	if picked.is_empty():
+		_open = false
 		return false
 	var selected: Dictionary = picked["item"]
 	var prepend: bool = picked["prepend"]
@@ -23,13 +29,16 @@ static func save(host: Node, tracks: Array) -> bool:
 		var validator := LibraryLogic.playlist_name_error if provider == "local" else Callable()
 		var value: Variant = await Dialogs.prompt(host, "Create playlist", "Playlist name", "", "", false, "Create", validator)
 		if value == null:
+			_open = false
 			return false
 		var created: Variant = await Store.run("playlist.create", {"provider": provider, "playlist": value})
 		if created == null:
+			_open = false
 			return false
 		name = Util.text(created.get("playlist"), value)
 	var result: Variant = await Store.run("playlist.prepend" if prepend else "playlist.add_many",
 		{"provider": provider, "playlist": name, "tracks": tracks})
+	_open = false
 	if result == null:
 		return false
 	var skipped: Variant = result.get("skipped")
@@ -44,19 +53,19 @@ static func collect_destinations() -> Array[Dictionary]:
 	var providers := Store.providers.duplicate()
 	for provider in providers:
 		var key := Util.text(provider.get("key"))
-		var caps: Variant
+		var caps: Dictionary = {}
 		if Store.supports("playlist.capabilities"):
-			caps = await Store.run("playlist.capabilities", {"provider": key})
+			var res := await Backend.call_op("playlist.capabilities", {"provider": key}, false)
+			if not Backend.failed(res):
+				caps = res
 		elif key == "local":
 			caps = {"add_many": true, "create": true, "prepend": true}
-		else:
-			caps = null
-		if caps == null or caps.get("add_many") != true:
+		if caps.get("add_many") != true:
 			continue
 		var offset := 0
 		while true:
-			var list: Variant = await Store.run("provider.playlists", {"provider": key, "offset": offset, "limit": 200})
-			if list == null:
+			var list := await Backend.call_op("provider.playlists", {"provider": key, "offset": offset, "limit": 200}, false)
+			if Backend.failed(list):
 				break
 			var playlists := Util.objects(list.get("playlists"))
 			if playlists.is_empty():
@@ -64,10 +73,8 @@ static func collect_destinations() -> Array[Dictionary]:
 			for playlist in playlists:
 				if key == "local" and LibraryLogic.SYSTEM_PLAYLISTS.has(Util.text(playlist.get("id"))):
 					continue
-				if Store.supports("playlist.capabilities"):
-					var target: Variant = await Store.run("playlist.capabilities", {"provider": key, "playlist": playlist.get("id")})
-					if target != null and target.get("can_add") == false:
-						continue
+				if playlist.get("can_add") == false:
+					continue
 				var entry := playlist.duplicate()
 				entry["provider"] = key
 				entry["provider_name"] = provider.get("name")

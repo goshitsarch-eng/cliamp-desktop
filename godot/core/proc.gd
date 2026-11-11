@@ -18,6 +18,7 @@ var _err_thread: Thread
 var _mutex := Mutex.new()
 var _proc_mutex := Mutex.new()
 var _killed := false
+var _eof_count := 0
 
 
 ## Returns false when the executable could not be started.
@@ -48,6 +49,15 @@ static func escape_arguments(arguments: PackedStringArray, windows := OS.get_nam
 	return out
 
 
+static func _windows_quotes_arg(arg: String) -> bool:
+	if arg.is_empty():
+		return true
+	for c in arg:
+		if c == " " or c == "\t" or c == "\n" or c == "\u000b" or c == "\"":
+			return true
+	return false
+
+
 static func windows_escape(arg: String) -> String:
 	var out := ""
 	var slashes := 0
@@ -60,8 +70,10 @@ static func windows_escape(arg: String) -> String:
 		else:
 			out += "\\".repeat(slashes) + c
 		slashes = 0
-	# Trailing backslashes precede the closing quote Godot adds.
-	return out + "\\".repeat(slashes * 2)
+	# Trailing backslashes precede a closing quote only when Godot quotes arg.
+	if _windows_quotes_arg(arg):
+		return out + "\\".repeat(slashes * 2)
+	return out + "\\".repeat(slashes)
 
 
 ## Sends one newline-terminated line. cliamp's JSON subcommands stop reading at
@@ -101,9 +113,7 @@ func _read_stdout() -> void:
 			stdout_line.emit.call_deferred(line.strip_edges(false, true))
 		elif _stdio.get_error() != OK or not _is_running():
 			break
-	while _is_running():
-		OS.delay_msec(10)
-	_finish.call_deferred(_exit_code())
+	_thread_done()
 
 
 func _read_stderr() -> void:
@@ -115,10 +125,31 @@ func _read_stderr() -> void:
 			_mutex.unlock()
 		elif _stderr.get_error() != OK or not _is_running():
 			break
+	_thread_done()
+
+
+func _thread_done() -> void:
+	_mutex.lock()
+	_eof_count += 1
+	var both_done := _eof_count >= 2
+	_mutex.unlock()
+	if not both_done:
+		return
+	while _is_running():
+		OS.delay_msec(10)
+	var code := _exit_code()
+	if OS.get_name() == "Windows":
+		_proc_mutex.lock()
+		if not _killed and pid > 0:
+			OS.kill(pid)
+		_proc_mutex.unlock()
+	_finish.call_deferred(code)
 
 
 func _finish(code: int) -> void:
 	_out_thread.wait_to_finish()
 	_err_thread.wait_to_finish()
+	_stdio = null
+	_stderr = null
 	running = false
 	exited.emit(code)

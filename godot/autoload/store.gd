@@ -37,6 +37,7 @@ var provider_action := ""
 
 var _theme_key := ""
 var _snapshot_key := ""
+var _state_seq := 0
 var _bands_silent := false
 var _state_at_ms := 0
 var _refreshing := false
@@ -143,6 +144,7 @@ func run(operation: String, params := {}, message := "") -> Variant:
 		return null
 	pending += 1
 	pending_changed.emit(pending)
+	var seq_before := _state_seq
 	var result := await Backend.call_op(operation, params)
 	var out: Variant = null
 	if Backend.failed(result):
@@ -153,7 +155,8 @@ func run(operation: String, params := {}, message := "") -> Variant:
 	elif result.get("ok") == false:
 		notify(Util.text(result.get("error"), "The operation could not be completed."), true)
 	else:
-		await refresh_state()
+		if _state_seq == seq_before:
+			await refresh_state()
 		if not message.is_empty():
 			notify(message)
 		out = result
@@ -179,10 +182,12 @@ func refresh_state() -> void:
 func accept_state(new_state: Dictionary) -> void:
 	if new_state.is_empty():
 		return
+	_state_seq += 1
 	var text := Util.text(new_state.get("notice"))
 	if not text.is_empty() and new_state.get("notice") != state.get("notice"):
 		notify(text, new_state.get("notice_error") == true)
-	var snap_key := JSON.stringify(new_state)
+	var playing: bool = new_state.get("state") == "playing"
+	var snap_key := "" if playing else JSON.stringify(new_state)
 	state = new_state
 	_state_at_ms = Time.get_ticks_msec()
 	connected = true
@@ -192,7 +197,7 @@ func accept_state(new_state: Dictionary) -> void:
 	if key != _theme_key:
 		_theme_key = key
 		ThemeBuilder.apply_engine_theme(colors)
-	if snap_key == _snapshot_key and new_state.get("state") != "playing":
+	if not playing and snap_key == _snapshot_key:
 		return
 	_snapshot_key = snap_key
 	state_changed.emit(state)

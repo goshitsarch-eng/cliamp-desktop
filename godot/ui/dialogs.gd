@@ -14,7 +14,7 @@ class Result extends RefCounted:
 ## dialog unless `keep_content` is set, for callers that reopen it.
 static func open(host: Node, title: String, content: Control, buttons: Array[String] = ["Close"], min_size := Vector2i(480, 0), keep_content := false) -> Variant:
 	var dialog := ConfirmationDialog.new()
-	dialog.title = title
+	dialog.title = Util.single_line(title)
 	dialog.exclusive = true
 	dialog.content_scale_factor = Prefs.ui_scale
 	dialog.min_size = Vector2i(Vector2(min_size) * Prefs.ui_scale)

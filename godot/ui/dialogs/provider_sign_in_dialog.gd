@@ -205,7 +205,9 @@ func _open_browser() -> void:
 
 
 func _copy_link() -> void:
-	DisplayServer.clipboard_set(_flow["url"])
+	var url: String = _flow["url"]
+	if ProviderAuth.is_http_url(url):
+		DisplayServer.clipboard_set(url)
 
 
 func _render() -> void:

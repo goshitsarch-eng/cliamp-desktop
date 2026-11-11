@@ -61,7 +61,19 @@ def main():
         # The MSYS2 libogg exports ogg_stream_iovecin only from the static archive;
         # the release workflow links it the same way.
         build_env.setdefault('CGO_LDFLAGS', '-Wl,-Bstatic -logg -Wl,-Bdynamic')
-    run(go, 'build', '-trimpath', '-o', str(sidecar), '.', cwd=repo, env=build_env)
+    version = os.environ.get('VERSION', '').strip()
+    if not version:
+        git = shutil.which('git')
+        if git:
+            described = subprocess.run(
+                [git, 'describe', '--tags', '--always', '--dirty'],
+                cwd=repo, capture_output=True, text=True,
+            )
+            if described.returncode == 0:
+                version = described.stdout.strip()
+        version = version or 'dev'
+    ldflags = f'-s -w -X main.version={version}'
+    run(go, 'build', '-trimpath', f'-ldflags={ldflags}', '-o', str(sidecar), '.', cwd=repo, env=build_env)
     license_dir = executable / 'Contents/Resources' if target == 'macos' else out
     license_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(repo / 'LICENSE', license_dir / 'CLIAMP-LICENSE.txt')

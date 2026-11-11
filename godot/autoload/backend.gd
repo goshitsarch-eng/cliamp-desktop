@@ -12,15 +12,19 @@ signal spectrum_received(bands: PackedFloat32Array)
 signal jobs_changed(jobs: Array)
 ## Emitted when the connection is lost. A runtime.state event follows a reconnect.
 signal connection_lost(error: Dictionary)
+signal _wake
 
 const PROTOCOL_CODES := [
 	"invalid_version", "invalid_request", "invalid_params", "unknown_operation",
 	"not_found", "conflict", "unavailable", "canceled", "internal_error",
 ]
 const EVENT_NAMES: PackedStringArray = [
-	"runtime.state", "runtime.playback", "runtime.playlist", "runtime.settings",
-	"runtime.job", "provider.auth",
+	"runtime.state", "runtime.job", "provider.auth",
 ]
+const RESTORE_CHUNK := 250
+
+static var _op_re: RegEx
+static var _proto_re: RegEx
 
 var command_timeout := 15.0
 var operation_timeout := 300.0
@@ -36,9 +40,11 @@ var connected := false
 
 var _closed := false
 var _closing := false
+var _restarting := false
 var _generation := 0
 var _connecting := false
 var _refreshing := false
+var _spectrum_wanted := true
 var _daemon: Object
 var _daemon_exit := -1
 var _daemon_log := ""
@@ -48,6 +54,7 @@ var _spectrum_proc: Object
 var _jobs: Dictionary = {}
 var _job_updated: Dictionary = {}
 var _auth_cancellable: Dictionary = {}
+var _saved_pref_keys: Dictionary = {}
 var _refresh_timer: Timer
 var _reconnect_pending := false
 
@@ -161,21 +168,23 @@ func _publish_snapshot(snapshot: Dictionary) -> void:
 
 
 func _refresh() -> void:
-	if _closed or not connected or _refreshing:
+	if _closed or not connected or _refreshing or _restarting:
+		return
+	if _event_proc == null:
+		_schedule_reconnect(fail("disconnected", "The player event connection closed.")["error"])
+		return
+	var now := Time.get_unix_time_from_system()
+	var stale: Array[BackendJob] = []
+	for job: BackendJob in current_jobs():
+		if job.is_active() and now - _job_updated.get(job.id, job.created_at) >= 2.0:
+			stale.append(job)
+	if stale.is_empty():
 		return
 	_refreshing = true
-	var snap := await _read_snapshot()
-	if failed(snap):
-		_refreshing = false
-		_schedule_reconnect(snap["error"])
-		return
-	_publish_snapshot(snap["snapshot"])
-	for job: BackendJob in current_jobs():
+	for job: BackendJob in stale:
 		if _closed or not connected:
 			break
-		if not job.is_active() or Time.get_unix_time_from_system() - _job_updated.get(job.id, job.created_at) < 2.0:
-			continue
-		var response := await _command(["remote", "job", job.id])
+		var response := await _command(["remote", "job", "--", job.id])
 		if not failed(response):
 			if response.get("job") is Dictionary:
 				_record_job(response["job"])
@@ -188,6 +197,20 @@ func _refresh() -> void:
 			_schedule_reconnect(response["error"])
 			return
 	_refreshing = false
+
+
+func set_spectrum_wanted(wanted: bool) -> void:
+	if _spectrum_wanted == wanted:
+		return
+	_spectrum_wanted = wanted
+	if _closed or not connected:
+		return
+	if wanted and _spectrum_proc == null:
+		_watch_stream(true, _generation)
+	elif not wanted and _spectrum_proc != null:
+		var proc := _spectrum_proc
+		_spectrum_proc = null
+		proc.kill()
 
 
 func _stop_streams() -> void:
@@ -204,7 +227,8 @@ func _stop_streams() -> void:
 func _start_streams() -> void:
 	_stop_streams()
 	_watch_stream(false, _generation)
-	_watch_stream(true, _generation)
+	if _spectrum_wanted:
+		_watch_stream(true, _generation)
 
 
 func _watch_stream(bands: bool, generation: int) -> void:
@@ -220,6 +244,9 @@ func _watch_stream(bands: bool, generation: int) -> void:
 	proc.stdout_line.connect(func(line: String) -> void:
 		if _closed or generation != _generation:
 			return
+		var active_proc: Object = _spectrum_proc if bands else _event_proc
+		if active_proc != proc:
+			return
 		var envelope := _decode_object(line)
 		if envelope.is_empty():
 			return
@@ -228,7 +255,8 @@ func _watch_stream(bands: bool, generation: int) -> void:
 		else:
 			_on_event_line(envelope))
 	proc.exited.connect(func(_code: int) -> void:
-		if not _closed and generation == _generation:
+		var active_proc: Object = _spectrum_proc if bands else _event_proc
+		if not _closed and not _restarting and generation == _generation and active_proc == proc:
 			_schedule_reconnect(fail("disconnected", "The player %s connection closed. %s" % ["spectrum" if bands else "event", str(proc.stderr_text).strip_edges()])["error"]))
 
 
@@ -253,6 +281,7 @@ func _on_event_line(envelope: Dictionary) -> void:
 		var job = data.get("job", data)
 		if job is Dictionary and _jobs.has(job.get("id")):
 			_record_job(job)
+			_wake.emit()
 	elif name == "provider.auth" and data is Dictionary and data.get("auth") is Dictionary:
 		var auth: Dictionary = data["auth"]
 		if auth.get("provider") is String and auth.get("cancellable") is bool:
@@ -265,14 +294,15 @@ func _on_event_line(envelope: Dictionary) -> void:
 
 
 func _schedule_reconnect(error: Dictionary) -> void:
-	if _closed or _reconnect_pending:
+	if _closed or _restarting or _reconnect_pending:
 		return
 	_reconnect_pending = true
 	connected = false
 	_stop_streams()
 	connection_lost.emit(error)
 	await get_tree().create_timer(reconnect_delay).timeout
-	if _closed:
+	if _closed or _restarting:
+		_reconnect_pending = false
 		return
 	_reconnect_pending = false
 	# connect reads authoritative state before it opens new subscriptions.
@@ -302,21 +332,27 @@ func _command(arguments: Array, timeout := -1.0, input := "", require_v2 := true
 	var proc: Object = _spawn(PackedStringArray(arguments))
 	if proc == null:
 		return fail("executable_unavailable", "Could not start cliamp (%s). Build the desktop bundle or set CLIAMP_BINARY to your cliamp executable." % resolve_executable())
-	var state := {"out": PackedStringArray(), "done": false, "code": 0}
+	var state := {"out": PackedStringArray(), "done": false, "timed_out": false, "code": 0}
 	proc.stdout_line.connect(func(line: String) -> void: state["out"].append(line))
 	proc.exited.connect(func(code: int) -> void:
 		state["code"] = code
-		state["done"] = true)
+		state["done"] = true
+		_wake.emit())
 	if not input.is_empty():
 		proc.write_line(input)
-	var deadline := Time.get_ticks_msec() + int(timeout * 1000.0)
-	while not state["done"]:
-		if Time.get_ticks_msec() > deadline:
+	if not state["done"]:
+		var timer := get_tree().create_timer(timeout)
+		timer.timeout.connect(func() -> void:
+			if not state["done"]:
+				state["timed_out"] = true
+				_wake.emit())
+		while not state["done"] and not state["timed_out"]:
+			await _wake
+		if not state["done"]:
 			proc.kill()
 			if private_errors:
 				return fail("timeout", "The operation timed out. Check the saved settings before trying again.")
 			return fail("timeout", "The cliamp command timed out. An accepted operation may still finish in the player; refresh its state before trying again.")
-		await get_tree().create_timer(0.02).timeout
 	var stdout := "\n".join(state["out"]).strip_edges()
 	var stderr := str(proc.stderr_text).strip_edges()
 	if state["code"] != 0:
@@ -364,9 +400,16 @@ static func _whole_numbers(value: Variant) -> Variant:
 	return value
 
 
+static func _op_regex() -> RegEx:
+	if _op_re == null:
+		_op_re = RegEx.create_from_string("^[a-zA-Z0-9][a-zA-Z0-9_.-]*$")
+	return _op_re
+
+
 static func _protocol_code(detail: String) -> String:
-	var re := RegEx.create_from_string("\\((" + "|".join(PROTOCOL_CODES) + ")\\)")
-	var m := re.search(detail)
+	if _proto_re == null:
+		_proto_re = RegEx.create_from_string("\\((" + "|".join(PROTOCOL_CODES) + ")\\)")
+	var m := _proto_re.search(detail)
 	return m.get_string(1) if m != null else "command_failed"
 
 
@@ -431,24 +474,14 @@ func read_frame(width: int, height: int) -> Dictionary:
 
 ## Submits an operation and waits for its job to finish.
 func call_op(operation: String, params := {}, track_job := true) -> Dictionary:
+	if _op_regex().search(operation) == null:
+		return fail("invalid_request", "Invalid operation name.")
 	var c := await connect_engine()
 	if failed(c):
 		return c
 	var deadline := Time.get_ticks_msec() + int(operation_timeout * 1000.0)
 	var encoded := encode_json(params)
-	var temp_path := ""
-	var call_args := ["remote", "call", "--params", encoded, operation]
-	if encoded.length() > 8192:
-		var temp := FileAccess.create_temp(FileAccess.WRITE, "cliamp-params", "json", true)
-		if temp != null:
-			temp_path = temp.get_path_absolute()
-			temp.store_string(encoded)
-			temp.flush()
-			temp.close()
-			call_args = ["remote", "call", "--params-file", temp_path, operation]
-	var response := await _command(call_args)
-	if not temp_path.is_empty():
-		DirAccess.remove_absolute(temp_path)
+	var response := await _command(["remote", "call", "--params-line", "--", operation], -1.0, encoded)
 	while true:
 		if failed(response):
 			return response
@@ -476,10 +509,20 @@ func call_op(operation: String, params := {}, track_job := true) -> Dictionary:
 		var remaining := (deadline - Time.get_ticks_msec()) / 1000.0
 		if remaining <= 0.0:
 			return fail("timeout", "%s is still running (job %s). Refresh its state before trying again." % [operation, job["id"]])
-		await get_tree().create_timer(0.1).timeout
+		var waited := {"done": false}
+		var poll_timer := get_tree().create_timer(minf(0.1, remaining))
+		poll_timer.timeout.connect(func() -> void:
+			waited["done"] = true
+			_wake.emit())
+		while not waited["done"] and not _closed:
+			var tracked: BackendJob = _jobs.get(job["id"])
+			if tracked != null and not tracked.is_active():
+				break
+			await _wake
 		if _closed:
 			return fail("closed", "The player connection is closed.")
-		response = await _command(["remote", "job", job["id"]], minf(remaining, command_timeout))
+		remaining = (deadline - Time.get_ticks_msec()) / 1000.0
+		response = await _command(["remote", "job", "--", job["id"]], minf(maxf(remaining, 0.05), command_timeout))
 	return {}
 
 
@@ -508,6 +551,9 @@ func preferences_schema() -> Dictionary:
 
 func save_preferences(values: Dictionary) -> Dictionary:
 	var result := await _management(["preferences", "apply"], values)
+	if not failed(result):
+		for k in values:
+			_saved_pref_keys[str(k)] = true
 	# An attached terminal saves its theme on exit. Apply a changed theme to that
 	# shared renderer so its exit cannot overwrite this edit.
 	if not failed(result) and values.has("theme"):
@@ -571,7 +617,7 @@ func _record_job(raw: Dictionary, operation := "", provider := "") -> void:
 	job.id = id
 	job.state = state
 	job.provider = provider if not provider.is_empty() else (previous.provider if previous != null else "")
-	job.operation = name if RegEx.create_from_string("^[a-zA-Z0-9_.-]+$").search(name) != null else "operation"
+	job.operation = name if _op_regex().search(name) != null else "operation"
 	var now := Time.get_unix_time_from_system()
 	job.created_at = BackendJob.parse_time(raw.get("created_at"), previous.created_at if previous != null else now)
 	job.finished_at = 0.0 if active else BackendJob.parse_time(raw.get("finished_at"), now)
@@ -596,7 +642,7 @@ func cancel_job(job_id: String) -> Dictionary:
 	job.cancellation_requested = true
 	_publish_jobs()
 	var c := await connect_engine()
-	var response := c if failed(c) else await _command(["remote", "cancel", job_id])
+	var response := c if failed(c) else await _command(["remote", "cancel", "--", job_id])
 	job.cancellation_requested = false
 	if not failed(response) and response.get("job") is Dictionary:
 		_record_job(response["job"])
@@ -613,20 +659,27 @@ func owns_daemon() -> bool:
 func restart_owned_engine() -> Dictionary:
 	if _closed:
 		return fail("closed", "The player connection is closed.")
+	if _restarting:
+		return fail("conflict", "The player is already restarting.")
 	if not owns_daemon():
 		return fail("not_owned", "This player was started elsewhere. Restart it there to load the new provider settings.")
+	_restarting = true
 	var preserved := await _capture_runtime_state() if connected else {}
 	connected = false
 	_reconnect_pending = false
 	_stop_streams()
 	var stopped := await _stop_owned_daemon()
 	if failed(stopped):
+		_restarting = false
 		return stopped
 	_connecting = true
 	var result := await _connect()
 	_connecting = false
+	_restarting = false
 	if not failed(result) and not preserved.is_empty():
 		await _restore_runtime_state(preserved)
+	else:
+		_saved_pref_keys.clear()
 	return result
 
 
@@ -669,25 +722,35 @@ func _read_all_tracks(operation: String) -> Array[Dictionary]:
 
 
 func _restore_runtime_state(preserved: Dictionary) -> void:
+	var saved_keys := _saved_pref_keys.duplicate()
+	_saved_pref_keys.clear()
 	var state: Dictionary = Util.object(preserved.get("snapshot"))
-	var queue: Array = preserved.get("queue", [])
+	var raw_queue: Array = preserved.get("queue", [])
 	var playnext: Array = preserved.get("playnext", [])
 	var cur := await _read_snapshot()
 	if failed(cur):
 		return
 	var cur_snap: Dictionary = cur["snapshot"]
 	var repeat_mode := Util.text(state.get("repeat")).to_lower()
-	if not repeat_mode.is_empty() and repeat_mode != Util.text(cur_snap.get("repeat")).to_lower():
+	if not saved_keys.has("repeat") and not repeat_mode.is_empty() and repeat_mode != Util.text(cur_snap.get("repeat")).to_lower():
 		await call_op("repeat", {"name": repeat_mode}, false)
-	if state.get("shuffle") is bool and state.get("shuffle") != cur_snap.get("shuffle"):
+	if not saved_keys.has("shuffle") and state.get("shuffle") is bool and state.get("shuffle") != cur_snap.get("shuffle"):
 		await call_op("shuffle", {"name": "on" if state["shuffle"] else "off"}, false)
+	var queue: Array = []
+	var index_map: Dictionary = {}
+	for i in raw_queue.size():
+		var item: Variant = raw_queue[i]
+		if item is Dictionary and item.get("feed") != true:
+			index_map[i] = queue.size()
+			queue.append(item)
 	if not queue.is_empty():
-		var idx := clampi(int(Util.number(state.get("index"), 0)), 0, queue.size() - 1)
+		var old_idx := clampi(int(Util.number(state.get("index"), 0)), 0, max(0, raw_queue.size() - 1))
+		var idx: int = index_map.get(old_idx, clampi(old_idx, 0, queue.size() - 1))
 		cur = await _read_snapshot()
 		if failed(cur):
 			return
 		var rev: Variant = cur["snapshot"].get("playlist_revision", 0)
-		var first := queue.slice(0, 1000)
+		var first := queue.slice(0, RESTORE_CHUNK)
 		var replaced := await call_op("tracks.replace", {
 			"tracks": first,
 			"play": false,
@@ -696,23 +759,24 @@ func _restore_runtime_state(preserved: Dictionary) -> void:
 		}, false)
 		if failed(replaced):
 			return
-		var offset := 1000
+		var offset := RESTORE_CHUNK
 		while offset < queue.size():
 			cur = await _read_snapshot()
 			if failed(cur):
 				return
 			var appended := await call_op("tracks.append", {
-				"tracks": queue.slice(offset, offset + 1000),
+				"tracks": queue.slice(offset, offset + RESTORE_CHUNK),
 				"play": false,
 				"if_revision": cur["snapshot"].get("playlist_revision", 0),
 			}, false)
 			if failed(appended):
 				return
-			offset += 1000
+			offset += RESTORE_CHUNK
 		for entry in playnext:
 			if entry is Dictionary and (entry.get("index") is int or entry.get("index") is float):
-				var q_idx := int(entry["index"])
-				if q_idx >= 0 and q_idx < queue.size():
+				var orig_idx := int(entry["index"])
+				if index_map.has(orig_idx):
+					var q_idx: int = index_map[orig_idx]
 					cur = await _read_snapshot()
 					if failed(cur):
 						break
@@ -739,7 +803,7 @@ func _stop_owned_daemon() -> Dictionary:
 		return {}
 	# Submit only: polling the quit job races with the socket shutting down.
 	# Wait on our own process handle for the normal exit save.
-	await _command(["remote", "call", "desktop.quit"], shutdown_timeout, "", true, false, true)
+	await _command(["remote", "call", "--", "desktop.quit"], shutdown_timeout, "", true, false, true)
 	if await _wait_exit(daemon, shutdown_timeout):
 		_daemon = null
 		_daemon_exit = -1
@@ -753,12 +817,17 @@ func _stop_owned_daemon() -> Dictionary:
 
 
 func _wait_exit(proc: Object, timeout: float) -> bool:
-	var deadline := Time.get_ticks_msec() + int(timeout * 1000.0)
-	while proc in _children:
-		if Time.get_ticks_msec() > deadline:
-			return false
-		await get_tree().create_timer(0.02).timeout
-	return true
+	if not (proc in _children):
+		return true
+	var timed_out := [false]
+	proc.exited.connect(func(_c: int) -> void: _wake.emit())
+	var timer := get_tree().create_timer(timeout)
+	timer.timeout.connect(func() -> void:
+		timed_out[0] = true
+		_wake.emit())
+	while proc in _children and not timed_out[0]:
+		await _wake
+	return not (proc in _children)
 
 
 ## Stops only children this adapter started. An already running cliamp is never
@@ -767,13 +836,14 @@ func _wait_exit(proc: Object, timeout: float) -> bool:
 func close() -> void:
 	if _closing:
 		while _closing:
-			await get_tree().create_timer(0.01).timeout
+			await _wake
 		return
 	if _closed:
 		return
 	_closing = true
 	_closed = true
 	connected = false
+	_wake.emit()
 	_refresh_timer.stop()
 	_stop_streams()
 	# The IPC quit lets the engine run its exit save, which a plain kill skips on Windows.
@@ -781,6 +851,7 @@ func close() -> void:
 	for child: Object in _children.duplicate():
 		child.kill()
 	_closing = false
+	_wake.emit()
 
 
 func _notification(what: int) -> void:

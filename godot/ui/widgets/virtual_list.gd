@@ -132,6 +132,8 @@ func _sync() -> void:
 		var slot := k % pool_size
 		var row := _pool[slot]
 		if _assigned[slot] != k:
+			if _assigned[slot] >= 0:
+				_release_row_focus(row)
 			_assigned[slot] = k
 			bind_row.call(row, k)
 		row.show()
@@ -139,9 +141,19 @@ func _sync() -> void:
 	for slot in _pool.size():
 		var k := _assigned[slot]
 		if slot >= wanted or k < _first or k >= _first + wanted or k >= _count:
+			if _pool[slot].visible:
+				_release_row_focus(_pool[slot])
 			_pool[slot].hide()
 			_assigned[slot] = -1
 	queue_sort()
+
+
+func _release_row_focus(row: Control) -> void:
+	if not is_inside_tree():
+		return
+	var focused := get_viewport().gui_get_focus_owner()
+	if focused != null and (focused == row or row.is_ancestor_of(focused)):
+		focused.release_focus()
 
 
 func _layout() -> void:

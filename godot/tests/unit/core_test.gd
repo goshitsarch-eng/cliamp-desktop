@@ -52,7 +52,8 @@ func test_seek_time_parsing() -> void:
 
 func test_windows_argument_escaping_round_trips_quotes() -> void:
 	assert_str(Proc.windows_escape('{"a":1}')).is_equal('{' + BS + '"a' + BS + '":1}')
-	assert_str(Proc.windows_escape("C:" + BS + "dir" + BS)).is_equal("C:" + BS + "dir" + BS + BS)
+	assert_str(Proc.windows_escape("C:" + BS + "my dir" + BS)).is_equal("C:" + BS + "my dir" + BS + BS)
+	assert_str(Proc.windows_escape("C:" + BS + "dir" + BS)).is_equal("C:" + BS + "dir" + BS)
 	assert_array(Array(Proc.escape_arguments(PackedStringArray(["x"]), false))).is_equal(["x"])
 
 
@@ -177,6 +178,13 @@ func test_provider_auth_supports_verification_code_flow() -> void:
 	assert_str(flow["state"]).is_equal("awaiting_code")
 	assert_str(ProviderAuth.message(flow["state"], "", flow["prompt"])).is_equal("Enter Telegram login code")
 	assert_bool(ProviderAuth.is_terminal(flow["state"])).is_false()
+	var retry := ProviderAuth.reduce(ProviderAuth.initial(), {"state": "failed", "code_required": true, "prompt": "Enter Telegram login code"})
+	assert_str(retry["state"]).is_equal("awaiting_code")
+	assert_bool(ProviderAuth.is_http_url("https://accounts.spotify.com/authorize?x=1")).is_true()
+	assert_bool(ProviderAuth.is_http_url("http://127.0.0.1:8080/login")).is_true()
+	assert_bool(ProviderAuth.is_http_url("https://user:pass@evil.example/")).is_false()
+	assert_bool(ProviderAuth.is_http_url("https://example.com:")).is_false()
+	assert_bool(ProviderAuth.is_http_url("https://example.com:99999/")).is_false()
 
 
 func test_provider_browse_pluralizes_and_labels_shows() -> void:

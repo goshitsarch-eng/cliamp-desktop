@@ -8,6 +8,8 @@ var _db_labels: Array[Label] = []
 var _muted_labels: Array[Label] = []
 var _top_icon: Label
 var _dragging: Array[bool] = []
+var _pending_bands: Dictionary = {}
+var _commit_timer: Timer
 var _building := true
 
 
@@ -121,6 +123,12 @@ func _init() -> void:
 	spectrum.custom_minimum_size = Vector2(160, 110)
 	sm.add_child(spectrum)
 
+	_commit_timer = Timer.new()
+	_commit_timer.one_shot = true
+	_commit_timer.wait_time = 0.12
+	_commit_timer.timeout.connect(_flush_pending_bands)
+	add_child(_commit_timer)
+
 	_building = false
 	Store.state_changed.connect(func(_s: Dictionary) -> void: _sync())
 	ThemeBuilder.palette_changed.connect(_recolor)
@@ -141,7 +149,7 @@ func activate() -> void:
 func _sync() -> void:
 	var values := EqLogic.band_values(Store.state)
 	for i in EqLogic.BANDS:
-		if _dragging[i]:
+		if _dragging[i] or _pending_bands.has(i):
 			continue
 		_sliders[i].set_value_no_signal(values[i])
 		_db_labels[i].text = EqLogic.db_text(values[i])
@@ -151,27 +159,47 @@ func _sync() -> void:
 
 func _on_value_changed(band: int, value: float) -> void:
 	_db_labels[band].text = EqLogic.db_text(value)
-	# Keyboard and wheel changes have no drag; commit them directly.
+	# Keyboard and wheel changes have no drag; debounce rapid ticks.
 	if not _dragging[band] and not _building:
-		_commit(band, value)
+		_pending_bands[band] = EqLogic.snap_db(value)
+		_commit_timer.start()
 
 
-func _on_drag_ended(band: int, _changed: bool) -> void:
+func _flush_pending_bands() -> void:
+	if _pending_bands.is_empty():
+		return
+	var pending := _pending_bands.duplicate()
+	_pending_bands.clear()
+	for band: int in pending.keys():
+		await _commit(band, float(pending[band]))
+
+
+func _on_drag_ended(band: int, changed: bool) -> void:
 	_dragging[band] = false
+	_pending_bands.erase(band)
+	if not changed:
+		_sync()
+		return
 	_commit(band, EqLogic.snap_db(_sliders[band].value))
 
 
 func _commit(band: int, value: float) -> void:
 	await Store.run("eq", {"band": band, "value": value})
-	if not _dragging[band]:
+	if is_inside_tree() and not _dragging[band] and not _pending_bands.has(band):
 		_sync()
 
 
 func _on_preset(index: int) -> void:
+	_pending_bands.clear()
+	_commit_timer.stop()
 	await Store.run("eq", {"name": EqLogic.PRESETS[index]})
-	_sync()
+	if is_inside_tree():
+		_sync()
 
 
 func _on_reset() -> void:
+	_pending_bands.clear()
+	_commit_timer.stop()
 	await Store.run("eq", {"name": "Flat"})
-	_sync()
+	if is_inside_tree():
+		_sync()

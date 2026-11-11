@@ -176,6 +176,7 @@ func _text_button(text: String, callback: Callable) -> Button:
 
 func activate() -> void:
 	_is_active = true
+	_last_frame = ""
 	_supported = Store.supports("desktop.vis.frame")
 	_controls.visible = _supported
 	_canvas_box.visible = _supported
@@ -183,7 +184,10 @@ func activate() -> void:
 	_unsupported.visible = not _supported
 	if not _supported:
 		return
+	var generation := _loop_generation
 	await _load_lists()
+	if not _is_active or generation != _loop_generation or not is_inside_tree():
+		return
 	_start_loop()
 
 
@@ -276,9 +280,16 @@ func _start_loop() -> void:
 	_backoff = 0.0
 	var generation := _loop_generation
 	while _is_active and generation == _loop_generation:
+		var win := get_window()
+		var minimized := win != null and win.mode == Window.MODE_MINIMIZED
+		var hidden_in_shell := _fs == null and not is_visible_in_tree()
+		var idle_paused := not Store.is_playing() and not _last_frame.is_empty() and _error.is_empty()
+		if minimized or hidden_in_shell or idle_paused:
+			await get_tree().create_timer(0.25).timeout
+			continue
 		var wait := FRAME_DELAY if _backoff == 0.0 else _backoff
 		await get_tree().create_timer(wait).timeout
-		if not _is_active or generation != _loop_generation:
+		if not _is_active or generation != _loop_generation or not is_inside_tree():
 			break
 		await _read_frame()
 
@@ -301,7 +312,7 @@ func _fetch_frame() -> void:
 	var generation := _loop_generation
 	var grid := _target_view().grid_size()
 	var result: Dictionary = await Backend.read_frame(grid.x, grid.y)
-	if generation != _loop_generation or not _is_active:
+	if generation != _loop_generation or not _is_active or not is_inside_tree():
 		return
 	if Backend.failed(result):
 		_error = result["error"]["message"]
@@ -320,11 +331,12 @@ func _fetch_frame() -> void:
 		_foreground = _parse_color(theme.get("fg"), Color.WHITE)
 	else:
 		_theme = Util.text(theme)
-	_view.set_colors(_foreground, _background)
-	_view.set_frame(frame)
 	if _fs != null and is_instance_valid(_fs_view):
 		_fs_view.set_colors(_foreground, _background)
 		_fs_view.set_frame(frame)
+	else:
+		_view.set_colors(_foreground, _background)
+		_view.set_frame(frame)
 	_last_frame = frame
 	_update_chrome()
 
@@ -339,7 +351,11 @@ func _retry() -> void:
 		return
 	_backoff = 0.0
 	_error = ""
+	_last_frame = ""
+	var generation := _loop_generation
 	await _load_lists()
+	if not _is_active or generation != _loop_generation or not is_inside_tree():
+		return
 	_update_chrome()
 	_start_loop()
 
@@ -371,6 +387,7 @@ func _select(operation: String, params: Dictionary) -> void:
 		Store.notify(result["error"]["message"], true)
 	elif operation == "desktop.vis" and result.has("index"):
 		_mode_index = int(Util.number(result.get("index")))
+	_last_frame = ""
 	await _read_frame()
 	_changing = false
 	_sync_pickers()
@@ -382,6 +399,7 @@ func _cancel_preview() -> void:
 		return
 	await restore_appearance()
 	_changing = true
+	_last_frame = ""
 	await _read_frame()
 	_changing = false
 	_sync_pickers()
@@ -402,6 +420,7 @@ func _apply_preview() -> void:
 	if not Backend.failed(a) and not Backend.failed(b):
 		_original_mode = -1
 		_original_theme = ""
+	_last_frame = ""
 	await _read_frame()
 	_changing = false
 	_sync_pickers()
@@ -567,6 +586,9 @@ func _close_fullscreen() -> void:
 	_fs_view = null
 	_fs_buttons.clear()
 	w.queue_free()
+	if is_instance_valid(_view):
+		_view.set_colors(_foreground, _background)
+		_view.set_frame(_last_frame)
 
 
 func _toggle_info() -> void:
@@ -577,11 +599,12 @@ func _toggle_info() -> void:
 func _update_fullscreen_player() -> void:
 	var track := Store.track()
 	_fs_info_box.visible = _show_info
-	_fs_title.text = Util.text(track.get("title"), Util.text(track.get("path"), "Nothing playing"))
+	_fs_title.text = Util.single_line(track.get("title"), Util.single_line(track.get("path"), "Nothing playing"))
 	var detail: PackedStringArray = []
 	for field in ["artist", "album"]:
-		if not Util.text(track.get(field)).is_empty():
-			detail.append(Util.text(track.get(field)))
+		var part := Util.single_line(track.get(field))
+		if not part.is_empty():
+			detail.append(part)
 	_fs_detail.text = " · ".join(detail)
 	_fs_detail.visible = not detail.is_empty()
 	_fs_toggle.text = "Pause" if Store.is_playing() else "Play"
@@ -621,17 +644,28 @@ func _transport(operation: String, params := {}) -> void:
 func _on_fs_input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
+	if event.alt_pressed:
+		return
 	var handled := true
 	var jump: bool = event.ctrl_pressed or event.meta_pressed
 	match event.keycode:
 		KEY_ESCAPE:
 			_close_fullscreen()
 		KEY_SPACE:
-			_transport("toggle")
+			if not jump:
+				_transport("toggle")
+			else:
+				handled = false
 		KEY_COMMA:
-			_transport("prev")
+			if not jump:
+				_transport("prev")
+			else:
+				handled = false
 		KEY_PERIOD:
-			_transport("next")
+			if not jump:
+				_transport("next")
+			else:
+				handled = false
 		KEY_LEFT:
 			if jump:
 				_transport("prev")
@@ -643,13 +677,25 @@ func _on_fs_input(event: InputEvent) -> void:
 			else:
 				_transport("seek", {"value": 5})
 		KEY_MINUS, KEY_KP_SUBTRACT:
-			_transport("volume.adjust", {"value": -1})
+			if not jump:
+				_transport("volume.adjust", {"value": -1})
+			else:
+				handled = false
 		KEY_EQUAL, KEY_KP_ADD:
-			_transport("volume.adjust", {"value": 1})
+			if not jump:
+				_transport("volume.adjust", {"value": 1})
+			else:
+				handled = false
 		KEY_T:
-			_toggle_info()
+			if not jump:
+				_toggle_info()
+			else:
+				handled = false
 		KEY_V:
-			_select("desktop.vis", {"name": "next"})
+			if not jump:
+				_select("desktop.vis", {"name": "next"})
+			else:
+				handled = false
 		_:
 			handled = false
 	if handled and _fs != null:

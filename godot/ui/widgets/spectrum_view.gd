@@ -7,6 +7,11 @@ const COUNT := 40
 
 var bands := PackedFloat32Array()
 var playing := false
+var _box := StyleBoxFlat.new()
+
+
+func _init() -> void:
+	_box.set_corner_radius_all(3)
 
 
 func _ready() -> void:
@@ -41,7 +46,5 @@ func _draw() -> void:
 			value = clampf(bands[clampi(i * bands.size() / COUNT, 0, bands.size() - 1)], 0.0, 1.0)
 		var h := maxf(2.0, value * size.y)
 		var color := palette.accent.lerp(palette.secondary, float(i) / (COUNT - 1))
-		var box := StyleBoxFlat.new()
-		box.bg_color = color
-		box.set_corner_radius_all(3)
-		draw_style_box(box, Rect2(i * bar, (size.y - h) / 2.0, maxf(1.0, bar - 3.0), h))
+		_box.bg_color = color
+		draw_style_box(_box, Rect2(i * bar, (size.y - h) / 2.0, maxf(1.0, bar - 3.0), h))

@@ -8,6 +8,7 @@ const SAVE_INTERVAL := 30.0
 
 var ui_scale := 1.0
 var _last_visible_mode := Window.MODE_WINDOWED
+var _closing := false
 ## Async callbacks the shell registers; awaited in order before the engine closes.
 var before_close: Array[Callable] = []
 
@@ -24,6 +25,9 @@ func _ready() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		if _closing:
+			return
+		_closing = true
 		save()
 		for hook in before_close:
 			await hook.call()

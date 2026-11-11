@@ -347,6 +347,7 @@ func _build_preferences(root: VBoxContainer) -> void:
 	_pref_progress = ProgressBar.new()
 	_pref_progress.indeterminate = true
 	_pref_progress.show_percentage = false
+	_pref_progress.custom_minimum_size = Vector2(0, 4)
 	_pref_progress.visible = false
 	box.add_child(_pref_progress)
 	_view = SchemaFormView.new()

@@ -56,8 +56,11 @@ static func adjust_volume(host: Node) -> void:
 	slider.accessibility_name = "Volume in decibels"
 	slider.custom_minimum_size = Vector2(0, 28)
 	SliderStyle.apply(slider)
-	slider.value_changed.connect(func(v: float) -> void: label.text = "%.1f dB" % v)
+	var chosen_db := [value]
+	slider.value_changed.connect(func(v: float) -> void:
+		chosen_db[0] = v
+		label.text = "%.1f dB" % v)
 	box.add_child(slider)
 	var chosen: Variant = await Dialogs.open(host, "Volume", box, ["Apply", "Cancel"], Vector2i(360, 0))
 	if chosen != null:
-		await Store.run("volume", {"value": slider.value})
+		await Store.run("volume", {"value": chosen_db[0]})

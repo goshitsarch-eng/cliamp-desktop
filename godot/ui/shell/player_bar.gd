@@ -11,7 +11,8 @@ const SPEEDS: Array[float] = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
 var _width := 1280.0
 var _narrow := false
 var _seek_preview := -1.0
-var _volume_preview := -1.0
+var _volume_preview := 0.0
+var _has_volume_preview := false
 var _seek_dragging := false
 var _volume_dragging := false
 var _updating := false
@@ -41,6 +42,8 @@ var _outer: VBoxContainer
 var _extras: Array[Control] = []
 var _wide_only: Array[Control] = []
 var _ticker: Timer
+var _seek_timer: Timer
+var _volume_timer: Timer
 var _buttons: Array[Button] = []
 
 
@@ -182,8 +185,24 @@ func _init() -> void:
 
 	_ticker = Timer.new()
 	_ticker.wait_time = 0.2
-	_ticker.timeout.connect(_refresh_position)
+	_ticker.timeout.connect(_on_ticker)
 	add_child(_ticker)
+
+	_seek_timer = Timer.new()
+	_seek_timer.one_shot = true
+	_seek_timer.wait_time = 0.12
+	_seek_timer.timeout.connect(func() -> void:
+		if _seek_preview >= 0.0:
+			_commit_seek(_seek_preview))
+	add_child(_seek_timer)
+
+	_volume_timer = Timer.new()
+	_volume_timer.one_shot = true
+	_volume_timer.wait_time = 0.12
+	_volume_timer.timeout.connect(func() -> void:
+		if _has_volume_preview:
+			_commit_volume(_volume_preview))
+	add_child(_volume_timer)
 
 
 func _ready() -> void:
@@ -285,7 +304,7 @@ func _refresh() -> void:
 	var fallback := "Add music to get started"
 	if not track.is_empty():
 		fallback = "Live stream" if track.get("realtime") == true else "Unknown artist"
-	_artist.text = Util.text(track.get("artist"), fallback)
+	_artist.text = Util.single_line(track.get("artist"), fallback)
 
 	var bookmarked: bool = track.get("bookmark") == true
 	Icons.set_glyph(_favorite, "favorite" if bookmarked else "favorite_border")
@@ -322,11 +341,11 @@ func _refresh() -> void:
 	_updating = true
 	_volume.min_value = floor_db
 	_volume.max_value = 6.0
-	if not _volume_dragging:
+	if not _volume_dragging and not _has_volume_preview:
 		_volume.set_value_no_signal(clampf(Util.number(s.get("volume")), floor_db, 6.0))
 	_updating = false
 	_volume.editable = connected
-	var shown := _volume.value if _volume_dragging else clampf(Util.number(s.get("volume")), floor_db, 6.0)
+	var shown := _volume.value if (_volume_dragging or _has_volume_preview) else clampf(Util.number(s.get("volume")), floor_db, 6.0)
 	var at_floor := shown <= floor_db
 	Icons.set_glyph(_volume_icon, "volume_off" if at_floor else "volume_up")
 	_volume_icon.tooltip_text = "Restore volume" if at_floor else "Minimum volume"
@@ -342,6 +361,13 @@ func _refresh() -> void:
 			_ticker.start()
 	else:
 		_ticker.stop()
+	_refresh_position()
+
+
+func _on_ticker() -> void:
+	var win := get_window()
+	if win != null and win.mode == Window.MODE_MINIMIZED:
+		return
 	_refresh_position()
 
 
@@ -361,20 +387,21 @@ func _refresh_position() -> void:
 func _on_seek_changed(value: float) -> void:
 	if _updating:
 		return
-	if _seek_dragging:
-		_seek_preview = value
-		_seek_time.text = Util.duration(value)
-	else:
-		# Keyboard adjustment: no drag, so commit directly.
-		_commit_seek(value)
+	_seek_preview = value
+	_seek_time.text = Util.duration(value)
+	if not _seek_dragging:
+		# Keyboard / wheel adjustment: debounce rapid ticks.
+		_seek_timer.start()
 
 
 func _on_seek_drag_ended(changed: bool) -> void:
 	_seek_dragging = false
+	_seek_timer.stop()
 	if changed:
 		_commit_seek(_seek.value)
 	else:
 		_seek_preview = -1.0
+		_refresh_position()
 
 
 func _commit_seek(value: float) -> void:
@@ -389,20 +416,25 @@ func _on_volume_changed(value: float) -> void:
 	if _updating:
 		return
 	_volume_preview = value
+	_has_volume_preview = true
 	if not _volume_dragging:
-		_commit_volume(value)
+		_volume_timer.start()
 
 
 func _on_volume_drag_ended(changed: bool) -> void:
 	_volume_dragging = false
+	_volume_timer.stop()
 	if changed:
 		_commit_volume(_volume.value)
+	else:
+		_has_volume_preview = false
+		_refresh()
 
 
 func _commit_volume(value: float) -> void:
 	await Store.run("volume", {"value": value})
 	if is_instance_valid(self):
-		_volume_preview = -1.0
+		_has_volume_preview = false
 		_refresh()
 
 

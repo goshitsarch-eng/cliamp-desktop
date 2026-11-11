@@ -70,7 +70,6 @@ func _init() -> void:
 	Store.filter_changed.connect(_on_filter_changed)
 	Store.search_submitted.connect(_on_search_submitted)
 	Store.focus_search_requested.connect(_on_focus_search)
-	Store.connection_changed.connect(_on_connection_changed)
 
 
 func activate() -> void:
@@ -144,11 +143,6 @@ func _on_provider_selected(index: int) -> void:
 		return
 	Store.provider = _populated_keys[index]
 	_load_browser()
-
-
-func _on_connection_changed() -> void:
-	if _active and Store.connected:
-		activate()
 
 
 # Shell search box

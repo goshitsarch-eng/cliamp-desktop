@@ -141,6 +141,7 @@ func finish_selecting() -> void:
 func _unhandled_key_input(event: InputEvent) -> void:
 	if _active and _selecting and event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		finish_selecting()
+		get_viewport().set_input_as_handled()
 
 
 # ---------------------------------------------------------------- Navigation
@@ -200,13 +201,15 @@ func _fetch(operation: String, params: Dictionary, kind := "tracks", append := f
 	var generation := _load_generation
 	var requested: Variant = Store.state.get("playlist_revision")
 	requested = int(requested) if requested is int or requested is float else null
-	var prev_marked_paths := {}
+	var prev_marked_entries: Array = []
 	if quiet and not append and _selecting:
-		for p: int in _marked.keys():
+		var sorted_marked := _marked.keys()
+		sorted_marked.sort()
+		for p: int in sorted_marked:
 			if p >= 0 and p < _items.size():
 				var mp := Util.text(LibraryLogic.track_of(_items[p], _kind).get("path"))
 				if not mp.is_empty():
-					prev_marked_paths[mp] = true
+					prev_marked_entries.append([p, mp])
 	var target_count := maxi(PAGE_LIMIT, _items.size()) if quiet and not append else PAGE_LIMIT
 	_request = operation
 	_params = params
@@ -217,6 +220,7 @@ func _fetch(operation: String, params: Dictionary, kind := "tracks", append := f
 		_items = []
 	if not append:
 		_marked.clear()
+		_anchor = -1
 	if page_id == "playlists" and not append:
 		_caps = {}
 		_caps_provider = ""
@@ -286,11 +290,21 @@ func _fetch(operation: String, params: Dictionary, kind := "tracks", append := f
 		_items.append_array(items)
 	else:
 		_items = items
-		if not prev_marked_paths.is_empty() and _selecting:
-			for idx in _items.size():
-				var mp := Util.text(LibraryLogic.track_of(_items[idx], _kind).get("path"))
-				if prev_marked_paths.has(mp):
-					_marked[idx] = true
+		if not prev_marked_entries.is_empty() and _selecting:
+			var unmatched: Array[String] = []
+			for entry: Array in prev_marked_entries:
+				var old_pos: int = entry[0]
+				var mp: String = entry[1]
+				if old_pos < _items.size() and not _marked.has(old_pos) \
+						and Util.text(LibraryLogic.track_of(_items[old_pos], _kind).get("path")) == mp:
+					_marked[old_pos] = true
+				else:
+					unmatched.append(mp)
+			for mp in unmatched:
+				for idx in _items.size():
+					if not _marked.has(idx) and Util.text(LibraryLogic.track_of(_items[idx], _kind).get("path")) == mp:
+						_marked[idx] = true
+						break
 	_total = int(Util.number(data.get("total"), _items.size()))
 	_sorts = Util.objects(data.get("sorts"))
 	if operation == "queue.list" or operation == "playnext.list":
@@ -826,7 +840,7 @@ func _menu_entries(pos: int) -> Array:
 	if _is_live():
 		if pos > 0:
 			entries.append(["up", "Move up"])
-		if pos < _items.size() - 1:
+		if pos < maxi(_items.size(), _total) - 1:
 			entries.append(["down", "Move down"])
 	if _is_live() or _can_remove_saved():
 		entries.append(["remove", "Remove from list"])
@@ -976,7 +990,7 @@ func _add_source() -> void:
 
 func _favorite(track: Dictionary) -> void:
 	if await _run("playlist.bookmark", {"provider": "local", "track": track}) != null:
-		if _kind == "tracks" or _kind == "history":
+		if _active and is_inside_tree() and (_kind == "tracks" or _kind == "history"):
 			await _refresh_list()
 
 
@@ -1009,7 +1023,7 @@ func _track_action(action: String, track: Dictionary, pos: int) -> void:
 				params["playlist"] = _collection
 			else:
 				params.merge(_revision())
-			if await _run(operation, params) != null:
+			if await _run(operation, params) != null and _active and is_inside_tree():
 				await _refresh_list()
 		"up", "down":
 			var to := index - 1 if action == "up" else index + 1
@@ -1017,7 +1031,7 @@ func _track_action(action: String, track: Dictionary, pos: int) -> void:
 				return
 			var params := {"index": index, "to": to}
 			params.merge(_revision())
-			if await _run("playnext.move" if next else "queue.move", params) != null:
+			if await _run("playnext.move" if next else "queue.move", params) != null and _active and is_inside_tree():
 				await _refresh_list()
 		"related", "artist":
 			await _open_track_provider(track, action)
@@ -1050,7 +1064,7 @@ func _undo() -> void:
 	if not _is_live() and (page_id != "playlists" or playlist.is_empty()):
 		return
 	var params := _revision() if _is_live() else {"provider": provider, "playlist": playlist}
-	if await _run("queue.undo" if _is_live() else "playlist.undo", params) != null and is_inside_tree():
+	if await _run("queue.undo" if _is_live() else "playlist.undo", params) != null and _active and is_inside_tree():
 		if not _is_live() and _playlist_list_undo.get(provider) == playlist:
 			_playlist_list_undo.erase(provider)
 		await _refresh_list()
@@ -1062,7 +1076,8 @@ func _clear_list() -> void:
 		return
 	var operation := "queue.clear" if page_id == "queue" else ("playnext.clear" if page_id == "next" else "history.clear")
 	await _run(operation, {} if page_id == "history" else _revision())
-	await _refresh_list()
+	if _active and is_inside_tree():
+		await _refresh_list()
 
 
 func _load_collection() -> void:
@@ -1098,13 +1113,13 @@ func _create_playlist() -> void:
 	if result != null and is_inside_tree():
 		if undoable:
 			_playlist_list_undo[provider] = Util.text(result.get("playlist"), playlist_name)
-		if page_id == "playlists" and Store.provider == provider:
+		if _active and page_id == "playlists" and Store.provider == provider:
 			await _refresh_list()
 
 
 func _playlist_tools() -> void:
 	var changed := await PlaylistToolsDialog.open(self, Store.provider, _collection)
-	if changed and is_inside_tree():
+	if changed and _active and is_inside_tree():
 		await _refresh_list()
 
 
@@ -1120,7 +1135,8 @@ func _playlist_action(action: String, item: Dictionary) -> void:
 				Store.navigate("queue")
 		"favorite":
 			await _run("provider.favorite", params)
-			await _refresh_list()
+			if _active and is_inside_tree():
+				await _refresh_list()
 		"rename":
 			var new_name: Variant = await Dialogs.prompt(self, "Rename playlist", "Playlist name", Util.text(item.get("name")), "", false, "Save", _name_validator())
 			if new_name == null:
@@ -1130,14 +1146,16 @@ func _playlist_action(action: String, item: Dictionary) -> void:
 			if await _run("playlist.rename", renamed) != null and is_inside_tree():
 				if undoable:
 					_playlist_list_undo[provider] = new_name
-				await _refresh_list()
+				if _active:
+					await _refresh_list()
 		"delete":
 			if await Dialogs.confirm(self, "Delete %s?" % Util.text(item.get("name")),
 					"This deletes the saved playlist. Your music files are kept.", "Delete") \
 					and await _run("playlist.delete", params) != null and is_inside_tree():
 				if undoable:
 					_playlist_list_undo[provider] = Util.text(item.get("id"))
-				await _refresh_list()
+				if _active:
+					await _refresh_list()
 
 
 func _batch_tracks(action: String) -> void:
@@ -1185,5 +1203,5 @@ func _batch_tracks(action: String) -> void:
 		var params := {"tracks": picked, "play": action == "replace"}
 		params.merge(_revision())
 		await _run("tracks.replace" if action == "replace" else "tracks.append", params)
-	if is_inside_tree():
+	if _active and is_inside_tree():
 		await _refresh_list()

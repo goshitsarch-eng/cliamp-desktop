@@ -7,6 +7,8 @@ const GRADIENTS: Array = [
 	["326b63", "253044"], ["675087", "293345"], ["86614c", "3e344c"], ["315b7e", "35444c"],
 ]
 const MAX_BYTES := 8 * 1024 * 1024
+const MAX_DIM := 256
+const MAX_CACHE := 200
 
 static var _cache: Dictionary = {}
 
@@ -17,6 +19,7 @@ var _texture: Texture2D
 var _canvas: Control
 var _request: HTTPRequest
 var _url := ""
+var _request_url := ""
 
 
 func _init(is_large := false, icon := "music_note") -> void:
@@ -51,10 +54,16 @@ func set_track(track: Dictionary) -> void:
 	_track = track
 	_texture = null
 	var url := Util.text(track.get("album_art_url"))
+	if url != _request_url and _request != null:
+		_request.cancel_request()
+		_request_url = ""
 	_url = url
+	if url.is_empty():
+		_canvas.queue_redraw()
+		return
 	if _cache.has(url):
 		_texture = _cache[url]
-	elif url.begins_with("http://") or url.begins_with("https://"):
+	elif ProviderAuth.is_http_url(url):
 		_fetch(url)
 	elif url.begins_with("file://"):
 		_load_file(url)
@@ -90,17 +99,25 @@ func _draw_art() -> void:
 
 
 func _fetch(url: String) -> void:
+	if url == _request_url and _request != null:
+		return
 	if _request == null:
 		_request = HTTPRequest.new()
 		_request.body_size_limit = MAX_BYTES
+		_request.timeout = 10.0
+		_request.max_redirects = 3
 		_request.request_completed.connect(_on_request_completed)
 		add_child(_request)
 	_request.cancel_request()
-	_request.request(url)
+	_request_url = url
+	if _request.request(url) != OK:
+		_request_url = ""
 
 
 func _on_request_completed(result: int, code: int, headers: PackedStringArray, body: PackedByteArray) -> void:
-	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+	var req_url := _request_url
+	_request_url = ""
+	if req_url.is_empty() or result != HTTPRequest.RESULT_SUCCESS or code != 200:
 		return
 	var image := Image.new()
 	var err := ERR_FILE_UNRECOGNIZED
@@ -117,22 +134,40 @@ func _on_request_completed(result: int, code: int, headers: PackedStringArray, b
 		if err != OK:
 			err = image.load_png_from_buffer(body)
 	if err == OK:
-		_store(_url, image)
+		_store(req_url, image)
 
 
 func _load_file(url: String) -> void:
 	var path := url.trim_prefix("file://").uri_decode()
 	if OS.get_name() == "Windows" and path.length() > 2 and path[0] == "/" and path[2] == ":":
 		path = path.substr(1)
+	if path.is_empty() or path.begins_with("//") or path.begins_with("\\\\"):
+		return
+	if not FileAccess.file_exists(path):
+		return
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return
+	var length := f.get_length()
+	f.close()
+	if length <= 0 or length > MAX_BYTES:
+		return
 	var image := Image.load_from_file(path)
-	if image != null:
+	if image != null and not image.is_empty():
 		_store(url, image)
 
 
 func _store(url: String, image: Image) -> void:
+	if url.is_empty() or image.is_empty():
+		return
+	var w := image.get_width()
+	var h := image.get_height()
+	if w > MAX_DIM or h > MAX_DIM:
+		var scale_factor := float(MAX_DIM) / float(maxi(w, h))
+		image.resize(maxi(1, roundi(w * scale_factor)), maxi(1, roundi(h * scale_factor)), Image.INTERPOLATE_BILINEAR)
 	var texture := ImageTexture.create_from_image(image)
-	if _cache.size() > 200:
-		_cache.clear()
+	while _cache.size() >= MAX_CACHE:
+		_cache.erase(_cache.keys()[0])
 	_cache[url] = texture
 	if url == _url:
 		_texture = texture

@@ -1,9 +1,9 @@
 name: Godot desktop
 on:
   push:
-    paths: ['godot/**', '**.go', 'go.mod', 'go.sum', '.github/workflows/godot.yml']
+    paths: ['godot/**', 'packaging/**', '**.go', 'go.mod', 'go.sum', '.github/workflows/godot.yml']
   pull_request:
-    paths: ['godot/**', '**.go', 'go.mod', 'go.sum', '.github/workflows/godot.yml']
+    paths: ['godot/**', 'packaging/**', '**.go', 'go.mod', 'go.sum', '.github/workflows/godot.yml']
   workflow_dispatch:
 
 permissions:
@@ -11,6 +11,7 @@ permissions:
 
 env:
   GODOT_VERSION: '4.7.2'
+  GODOT_TEMPLATES_SHA512: 'ca4d71c4d7b81dfc15d1a98baa07534aa95b03fdda78a0075b06672e1648d2e5f40980c9adc28d23e1b92e732ee7bf3461997aa804af74ec2fcd7a93ccb84079'
 
 jobs:
   desktop:
@@ -20,12 +21,18 @@ jobs:
         include:
           - os: ubuntu-24.04
             godot: Godot_v4.7.2-stable_linux.x86_64
+            archive: Godot_v4.7.2-stable_linux.x86_64.zip
+            sha512: 9aa00f7a605200940bce3027a567b782f49bd8e940dd06ae9e987bd65aee1b1467edd56ed84fcdcbdd44354bf613bdbb4e5d2913e925850368e150c59ed54c65
             templates_dir: ~/.local/share/godot/export_templates
           - os: macos-26
             godot: Godot_v4.7.2-stable_macos.universal
+            archive: Godot_v4.7.2-stable_macos.universal.zip
+            sha512: 38aa16e5bba2083941fc5b3e54be0089bd4cc35e32415f5b9fd9a8a6a7b9818255d44532ea8ef94b5aef56c4b407c2d634fa4f657e4ebe681ebbf59b7bac69ca
             templates_dir: ~/Library/Application Support/Godot/export_templates
           - os: windows-2025
             godot: Godot_v4.7.2-stable_win64
+            archive: Godot_v4.7.2-stable_win64.exe.zip
+            sha512: 83decd58fdf67b9d657958a1ae6bf1929c20785315a81effe245874cdc57acb709bf868e00778a96984338c1b29dafdb453c6847747694621c6ecf5da2259993
             templates_dir: ~/AppData/Roaming/Godot/export_templates
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -41,10 +48,24 @@ jobs:
           go-version-file: go.mod
       - name: Install Godot and export templates
         run: |
+          verify_sha512() {
+            local file="$1" expected="$2" actual
+            if command -v sha512sum >/dev/null 2>&1; then
+              actual="$(sha512sum "$file" | awk '{print $1}')"
+            else
+              actual="$(shasum -a 512 "$file" | awk '{print $1}')"
+            fi
+            if [ "$actual" != "$expected" ]; then
+              echo "SHA-512 mismatch for $file: got $actual, expected $expected" >&2
+              exit 1
+            fi
+          }
           base="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
           mkdir -p "$RUNNER_TEMP/godot"
-          curl -fsSL -o "$RUNNER_TEMP/godot.zip" "$base/${{ matrix.godot }}.zip"
+          curl -fsSL -o "$RUNNER_TEMP/godot.zip" "$base/${{ matrix.archive }}"
+          verify_sha512 "$RUNNER_TEMP/godot.zip" "${{ matrix.sha512 }}"
           curl -fsSL -o "$RUNNER_TEMP/templates.tpz" "$base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          verify_sha512 "$RUNNER_TEMP/templates.tpz" "$GODOT_TEMPLATES_SHA512"
           unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
           templates="${{ matrix.templates_dir }}"
           templates="${templates/#\~/$HOME}/${GODOT_VERSION}.stable"
@@ -110,9 +131,15 @@ jobs:
           mkdir -p "$RUNNER_TEMP/plugins" && cp plugins/auto-eq.lua "$RUNNER_TEMP/plugins/hello-eq.lua"
           python3 -m http.server 8765 --bind 127.0.0.1 --directory "$RUNNER_TEMP/plugins" &
           server=$!
-          sleep 1
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 50); do
+            if curl --noproxy 127.0.0.1 -fsSo /dev/null http://127.0.0.1:8765/hello-eq.lua; then
+              break
+            fi
+            sleep 0.1
+          done
+          curl --noproxy 127.0.0.1 -fsSo /dev/null http://127.0.0.1:8765/hello-eq.lua
           PLUGIN_URL=http://127.0.0.1:8765/hello-eq.lua "$GODOT" --headless --path godot res://tests/engine_plugins.tscn
-          kill "$server"
       - name: Save native development bundle
         uses: actions/upload-artifact@v7.0.1
         with:

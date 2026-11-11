@@ -33,6 +33,10 @@ var _error := ""
 var _notice := ""
 var _failed: Array[String] = []
 var _operations: Dictionary = {}
+var _item_rows: Array[Control] = []
+var _group_rows: Array[Control] = []
+var _empty_row: Control
+var _list_built := false
 
 var _search: LineEdit
 var _refresh_button: Button
@@ -71,7 +75,7 @@ func _init() -> void:
 	_progress = ProgressBar.new()
 	_progress.indeterminate = true
 	_progress.show_percentage = false
-	_progress.custom_minimum_size = Vector2(0, 2)
+	_progress.custom_minimum_size = Vector2(0, 4)
 	add_child(_progress)
 	_chrome = VBoxContainer.new()
 	add_child(_chrome)
@@ -106,6 +110,7 @@ func configure(provider: Dictionary, seed := {}, action := "") -> void:
 	_initial_action = action
 	_trail = []
 	_browse = {}
+	_busy = false
 	_search.text = ""
 	_filter = ""
 	_initialize()
@@ -120,7 +125,7 @@ func focus_search() -> void:
 func set_filter(text: String) -> void:
 	_filter = text.to_lower()
 	_search.text = text
-	_render_list()
+	_apply_list_filter()
 
 
 ## Enter in the shell search box.
@@ -189,7 +194,7 @@ func _initialize() -> void:
 	_items = []
 	_render()
 	var result := await Backend.call_op("provider.browse", {"provider": _provider_key()})
-	if generation != _generation:
+	if generation != _generation or not is_inside_tree():
 		return
 	if Backend.failed(result):
 		_loading = false
@@ -228,7 +233,7 @@ func _show(view: ProviderBrowse.View, push := true, append := false) -> void:
 	if append:
 		params["offset"] = _catalog_offset if view.operation == "provider.catalog" else _items.size()
 	var result := await Backend.call_op(view.operation, params)
-	if generation != _generation:
+	if generation != _generation or not is_inside_tree():
 		return
 	if Backend.failed(result):
 		_loading = false
@@ -266,7 +271,7 @@ func _read_listening(generation: int, tracks: Array[Dictionary]) -> void:
 	if tracks.is_empty():
 		return
 	var result := await Backend.call_op("provider.playback_state", {"provider": _owner(), "tracks": tracks})
-	if generation != _generation:
+	if generation != _generation or not is_inside_tree():
 		return
 	if Backend.failed(result):
 		# Older engines can omit the optional listening-state operation.
@@ -278,6 +283,7 @@ func _read_listening(generation: int, tracks: Array[Dictionary]) -> void:
 	var merged := Util.object(_response.get("listening")).duplicate()
 	merged.merge(Util.object(result.get("listening")), true)
 	_response["listening"] = merged
+	_list_built = false
 	_render_list()
 
 
@@ -295,6 +301,9 @@ func _action(operation: String, params := {}) -> Variant:
 	call_params.merge(params, true)
 	if changes:
 		var snapshot := await Backend.snapshot()
+		if not is_inside_tree():
+			_busy = false
+			return null
 		if Backend.failed(snapshot):
 			_busy = false
 			_error = snapshot["error"]["message"]
@@ -303,6 +312,8 @@ func _action(operation: String, params := {}) -> Variant:
 		call_params["if_revision"] = snapshot.get("playlist_revision", 0)
 	var result := await Backend.call_op(operation, call_params)
 	_busy = false
+	if not is_inside_tree():
+		return null
 	if Backend.failed(result):
 		_error = result["error"]["message"]
 		_render()
@@ -392,7 +403,7 @@ func _refresh() -> void:
 
 func _on_search_changed(text: String) -> void:
 	_filter = text.to_lower()
-	_render_list()
+	_apply_list_filter()
 
 
 func _search_provider(query: String) -> void:
@@ -403,14 +414,14 @@ func _search_provider(query: String) -> void:
 			await _show(ProviderBrowse.View.new("provider.catalog.search", "playlists", "%s catalog" % kind_word if q.is_empty() else "%s search" % kind_word, {"query": q}))
 		"clear":
 			_filter = ""
-			_render_list()
+			_apply_list_filter()
 		"genres":
 			await _show(ProviderBrowse.View.new("provider.genres", "genres", "Search " + _view.title.to_lower(), _merged(_view.params, {"query": q})))
 		"search":
 			await _show(ProviderBrowse.View.new("provider.search", "tracks", "Search results", {"query": q}))
 		_:
 			_filter = query.to_lower()
-			_render_list()
+			_apply_list_filter()
 
 
 func _change_sort(value: String) -> void:
@@ -449,6 +460,7 @@ func _pin_genre(genre: Dictionary) -> void:
 	var result = await _action("provider.genre.favorite", params)
 	if result != null:
 		genre["favorite"] = result.get("favorite") == true
+		_list_built = false
 		_render_list()
 
 
@@ -577,6 +589,8 @@ func _play_visible_tracks(track: Dictionary) -> void:
 	_render()
 	var failure := await _replace_with_visible(track)
 	_busy = false
+	if not is_inside_tree():
+		return
 	_error = failure
 	_render()
 	if failure.is_empty():
@@ -595,6 +609,8 @@ func _replace_with_visible(track: Dictionary) -> String:
 		params["offset"] = all.size()
 		params["limit"] = 100
 		var next := await Backend.call_op(view.operation, params)
+		if not is_inside_tree():
+			return "Canceled."
 		if Backend.failed(next):
 			return next["error"]["message"]
 		var page := Util.objects(next.get("tracks"))
@@ -612,6 +628,8 @@ func _replace_with_visible(track: Dictionary) -> String:
 	if visible.size() > 1000:
 		return "This selection exceeds the player's track-batch limit. Use Play collection to load the complete source."
 	var snapshot := await Backend.snapshot()
+	if not is_inside_tree():
+		return "Canceled."
 	if Backend.failed(snapshot):
 		return snapshot["error"]["message"]
 	var replaced := await Backend.call_op("tracks.replace", {
@@ -620,6 +638,8 @@ func _replace_with_visible(track: Dictionary) -> String:
 		"index": selected,
 		"if_revision": snapshot.get("playlist_revision", 0),
 	})
+	if not is_inside_tree():
+		return "Canceled."
 	if Backend.failed(replaced):
 		return replaced["error"]["message"]
 	return ""
@@ -669,6 +689,7 @@ func _render() -> void:
 	_refresh_button.accessibility_name = _refresh_button.tooltip_text
 	_refresh_button.disabled = _busy or _loading
 	_progress.modulate.a = 1.0 if _loading or _busy else 0.0
+	_list_built = false
 	_render_routes()
 	_render_chrome()
 	_render_list()
@@ -720,11 +741,27 @@ func _render_footer() -> void:
 		_footer.disabled = _loading
 
 
+func _visible_indices() -> PackedInt32Array:
+	if not _pinned_only:
+		return Fuzzy.rank(_filter, _items, ProviderBrowse.filter_text)
+	var pool: Array[Dictionary] = []
+	var map := PackedInt32Array()
+	for i in _items.size():
+		if _items[i].get("favorite") == true:
+			pool.append(_items[i])
+			map.append(i)
+	var ranked := Fuzzy.rank(_filter, pool, ProviderBrowse.filter_text)
+	var out := PackedInt32Array()
+	for r in ranked:
+		out.append(map[r])
+	return out
+
+
 func _visible_items() -> Array[Dictionary]:
-	var pool: Array = _items
-	if _pinned_only:
-		pool = _items.filter(func(item: Dictionary) -> bool: return item.get("favorite") == true)
-	return ProviderBrowse.filtered(pool, _filter)
+	var out: Array[Dictionary] = []
+	for i in _visible_indices():
+		out.append(_items[i])
+	return out
 
 
 func _narrowed() -> bool:
@@ -733,27 +770,75 @@ func _narrowed() -> bool:
 
 func _render_list() -> void:
 	_clear(_list)
+	_item_rows.clear()
+	_group_rows.clear()
+	_empty_row = null
+	_list_built = false
 	if _loading:
 		return
 	if _items.is_empty():
 		_list.add_child(_empty(false))
 		return
-	var items := _visible_items()
-	if items.is_empty():
-		_list.add_child(_empty(_narrowed()))
-		return
 	if _is_tracks():
 		var listening := Util.object(_response.get("listening"))
-		for track in items:
-			_list.add_child(_track_row(track, listening))
+		for track in _items:
+			var row := _track_row(track, listening)
+			_item_rows.append(row)
+			_list.add_child(row)
 	else:
-		var previous := ""
-		for item in items:
-			var group := ProviderBrowse.group_of(item)
+		for item in _items:
+			var row := _collection_row(item)
+			_item_rows.append(row)
+			_list.add_child(row)
+	_list_built = true
+	_apply_list_filter()
+
+
+func _apply_list_filter() -> void:
+	if not _list_built or _item_rows.size() != _items.size():
+		_render_list()
+		return
+	var indices := _visible_indices()
+	for row in _item_rows:
+		row.visible = false
+	for hdr in _group_rows:
+		hdr.visible = false
+	if indices.is_empty():
+		if _empty_row != null:
+			_list.remove_child(_empty_row)
+			_empty_row.queue_free()
+		_empty_row = _empty(_narrowed())
+		_list.add_child(_empty_row)
+		return
+	if _empty_row != null:
+		_list.remove_child(_empty_row)
+		_empty_row.queue_free()
+		_empty_row = null
+	var order := 0
+	var group_used := 0
+	var previous := ""
+	var is_tracks := _is_tracks()
+	for idx in indices:
+		if not is_tracks:
+			var group := ProviderBrowse.group_of(_items[idx])
 			if not group.is_empty() and group != previous:
-				_list.add_child(_group_header(group))
+				var hdr: Control
+				if group_used < _group_rows.size():
+					hdr = _group_rows[group_used]
+					(hdr.get_child(0) as Label).text = group.to_upper()
+				else:
+					hdr = _group_header(group)
+					_group_rows.append(hdr)
+					_list.add_child(hdr)
+				hdr.visible = true
+				_list.move_child(hdr, order)
+				order += 1
+				group_used += 1
 			previous = group
-			_list.add_child(_collection_row(item))
+		var row := _item_rows[idx]
+		row.visible = true
+		_list.move_child(row, order)
+		order += 1
 
 
 func _palette() -> Palette:
@@ -906,7 +991,7 @@ func _filter_toolbar(sorts: Array[Dictionary]) -> Control:
 		pinned.accessibility_name = "Pinned only"
 		pinned.toggled.connect(func(on: bool) -> void:
 			_pinned_only = on
-			_render_list())
+			_apply_list_filter())
 		flow.add_child(pinned)
 	if not sorts.is_empty():
 		var picker := OptionButton.new()

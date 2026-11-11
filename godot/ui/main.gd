@@ -187,6 +187,26 @@ func _on_resized() -> void:
 	_topbar.set_width(size.x)
 	_player.set_width(size.x)
 	_was_compact = compact
+	_sync_spectrum_wanted()
+
+
+func _notification(what: int) -> void:
+	if what in [
+		NOTIFICATION_WM_WINDOW_FOCUS_IN,
+		NOTIFICATION_WM_WINDOW_FOCUS_OUT,
+		NOTIFICATION_APPLICATION_FOCUS_IN,
+		NOTIFICATION_APPLICATION_FOCUS_OUT,
+		NOTIFICATION_VISIBILITY_CHANGED,
+	]:
+		_sync_spectrum_wanted()
+
+
+func _sync_spectrum_wanted() -> void:
+	var win := get_window()
+	var minimized := win != null and win.mode == Window.MODE_MINIMIZED
+	var wanted := Store.connected and Store.is_playing() and not minimized and not _compact_player \
+		and (Store.current_page == "equalizer" or (Store.current_page == "queue" and size.x > LibraryPage.WIDE_SPECTRUM))
+	Backend.set_spectrum_wanted(wanted)
 
 
 # Pages
@@ -215,6 +235,7 @@ func _show_page_node(page_id: String) -> void:
 	if Store.connected:
 		_page_active = true
 		page.activate()
+	_sync_spectrum_wanted()
 
 
 func _page_for(page_id: String) -> Page:
@@ -288,6 +309,7 @@ func _refresh_chrome() -> void:
 		_connection_view.configure("power_off", "Let's reconnect your player",
 			"The audio engine could not be reached. Check that the Cliamp engine is installed beside the app, then retry.",
 			"Retry connection", Callable(Store, "start"))
+	_sync_spectrum_wanted()
 
 
 func _refresh_compact() -> void:
@@ -302,6 +324,7 @@ func set_compact_player(value: bool) -> void:
 	_library.visible = not value
 	_compact_view.visible = value
 	_refresh_compact()
+	_sync_spectrum_wanted()
 
 
 func _focus_search() -> void:
@@ -328,7 +351,7 @@ func open_command_palette() -> void:
 		["Volume up", "%s+Up" % mod, func() -> void: Store.run("volume.adjust", {"value": 1})],
 		["Volume down", "%s+Down" % mod, func() -> void: Store.run("volume.adjust", {"value": -1})],
 		["Add files, folder, or URL", "%s+O" % mod, add_source],
-		["Search this view", "%s+F" % mod, _focus_search],
+		["Search this view", "%s+F" % mod, func() -> void: Store.focus_search_requested.emit()],
 		["Download playing track", "%s+S" % mod, ShellActions.download],
 		["Undo playlist / queue edit", "%s+Z" % mod, _undo],
 		["Compact player", "%s+X" % mod, func() -> void: set_compact_player(not _compact_player)],
@@ -419,10 +442,12 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	elif key.keycode == KEY_ESCAPE and plain:
 		if _active != null and _page_active and _active.handles_escape():
 			return
-		if _topbar.has_text() or not Store.filter.is_empty():
+		if _compact_player:
+			set_compact_player(false)
+			get_viewport().set_input_as_handled()
+		elif _topbar.has_text() or not Store.filter.is_empty():
 			_topbar.clear_search()
-		set_compact_player(false)
-		get_viewport().set_input_as_handled()
+			get_viewport().set_input_as_handled()
 
 
 ## Runs a plugin binding for the pressed combination. Returns true when handled.

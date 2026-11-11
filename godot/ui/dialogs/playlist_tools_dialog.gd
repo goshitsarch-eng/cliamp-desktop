@@ -35,7 +35,7 @@ static func open(host: Node, provider_key: String, playlist_id: String) -> bool:
 	var content := PlaylistToolsDialog.new()
 	content.provider = provider_key
 	content.playlist = playlist_id
-	await Dialogs.open(host, "Manage " + playlist_id, content, ["Done"], Vector2i(720, 540))
+	await Dialogs.open(host, "Manage " + Util.single_line(playlist_id), content, ["Done"], Vector2i(720, 540))
 	return content._changed
 
 
@@ -112,6 +112,19 @@ func _refresh() -> void:
 			if page != null:
 				_tracks = Util.objects(page.get("tracks"))
 				_total = int(Util.number(page.get("total"), _tracks.size()))
+				if _total == 0:
+					_page_offset = 0
+				elif _page_offset >= _total:
+					_page_offset = maxi(0, ((_total - 1) / PAGE) * PAGE)
+					var clamped := _target()
+					clamped["offset"] = _page_offset
+					clamped["limit"] = PAGE
+					var refetched: Variant = await _call("provider.tracks", clamped)
+					if _closed or generation != _generation:
+						return
+					if refetched != null:
+						_tracks = Util.objects(refetched.get("tracks"))
+						_total = int(Util.number(refetched.get("total"), _tracks.size()))
 	_set_busy(false)
 	_render()
 
@@ -260,10 +273,10 @@ func _render_tracks(muted: Color) -> void:
 		row.add_child(text)
 		if not sourced:
 			var up := Icons.button("arrow_upward", "Move track up", _move_track.bind(index, -1), 16)
-			up.disabled = _busy or _page_offset + index == 0
+			up.disabled = _busy or not _can_move(index, -1)
 			row.add_child(up)
 			var down := Icons.button("arrow_downward", "Move track down", _move_track.bind(index, 1), 16)
-			down.disabled = _busy or _page_offset + index == _total - 1
+			down.disabled = _busy or not _can_move(index, 1)
 			row.add_child(down)
 		list.add_child(row)
 	_body.add_child(scroll)
@@ -311,6 +324,14 @@ func _sort_tracks() -> void:
 	await _write("playlist.sort", {"sort": _sort})
 
 
+func _can_move(from: int, step: int) -> bool:
+	var to := from + step
+	while to >= 0 and to < _tracks.size() and _tracks[to].get("dir_sourced") == true:
+		to += step
+	var target := _page_offset + to
+	return target >= 0 and target < _total
+
+
 func _move_track(from: int, step: int) -> void:
 	var to := from + step
 	while to >= 0 and to < _tracks.size() and _tracks[to].get("dir_sourced") == true:
@@ -322,5 +343,6 @@ func _move_track(from: int, step: int) -> void:
 
 
 func _change_page(direction: int) -> void:
-	_page_offset = clampi(_page_offset + PAGE * direction, 0, _total)
+	var max_offset := maxi(0, ((_total - 1) / PAGE) * PAGE) if _total > 0 else 0
+	_page_offset = clampi(_page_offset + PAGE * direction, 0, max_offset)
 	_refresh()

@@ -144,7 +144,7 @@ func _init() -> void:
 
 	_timer = Timer.new()
 	_timer.wait_time = 0.25
-	_timer.timeout.connect(_update_active)
+	_timer.timeout.connect(_on_timer)
 	add_child(_timer)
 
 	Store.state_changed.connect(_on_state)
@@ -192,6 +192,7 @@ func _on_state(_state: Dictionary) -> void:
 		_load()
 		return
 	_update_controls()
+	_sync_timer()
 	_update_active()
 
 
@@ -253,11 +254,24 @@ func _rebuild() -> void:
 		_buttons.append(node)
 	_style_lines()
 	_update_controls()
+	_sync_timer()
 	if _synced and _is_active:
-		_timer.start()
 		_update_active()
+
+
+func _sync_timer() -> void:
+	if _synced and _is_active and Store.is_playing():
+		if _timer.is_stopped():
+			_timer.start()
 	else:
 		_timer.stop()
+
+
+func _on_timer() -> void:
+	var win := get_window()
+	if win != null and win.mode == Window.MODE_MINIMIZED:
+		return
+	_update_active()
 
 
 func _style_lines() -> void:

@@ -227,12 +227,19 @@ func conflict_not_retried() -> void:
 
 func hostile_path_single_argument() -> void:
 	var l := FakeLauncher.new()
+	var seen: Array = []
+	l.on_command = func(p: FakeProc) -> bool:
+		if p.args.has("call"):
+			seen.append(p)
+		return false
 	var b := backend_for(l, {"executable": "/opt/Player App/cliamp"})
 	var path := "/music/a \"quoted\" song; $(touch nope).flac"
 	await b.call_op("queue", {"path": path})
-	var call: Array = l.commands.filter(func(c: Array) -> bool: return c.has("call"))[0]
-	ok(call.size() == 5, "five arguments")
-	ok(JSON.parse_string(call[3]) == {"path": path}, "params are one JSON argument")
+	var proc: FakeProc = seen[0]
+	ok(Array(proc.args) == ["remote", "call", "--params-line", "--", "queue"], "params passed on stdin, not argv")
+	ok(proc.input_lines.size() == 1 and JSON.parse_string(proc.input_lines[0]) == {"path": path}, "params are one JSON stdin line")
+	var bad: Dictionary = await b.call_op("--help", {})
+	ok(bad.get("error", {}).get("code") == "invalid_request", "invalid operation name rejected")
 	await b.close()
 	b.queue_free()
 
@@ -282,12 +289,20 @@ func spectrum_doubles() -> void:
 	var l := FakeLauncher.new()
 	var b := backend_for(l)
 	var got: Array = []
+	var lost: Array = []
 	b.spectrum_received.connect(func(v: PackedFloat32Array) -> void: got.append(v))
+	b.connection_lost.connect(func(e: Dictionary) -> void: lost.append(e))
 	await b.connect_engine()
 	await eventually(func() -> bool: return not l.spectrum_procs.is_empty(), "spectrum stream")
 	l.spectrum_procs[0].line({"ok": true, "bands": [0, 0.2, 1]})
 	await eventually(func() -> bool: return not got.is_empty(), "frame received")
 	ok(got[0] == PackedFloat32Array([0.0, 0.2, 1.0]), "bands as floats")
+	b.set_spectrum_wanted(false)
+	await get_tree().process_frame
+	ok(l.spectrum_procs[0].killed, "spectrum stream stopped when unwanted")
+	ok(lost.is_empty() and b.connected, "stopping spectrum does not trigger reconnect")
+	b.set_spectrum_wanted(true)
+	await eventually(func() -> bool: return l.spectrum_procs.size() == 2, "spectrum stream resumed on demand")
 	await b.close()
 	b.queue_free()
 
@@ -380,30 +395,26 @@ func restart_refused_when_not_owned() -> void:
 
 func large_params_spilled_to_file() -> void:
 	var l := FakeLauncher.new()
-	var seen_file := [""]
-	var file_text := [""]
+	var seen: Array = []
 	l.on_command = func(p: FakeProc) -> bool:
-		var idx := p.args.find("--params-file")
-		if idx >= 0 and idx + 1 < p.args.size():
-			seen_file[0] = p.args[idx + 1]
-			file_text[0] = FileAccess.get_file_as_string(seen_file[0])
+		if p.args.has("--params-line"):
+			seen.append(p)
 			p.finish_json(FakeLauncher.envelope({"job": {"id": "big-1", "state": "succeeded", "result": {"ok": true}}}))
 			return true
 		return false
 	var b := backend_for(l)
 	var big := "x".repeat(9000)
 	var r: Dictionary = await b.call_op("tracks.replace", {"note": big})
-	ok(not Backend.failed(r), "spilled call succeeded")
-	ok(not seen_file[0].is_empty(), "--params-file used for >8KB payload")
-	ok(JSON.parse_string(file_text[0]) == {"note": big}, "spilled JSON matches payload")
-	ok(not FileAccess.file_exists(seen_file[0]), "temporary params file deleted after call")
+	ok(not Backend.failed(r), "large stdin call succeeded")
+	ok(seen.size() == 1 and not seen[0].args.has("--params-file"), "--params-line used without temp file")
+	ok(seen[0].input_lines.size() == 1 and JSON.parse_string(seen[0].input_lines[0]) == {"note": big}, "stdin JSON matches payload")
 	await b.close()
 	b.queue_free()
 
 
 func restart_owned_preserves_queue() -> void:
 	var l := FakeLauncher.new()
-	var restored_ops: Array = []
+	var restored_procs: Array = []
 	var new_rev := [0]
 	l.on_command = func(p: FakeProc) -> bool:
 		if p.args.size() > 1 and p.args[1] == "state":
@@ -438,8 +449,7 @@ func restart_owned_preserves_queue() -> void:
 					"ok": true, "total": 1, "tracks": [{"path": "/tmp/a.wav", "title": "A", "index": 0}],
 				}}}))
 				return true
-			var params: Variant = JSON.parse_string(p.args[3]) if p.args.size() > 4 and p.args[2] == "--params" else {}
-			restored_ops.append([op, params])
+			restored_procs.append([op, p])
 			new_rev[0] += 1
 			p.finish_json(FakeLauncher.envelope({"job": {"id": "r-%d" % new_rev[0], "state": "succeeded", "result": {"ok": true}}}))
 			return true
@@ -449,7 +459,7 @@ func restart_owned_preserves_queue() -> void:
 	var r: Dictionary = await b.restart_owned_engine()
 	ok(not Backend.failed(r), "owned engine restarted")
 	ok(l.daemons.size() == 2, "second daemon started")
-	var names := restored_ops.map(func(x: Array) -> String: return x[0])
+	var names := restored_procs.map(func(x: Array) -> String: return x[0])
 	ok(names == ["repeat", "shuffle", "tracks.replace", "queue.enqueue", "queue.play", "seek.absolute"], "restored runtime state in order (got %s)" % str(names))
 	await b.close()
 	b.queue_free()
