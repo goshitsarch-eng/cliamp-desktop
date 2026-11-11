@@ -93,7 +93,7 @@ func validateNewName(name string) error {
 func (p *Provider) lock() (func(), error) {
 	p.mu.Lock()
 	path := p.dir + ".lock"
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		p.mu.Unlock()
 		return nil, fmt.Errorf("creating config dir: %w", err)
 	}
@@ -288,7 +288,7 @@ func (p *Provider) AddTracks(playlistName string, tracks []playlist.Track) (adde
 		return 0, 0, err
 	}
 	defer unlock()
-	if err := os.MkdirAll(p.dir, 0o755); err != nil {
+	if err := os.MkdirAll(p.dir, 0o700); err != nil {
 		return 0, 0, err
 	}
 	path, err := p.safePath(playlistName)
@@ -358,7 +358,7 @@ func (p *Provider) PrependTracks(playlistName string, tracks []playlist.Track) (
 		return 0, 0, 0, err
 	}
 	defer unlock()
-	if err := os.MkdirAll(p.dir, 0o755); err != nil {
+	if err := os.MkdirAll(p.dir, 0o700); err != nil {
 		return 0, 0, 0, fmt.Errorf("creating playlist dir: %w", err)
 	}
 	path, err := p.safePath(playlistName)
@@ -461,17 +461,22 @@ func (p *Provider) CreatePlaylist(_ context.Context, name string) (string, error
 	if err := writable(name); err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(p.dir, 0o755); err != nil {
+	if err := validateNewName(name); err != nil {
 		return "", err
 	}
-	if err := validateNewName(name); err != nil {
+	unlock, err := p.lock()
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
+	if err := os.MkdirAll(p.dir, 0o700); err != nil {
 		return "", err
 	}
 	path, err := p.safePath(name)
 	if err != nil {
 		return "", err
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			return "", fmt.Errorf("playlist %q already exists", name)
@@ -492,9 +497,6 @@ func (p *Provider) CreateDirPlaylist(name string, dirs []string) error {
 	if err := writable(name); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(p.dir, 0o755); err != nil {
-		return fmt.Errorf("creating playlist dir: %w", err)
-	}
 	if err := validateNewName(name); err != nil {
 		return err
 	}
@@ -502,6 +504,14 @@ func (p *Provider) CreateDirPlaylist(name string, dirs []string) error {
 		if err := validateDirSource(dir); err != nil {
 			return err
 		}
+	}
+	unlock, err := p.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := os.MkdirAll(p.dir, 0o700); err != nil {
+		return fmt.Errorf("creating playlist dir: %w", err)
 	}
 	path, err := p.safePath(name)
 	if err != nil {
@@ -521,14 +531,25 @@ func (p *Provider) CreateDirPlaylist(name string, dirs []string) error {
 		writeDir(&b, playlist.DirSource{Path: dir, Recursive: true})
 	}
 
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(b.String()), 0o644); err != nil {
+	tmpFile, err := os.CreateTemp(p.dir, ".playlist-*.tmp")
+	if err != nil {
+		return fmt.Errorf("writing playlist %q: %w", name, err)
+	}
+	tmp := tmpFile.Name()
+	_ = tmpFile.Chmod(0o600)
+	if _, err := tmpFile.WriteString(b.String()); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmp)
+		return fmt.Errorf("writing playlist %q: %w", name, err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmp)
 		return fmt.Errorf("writing playlist %q: %w", name, err)
 	}
 	// Link is atomic and fails when the final path already exists, preserving
 	// the create-only semantics without a partial-write window.
 	if err := os.Link(tmp, path); err != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		if errors.Is(err, fs.ErrExist) {
 			return fmt.Errorf("playlist %q already exists", name)
 		}
@@ -555,7 +576,7 @@ func (p *Provider) AddDirSources(name string, dirs []string) ([]string, error) {
 		return nil, err
 	}
 	defer unlock()
-	if err := os.MkdirAll(p.dir, 0o755); err != nil {
+	if err := os.MkdirAll(p.dir, 0o700); err != nil {
 		return nil, fmt.Errorf("creating playlist dir: %w", err)
 	}
 	path, err := p.safePath(name)
@@ -715,7 +736,7 @@ func (p *Provider) SetDirRecursive(name, dir string, recursive bool) error {
 // The full document is rendered in memory before the atomic rename so a
 // partial write can never clobber the existing playlist.
 func (p *Provider) saveDoc(name string, doc *playlistDoc) error {
-	if err := os.MkdirAll(p.dir, 0o755); err != nil {
+	if err := os.MkdirAll(p.dir, 0o700); err != nil {
 		return fmt.Errorf("creating playlist dir: %w", err)
 	}
 	path, err := p.safePath(name)
@@ -746,7 +767,7 @@ func (p *Provider) saveDoc(name string, doc *playlistDoc) error {
 		sections++
 	}
 
-	if err := fileutil.WriteFileAtomicInExistingDir(path, []byte(b.String()), 0o644); err != nil {
+	if err := fileutil.WriteFileAtomicInExistingDir(path, []byte(b.String()), 0o600); err != nil {
 		return fmt.Errorf("saving playlist %q: %w", name, err)
 	}
 	return nil
@@ -777,7 +798,7 @@ func (p *Provider) Exists(name string) bool {
 // Tracks marked DirSourced are not persisted; they are re-derived from the
 // directory sources on the next load.
 func (p *Provider) savePlaylist(name string, tracks []playlist.Track) error {
-	if err := os.MkdirAll(p.dir, 0o755); err != nil {
+	if err := os.MkdirAll(p.dir, 0o700); err != nil {
 		return fmt.Errorf("creating playlist dir: %w", err)
 	}
 
@@ -1078,14 +1099,14 @@ func (p *Provider) RestorePlaylistDocument(name string, data []byte) error {
 		return err
 	}
 	defer unlock()
-	if err := os.MkdirAll(p.dir, 0o755); err != nil {
+	if err := os.MkdirAll(p.dir, 0o700); err != nil {
 		return fmt.Errorf("creating playlist dir: %w", err)
 	}
 	path, err := p.safePath(name)
 	if err != nil {
 		return err
 	}
-	if err := fileutil.WriteFileAtomicInExistingDir(path, data, 0o644); err != nil {
+	if err := fileutil.WriteFileAtomicInExistingDir(path, data, 0o600); err != nil {
 		return fmt.Errorf("replacing playlist %q: %w", name, err)
 	}
 	return nil

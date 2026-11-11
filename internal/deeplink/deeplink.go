@@ -337,7 +337,7 @@ var dangerousTrackSchemes = map[string]bool{
 // link probe for files through decode behavior.
 func AllowsTrackPath(path string) bool {
 	path = strings.TrimSpace(path)
-	if path == "" || strings.HasPrefix(path, "-") {
+	if path == "" || strings.HasPrefix(path, "-") || strings.HasPrefix(path, `\\`) || strings.HasPrefix(path, "//") {
 		return false
 	}
 	if err := rejectUnprintable("track path", path); err != nil {
@@ -361,6 +361,9 @@ func AllowsTrackPath(path string) bool {
 func validateProvider(provider string) error {
 	if provider == "" {
 		return errors.New("cliamp URI is missing the provider parameter")
+	}
+	if provider == "local" {
+		return errors.New("provider \"local\" is not allowed in a cliamp:// link")
 	}
 	if len(provider) > maxProviderLen {
 		return fmt.Errorf("provider name is too long (%d bytes, limit %d)", len(provider), maxProviderLen)

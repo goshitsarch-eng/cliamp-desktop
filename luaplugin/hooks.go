@@ -55,6 +55,7 @@ const (
 type luaHook struct {
 	plugin *Plugin
 	fn     *lua.LFunction
+	desc   string
 }
 
 // callBuilder returns the Lua function to call and its arguments. call runs
@@ -90,13 +91,20 @@ const renderLabel = "render"
 // each frame, so it logs only its first error and its first timeout while the
 // plugin is loaded. Otherwise a render that fails on some frames fills
 // plugins.log. A timeout error names the limit.
-func (m *Manager) callLocked(parent context.Context, p *Plugin, label string, timeout time.Duration, nret int, build callBuilder) (lua.LValue, error) {
+func (m *Manager) callLocked(parent context.Context, p *Plugin, label string, timeout time.Duration, nret int, build callBuilder) (retVal lua.LValue, retErr error) {
 	if p.closed {
 		return lua.LNil, errClosed
 	}
 	if parent.Err() != nil {
 		return lua.LNil, context.Cause(parent)
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			retVal = lua.LNil
+			retErr = fmt.Errorf("panic: %v", r)
+			m.logHookErr(p.installName, label, retErr)
+		}
+	}()
 	fn, args := build(p.L)
 	if fn == nil {
 		return lua.LNil, nil

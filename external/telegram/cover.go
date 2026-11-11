@@ -102,11 +102,11 @@ func (p *Provider) extractCoverFromFile(chat string, msgID int, flacPath string)
 			extension = ".png"
 		}
 		dir := filepath.Join(p.cacheDir, safeChat(chat))
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return
 		}
 		path := filepath.Join(dir, cfgName(msgID, extension))
-		if err := os.WriteFile(path, picture.Data, 0o644); err != nil {
+		if err := os.WriteFile(path, picture.Data, 0o600); err != nil {
 			return
 		}
 		return

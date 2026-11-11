@@ -224,7 +224,7 @@ func (s *Store) saveLocked(entries []Entry) error {
 	// WriteFileAtomic uses a unique temp file per write and fsyncs before
 	// renaming, so a crash or a second process can never leave a torn or
 	// half-clobbered favorites.toml behind.
-	return fileutil.WriteFileAtomic(s.path, []byte(b.String()), 0o644)
+	return fileutil.WriteFileAtomic(s.path, []byte(b.String()), 0o600)
 }
 
 func writeEntry(w io.Writer, e Entry) {

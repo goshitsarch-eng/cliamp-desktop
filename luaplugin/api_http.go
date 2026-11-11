@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -22,6 +23,35 @@ import (
 // any plugin runs.
 var allowedPrivateAddrs atomic.Pointer[map[string]bool]
 
+var nonPublicPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("0.0.0.0/8"),
+	netip.MustParsePrefix("100.64.0.0/10"),
+	netip.MustParsePrefix("192.0.0.0/24"),
+	netip.MustParsePrefix("192.0.2.0/24"),
+	netip.MustParsePrefix("198.18.0.0/15"),
+	netip.MustParsePrefix("198.51.100.0/24"),
+	netip.MustParsePrefix("203.0.113.0/24"),
+	netip.MustParsePrefix("240.0.0.0/4"),
+	netip.MustParsePrefix("64:ff9b::/96"),
+	netip.MustParsePrefix("64:ff9b:1::/48"),
+	netip.MustParsePrefix("100::/64"),
+	netip.MustParsePrefix("2001:db8::/32"),
+}
+
+func isNonPublicAddr(addr netip.Addr) bool {
+	u := addr.Unmap()
+	if u.IsLoopback() || u.IsPrivate() || u.IsLinkLocalUnicast() ||
+		u.IsLinkLocalMulticast() || u.IsMulticast() || u.IsUnspecified() {
+		return true
+	}
+	for _, pfx := range nonPublicPrefixes {
+		if pfx.Contains(u) {
+			return true
+		}
+	}
+	return false
+}
+
 // ssrfGuard rejects connections to non-public addresses. It runs as the
 // dialer's Control hook, so it sees the resolved IP for every connection
 // attempt, including ones reached via HTTP redirects or DNS rebinding. An
@@ -31,16 +61,16 @@ func ssrfGuard(network, address string, _ syscall.RawConn) error {
 	if err != nil {
 		return err
 	}
-	ip := net.ParseIP(host)
-	if ip == nil {
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
 		return fmt.Errorf("cannot resolve dial address %q", address)
 	}
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
-		if allowed := allowedPrivateAddrs.Load(); allowed != nil && (*allowed)[net.JoinHostPort(ip.String(), port)] {
+	canonicalIP := addr.Unmap().String()
+	if isNonPublicAddr(addr) {
+		if allowed := allowedPrivateAddrs.Load(); allowed != nil && (*allowed)[net.JoinHostPort(canonicalIP, port)] {
 			return nil
 		}
-		return fmt.Errorf("blocked request to non-public address %s", ip)
+		return fmt.Errorf("blocked request to non-public address %s", canonicalIP)
 	}
 	return nil
 }

@@ -2,11 +2,17 @@ package luaplugin
 
 import (
 	"errors"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	lua "github.com/yuin/gopher-lua"
+)
+
+const (
+	maxTimersPerPlugin = 64
+	maxTimerSeconds    = 86400 * 365
 )
 
 type timerEntry struct {
@@ -29,16 +35,26 @@ func newTimerManager() *timerManager {
 	}
 }
 
-func (tm *timerManager) add(e *timerEntry) {
+func (tm *timerManager) add(e *timerEntry) bool {
 	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	count := 0
+	for _, cur := range tm.timers {
+		if cur.plugin == e.plugin {
+			count++
+		}
+	}
+	if count >= maxTimersPerPlugin {
+		return false
+	}
 	tm.timers[e.id] = e
-	tm.mu.Unlock()
+	return true
 }
 
-func (tm *timerManager) cancel(id int64) {
+func (tm *timerManager) cancel(p *Plugin, id int64) {
 	tm.mu.Lock()
 	e, ok := tm.timers[id]
-	if ok {
+	if ok && (p == nil || e.plugin == p) {
 		close(e.done)
 		if e.ticker != nil {
 			e.ticker.Stop()
@@ -109,13 +125,21 @@ func (m *Manager) registerTimerAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin)
 
 	// cliamp.timer.after(secs, callback) -> id
 	L.SetField(tbl, "after", L.NewFunction(func(L *lua.LState) int {
-		secs := L.CheckNumber(1)
+		secs := float64(L.CheckNumber(1))
 		fn := L.CheckFunction(2)
+		if math.IsNaN(secs) || math.IsInf(secs, 0) || secs < 0 || secs > maxTimerSeconds {
+			L.ArgError(1, "delay must be a non-negative finite number")
+			return 0
+		}
 		id := tm.nextID.Add(1)
-		d := time.Duration(float64(secs) * float64(time.Second))
+		d := time.Duration(secs * float64(time.Second))
 		t := time.NewTimer(d)
 		e := &timerEntry{id: id, plugin: p, timer: t, done: make(chan struct{})}
-		tm.add(e)
+		if !tm.add(e) {
+			t.Stop()
+			L.RaiseError("too many active timers (limit %d)", maxTimersPerPlugin)
+			return 0
+		}
 
 		go func() {
 			select {
@@ -138,13 +162,21 @@ func (m *Manager) registerTimerAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin)
 
 	// cliamp.timer.every(secs, callback) -> id
 	L.SetField(tbl, "every", L.NewFunction(func(L *lua.LState) int {
-		secs := L.CheckNumber(1)
+		secs := float64(L.CheckNumber(1))
 		fn := L.CheckFunction(2)
+		if math.IsNaN(secs) || math.IsInf(secs, 0) || secs <= 0 || secs > maxTimerSeconds {
+			L.ArgError(1, "interval must be a positive finite number")
+			return 0
+		}
 		id := tm.nextID.Add(1)
-		d := time.Duration(float64(secs) * float64(time.Second))
+		d := max(time.Duration(secs*float64(time.Second)), time.Millisecond)
 		ticker := time.NewTicker(d)
 		e := &timerEntry{id: id, plugin: p, ticker: ticker, done: make(chan struct{})}
-		tm.add(e)
+		if !tm.add(e) {
+			ticker.Stop()
+			L.RaiseError("too many active timers (limit %d)", maxTimersPerPlugin)
+			return 0
+		}
 
 		go func() {
 			for {
@@ -172,7 +204,7 @@ func (m *Manager) registerTimerAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin)
 	// cliamp.timer.cancel(id)
 	L.SetField(tbl, "cancel", L.NewFunction(func(L *lua.LState) int {
 		id := L.CheckInt64(1)
-		tm.cancel(id)
+		tm.cancel(p, id)
 		return 0
 	}))
 
@@ -187,7 +219,7 @@ func (m *Manager) registerTimerAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin)
 func registerSleepAPI(L *lua.LState, cliamp *lua.LTable) {
 	L.SetField(cliamp, "sleep", L.NewFunction(func(L *lua.LState) int {
 		secs := float64(L.CheckNumber(1))
-		if secs <= 0 || secs > 10 {
+		if math.IsNaN(secs) || math.IsInf(secs, 0) || secs <= 0 || secs > 10 {
 			return 0
 		}
 		t := time.NewTimer(time.Duration(secs * float64(time.Second)))

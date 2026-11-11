@@ -14,17 +14,29 @@ import (
 )
 
 // ExpandPath expands a leading ~ and environment variables in p.
+// If the tilde-expanded path contains $ and already exists literally on disk,
+// it is returned as-is so directory names containing $ are not mangled.
 func ExpandPath(p string) string {
 	if p == "" {
 		return p
 	}
-	expanded := os.ExpandEnv(p)
-	if expanded == "~" || strings.HasPrefix(expanded, "~/") {
+	res := expandLeadingTilde(p)
+	if !strings.Contains(res, "$") {
+		return res
+	}
+	if _, err := os.Stat(res); err == nil {
+		return res
+	}
+	return expandLeadingTilde(os.ExpandEnv(res))
+}
+
+func expandLeadingTilde(p string) string {
+	if p == "~" || strings.HasPrefix(p, "~/") {
 		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, strings.TrimPrefix(expanded, "~"))
+			return filepath.Join(home, strings.TrimPrefix(p, "~"))
 		}
 	}
-	return expanded
+	return p
 }
 
 // scanDir lists the audio files of a [[dir]] source and readTags reads their

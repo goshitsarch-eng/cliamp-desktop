@@ -62,7 +62,7 @@ type ncmLyricResponse struct {
 }
 
 // lrcTimeRegex matches one leading [mm:ss], [mm:ss.xx] or [mm:ss.xxx] tag.
-var lrcTimeRegex = regexp.MustCompile(`^\[(\d{2,}):(\d{2})(?:\.(\d{1,3}))?\]`)
+var lrcTimeRegex = regexp.MustCompile(`^\[(\d{2,5}):(\d{2})(?:\.(\d{1,3}))?\]`)
 
 // cleanQuery strips noise from a search query: bracketed text like "[Official Video]",
 // parenthesized text like "(Lyric Video)", and common video/audio label suffixes.
@@ -295,8 +295,11 @@ func parseLRC(data string) []Line {
 			if matches == nil {
 				break
 			}
-			mins, _ := strconv.Atoi(matches[1])
-			secs, _ := strconv.Atoi(matches[2])
+			mins, err1 := strconv.Atoi(matches[1])
+			secs, err2 := strconv.Atoi(matches[2])
+			if err1 != nil || err2 != nil || secs >= 60 {
+				break
+			}
 			start := time.Duration(mins)*time.Minute + time.Duration(secs)*time.Second
 			if frac := matches[3]; frac != "" {
 				// tenths, hundredths or milliseconds
@@ -307,7 +310,7 @@ func parseLRC(data string) []Line {
 				start += time.Duration(n) * time.Millisecond
 			}
 			starts = append(starts, start)
-			rest = rest[len(matches[0]):]
+			rest = strings.TrimLeft(rest[len(matches[0]):], " \t")
 		}
 		text := strings.TrimSpace(rest)
 		for _, start := range starts {

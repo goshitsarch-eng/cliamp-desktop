@@ -179,6 +179,7 @@ func TestParseRejects(t *testing.T) {
 		{"flag as album id", "cliamp://play?provider=nd&album=--exec%3Dwhoami", "command-line flag"},
 
 		// Provider charset.
+		{"local provider is blocked", "cliamp://play?provider=local&playlist=Favorites", "not allowed"},
 		{"provider with slash", "cliamp://play?provider=..%2F..%2Fetc&album=x", "disallowed characters"},
 		{"provider with flag shape", "cliamp://play?provider=-nd&album=x", "must start with a letter"},
 		{"provider uppercase", "cliamp://play?provider=Navidrome&album=x", "disallowed characters"},

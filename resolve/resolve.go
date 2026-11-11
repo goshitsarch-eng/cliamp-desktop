@@ -532,7 +532,11 @@ func resolveM3U(ctx context.Context, m3uURL string) ([]playlist.Track, error) {
 	if err != nil {
 		return nil, err
 	}
-	return filterRemoteEntries(entriesToTracks(entries)), nil
+	baseURL := resp.Request.URL
+	if baseURL == nil {
+		baseURL, _ = url.Parse(m3uURL)
+	}
+	return resolveRemotePlaylistTracks(baseURL, entriesToTracks(entries)), nil
 }
 
 // resolvePLS fetches a PLS playlist URL and returns tracks.
@@ -562,7 +566,11 @@ func resolvePLS(ctx context.Context, plsURL string) ([]playlist.Track, error) {
 	if err != nil {
 		return nil, err
 	}
-	return filterRemoteEntries(plsEntriesToTracks(entries)), nil
+	baseURL := resp.Request.URL
+	if baseURL == nil {
+		baseURL, _ = url.Parse(plsURL)
+	}
+	return resolveRemotePlaylistTracks(baseURL, plsEntriesToTracks(entries)), nil
 }
 
 // hasHLSEndList reports whether an HLS body holds #EXT-X-ENDLIST. head is the
@@ -780,11 +788,14 @@ func parseYTDLTracks(r io.Reader) ([]playlist.Track, int, error) {
 		if err := json.Unmarshal([]byte(line), &e); err != nil {
 			continue
 		}
-		trackURL := e.WebpageURL
+		trackURL := strings.TrimSpace(e.WebpageURL)
 		if trackURL == "" {
-			trackURL = e.URL
+			trackURL = strings.TrimSpace(e.URL)
 		}
 		if trackURL == "" {
+			continue
+		}
+		if u, err := url.Parse(trackURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
 			continue
 		}
 		title := e.Title
@@ -849,7 +860,7 @@ func DownloadYTDLContext(ctx context.Context, pageURL, saveDir string) (string, 
 	}
 
 	var e ytdlFullEntry
-	if err := json.Unmarshal(stdout, &e); err != nil {
+	if err := json.NewDecoder(bytes.NewReader(stdout)).Decode(&e); err != nil {
 		return "", fmt.Errorf("parsing yt-dlp output: %w", err)
 	}
 	if e.Filename == "" {

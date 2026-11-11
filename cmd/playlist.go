@@ -13,6 +13,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/bjarneo/cliamp/external/local"
 	"github.com/bjarneo/cliamp/favorites"
@@ -731,8 +732,12 @@ func sshCommand(parsed sshurl.Parsed, remoteCmd string) *exec.Cmd {
 
 func probeRemoteDuration(parsed sshurl.Parsed) int {
 	// Use ffprobe over SSH for cross-platform compatibility (works on Linux and macOS remotes).
-	probeCmd := fmt.Sprintf("ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 %s 2>/dev/null", shellQuote(parsed.Path))
-	out, err := sshCommand(parsed, probeCmd).Output()
+	probeCmd := fmt.Sprintf("ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 -i %s 2>/dev/null", shellQuote(parsed.Path))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ssh", append(parsed.SSHArgs(), probeCmd)...)
+	cmd.WaitDelay = time.Second
+	out, err := cmd.Output()
 	if err != nil {
 		return 0
 	}
@@ -750,7 +755,15 @@ func probeDuration(path string) int {
 	if playlist.IsURL(path) || path == "" {
 		return 0
 	}
-	cmd := exec.Command("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path)
+	inputArg := path
+	vol := filepath.VolumeName(path)
+	if strings.Contains(path[len(vol):], ":") {
+		inputArg = "file:" + path
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", "-i", inputArg)
+	cmd.WaitDelay = time.Second
 	out, err := cmd.Output()
 	if err != nil {
 		return 0

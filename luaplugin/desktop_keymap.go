@@ -16,11 +16,11 @@ func (m *Manager) DesktopKeyBindings() []DesktopKeyBinding {
 	result := make([]DesktopKeyBinding, 0, len(m.keyBinds))
 	for key, hooks := range m.keyBinds {
 		for _, h := range hooks {
-			item := DesktopKeyBinding{Key: key, Plugin: h.plugin.Name}
-			if described, ok := m.keyBindDescs[key]; ok && described.owner == h.plugin {
-				item.Description = described.Description
-			}
-			result = append(result, item)
+			result = append(result, DesktopKeyBinding{
+				Key:         key,
+				Plugin:      h.plugin.Name,
+				Description: h.desc,
+			})
 		}
 	}
 	sort.Slice(result, func(i, j int) bool {

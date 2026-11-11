@@ -182,6 +182,9 @@ func TestSafeChat(t *testing.T) {
 		"@deezload2bot":  "deezload2bot",
 		"-1001234567890": "-1001234567890",
 		"a/b:c\\d":       "a_b_c_d",
+		"..":             "_invalid",
+		".":              "_invalid",
+		"@":              "_invalid",
 	}
 	for in, want := range tests {
 		if got := safeChat(in); got != want {

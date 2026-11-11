@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,12 +38,20 @@ func pcmFrameSize(f32 bool) int {
 	return pcmFrameSize16
 }
 
+func sanitizeFloat32Sample(v float32) float64 {
+	f := float64(v)
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0
+	}
+	return f
+}
+
 // decodePCMFrame decodes one stereo sample frame from buf into a [2]float64.
 func decodePCMFrame(buf []byte, f32 bool) [2]float64 {
 	if f32 {
 		return [2]float64{
-			float64(math.Float32frombits(binary.LittleEndian.Uint32(buf[0:4]))),
-			float64(math.Float32frombits(binary.LittleEndian.Uint32(buf[4:8]))),
+			sanitizeFloat32Sample(math.Float32frombits(binary.LittleEndian.Uint32(buf[0:4]))),
+			sanitizeFloat32Sample(math.Float32frombits(binary.LittleEndian.Uint32(buf[4:8]))),
 		}
 	}
 	left := int16(binary.LittleEndian.Uint16(buf[0:2]))
@@ -103,15 +112,16 @@ func (e *firstError) load() error {
 }
 
 type pipeStreamState struct {
-	err firstError
-	pos atomic.Int64
+	err   firstError
+	pos   atomic.Int64
+	total atomic.Int64
 }
 
 // pipeReport answers Err, Len and Position for a pipe-based streamer from
 // the state that its Stream updates. ffmpegPipe and ytdlPipeStreamer embed it.
 type pipeReport struct {
 	state *pipeStreamState
-	total int // total frames (0 if unknown/unbounded)
+	total int // initial total frames fallback (0 if unknown/unbounded)
 }
 
 func (r *pipeReport) Err() error {
@@ -121,7 +131,27 @@ func (r *pipeReport) Err() error {
 	return r.state.err.load()
 }
 
-func (r *pipeReport) Len() int { return r.total }
+func (r *pipeReport) Len() int {
+	if r.state != nil {
+		if n := r.state.total.Load(); n > 0 {
+			return int(n)
+		}
+	}
+	return r.total
+}
+
+func (r *pipeReport) setTotal(n int) {
+	if n <= 0 {
+		return
+	}
+	if r.state != nil {
+		r.state.total.CompareAndSwap(0, int64(n))
+		return
+	}
+	if r.total == 0 {
+		r.total = n
+	}
+}
 
 func (r *pipeReport) Position() int {
 	if r.state == nil {
@@ -133,6 +163,14 @@ func (r *pipeReport) Position() int {
 func newPipeStreamState(pos int) *pipeStreamState {
 	state := &pipeStreamState{}
 	state.pos.Store(int64(pos))
+	return state
+}
+
+func newPipeStreamStateWithTotal(pos, total int) *pipeStreamState {
+	state := newPipeStreamState(pos)
+	if total > 0 {
+		state.total.Store(int64(total))
+	}
 	return state
 }
 
@@ -233,7 +271,13 @@ func decodeFFmpegStream(path string, sr beep.SampleRate, bitDepth int) (*ffmpegP
 // returned ffmpegPipe in a streamer type.
 func startFFmpegPipe(input string, stdin io.ReadCloser, sr beep.SampleRate, bitDepth int) (ffmpegPipe, beep.Format, error) {
 	_, _, precision := ffmpegPCMArgs(bitDepth)
-	cmd := exec.Command("ffmpeg", append([]string{"-i", input}, pcmOutputArgs(sr, bitDepth)...)...)
+	var args []string
+	if stdin == nil && isURL(input) {
+		args = append(args, "-protocol_whitelist", "http,https,tcp,tls,crypto")
+	}
+	args = append(args, "-i", input)
+	args = append(args, pcmOutputArgs(sr, bitDepth)...)
+	cmd := exec.Command("ffmpeg", args...)
 	cmd.Stdin = stdin
 	proc := newFFmpegProcess(cmd)
 
@@ -445,13 +489,21 @@ type localFFmpegStreamer struct {
 	sr   beep.SampleRate
 }
 
+func ffmpegLocalInputArg(path string) string {
+	vol := filepath.VolumeName(path)
+	if strings.Contains(path[len(vol):], ":") {
+		return "file:" + path
+	}
+	return path
+}
+
 func (s *localFFmpegStreamer) startPipe(seekPos int) (ffmpegPipe, error) {
 	var args []string
 	if seekPos > 0 {
 		secs := float64(seekPos) / float64(s.sr)
 		args = append(args, "-ss", strconv.FormatFloat(secs, 'f', 3, 64))
 	}
-	args = append(args, "-i", s.path)
+	args = append(args, "-i", ffmpegLocalInputArg(s.path))
 	args = append(args, pcmOutputArgs(s.sr, s.bitDepth())...)
 
 	cmd := exec.Command("ffmpeg", args...)
@@ -465,8 +517,9 @@ func (s *localFFmpegStreamer) startPipe(seekPos int) (ffmpegPipe, error) {
 		return ffmpegPipe{}, fmt.Errorf("ffmpeg start: %w", err)
 	}
 
+	total := s.Len()
 	fp := ffmpegPipe{
-		pipeReport: pipeReport{state: newPipeStreamState(seekPos), total: s.total},
+		pipeReport: pipeReport{state: newPipeStreamStateWithTotal(seekPos, total), total: total},
 		proc:       proc,
 		reader:     bufio.NewReaderSize(pipe, pipeBufSize),
 		pipe:       pipe,
@@ -482,8 +535,8 @@ func (s *localFFmpegStreamer) startPipe(seekPos int) (ffmpegPipe, error) {
 func (s *localFFmpegStreamer) Stream(samples [][2]float64) (int, bool) {
 	n, ok := s.ffmpegPipe.Stream(samples)
 	if !ok {
-		if s.total == 0 {
-			s.total = s.Position()
+		if s.Len() == 0 {
+			s.setTotal(s.Position())
 		}
 	}
 	return n, ok
@@ -532,7 +585,7 @@ func (f *ffmpegPipe) applyPreparedSeek(prepared *preparedFFmpegSeek) {
 }
 
 func (s *localFFmpegStreamer) prepareSeek(pos int) (*preparedFFmpegSeek, error) {
-	pos = clampSeekPosition(pos, s.total)
+	pos = clampSeekPosition(pos, s.Len())
 	replacement, err := s.startPipe(pos)
 	if err != nil {
 		return nil, err
@@ -677,8 +730,9 @@ func (s *navFFmpegStreamer) startPipe(seekPos int, validate bool) (ffmpegPipe, e
 		return ffmpegPipe{}, fmt.Errorf("ffmpeg nav start: %w", err)
 	}
 
+	total := s.ffmpegPipe.Len()
 	fp := ffmpegPipe{
-		pipeReport: pipeReport{state: newPipeStreamState(seekPos), total: s.total},
+		pipeReport: pipeReport{state: newPipeStreamStateWithTotal(seekPos, total), total: total},
 		proc:       proc,
 		pipe:       pipe,
 		reader:     bufio.NewReaderSize(pipe, pipeBufSize),
@@ -780,7 +834,7 @@ func probeFramesWithin(path string, sr beep.SampleRate, timeout time.Duration) i
 		"-v", "error",
 		"-show_entries", "format=duration",
 		"-of", "default=noprint_wrappers=1:nokey=1",
-		path,
+		"-i", ffmpegLocalInputArg(path),
 	)
 	// A child that keeps stdout open must not hold Output after the kill.
 	cmd.WaitDelay = time.Second

@@ -44,10 +44,10 @@ func TestSSHCommandsKeepPort(t *testing.T) {
 		host string   // the --ssh value and the host part of an ssh:// path
 		want []string // ssh arguments before the remote command
 	}{
-		{"no port", "nas", slices.Concat(options, []string{"nas"})},
-		{"user", "me@nas", slices.Concat(options, []string{"me@nas"})},
-		{"port", "nas:2222", slices.Concat(options, []string{"-p", "2222", "nas"})},
-		{"user and port", "me@nas:2222", slices.Concat(options, []string{"-p", "2222", "me@nas"})},
+		{"no port", "nas", slices.Concat(options, []string{"--", "nas"})},
+		{"user", "me@nas", slices.Concat(options, []string{"--", "me@nas"})},
+		{"port", "nas:2222", slices.Concat(options, []string{"-p", "2222", "--", "nas"})},
+		{"user and port", "me@nas:2222", slices.Concat(options, []string{"-p", "2222", "--", "me@nas"})},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name+"/enrich", func(t *testing.T) {

@@ -39,6 +39,17 @@ func (b *biquad) calcCoeffs(dB float64) {
 	b.lastGain = dB
 	b.inited = true
 
+	// Above Nyquist (e.g. 12/14/16 kHz bands when sample_rate is 22050 Hz),
+	// w0 >= pi flips sin(w0) negative, which moves the peaking filter poles
+	// outside the unit circle and blows up to Inf/NaN. Bypass cleanly instead.
+	if b.sr <= 0 || b.freq >= 0.49*b.sr || b.q <= 0 || math.IsNaN(dB) || math.IsInf(dB, 0) {
+		b.b0 = 1
+		b.b1, b.b2, b.a1, b.a2 = 0, 0, 0, 0
+		b.x1, b.x2 = [2]float64{}, [2]float64{}
+		b.y1, b.y2 = [2]float64{}, [2]float64{}
+		return
+	}
+
 	a := math.Pow(10, dB/40)
 	w0 := 2 * math.Pi * b.freq / b.sr
 	sinW0 := math.Sin(w0)
@@ -63,21 +74,38 @@ func (b *biquad) Stream(samples [][2]float64) (int, bool) {
 	n, ok := b.s.Stream(samples)
 	dB := math.Float64frombits(b.gain.Load())
 
-	// Skip processing when gain is effectively zero
+	// Skip processing when gain is effectively zero, clearing stale delay state
+	// so re-enabling the band later cannot burst old samples.
 	if dB > -0.1 && dB < 0.1 {
+		if b.x1 != ([2]float64{}) || b.x2 != ([2]float64{}) || b.y1 != ([2]float64{}) || b.y2 != ([2]float64{}) {
+			b.x1, b.x2 = [2]float64{}, [2]float64{}
+			b.y1, b.y2 = [2]float64{}, [2]float64{}
+		}
 		return n, ok
 	}
 
 	b.calcCoeffs(dB)
+	if b.b1 == 0 && b.b2 == 0 && b.a1 == 0 && b.a2 == 0 && b.b0 == 1 {
+		return n, ok
+	}
 
 	for i := range n {
 		for ch := range 2 {
 			x := samples[i][ch]
+			if math.IsNaN(x) || math.IsInf(x, 0) {
+				x = 0
+			}
 			y := b.b0*x + b.b1*b.x1[ch] + b.b2*b.x2[ch] - b.a1*b.y1[ch] - b.a2*b.y2[ch]
-			b.x2[ch] = b.x1[ch]
-			b.x1[ch] = x
-			b.y2[ch] = b.y1[ch]
-			b.y1[ch] = y
+			if math.IsNaN(y) || math.IsInf(y, 0) || y > 1e6 || y < -1e6 {
+				b.x1[ch], b.x2[ch] = 0, 0
+				b.y1[ch], b.y2[ch] = 0, 0
+				y = 0
+			} else {
+				b.x2[ch] = b.x1[ch]
+				b.x1[ch] = x
+				b.y2[ch] = b.y1[ch]
+				b.y1[ch] = y
+			}
 			samples[i][ch] = y
 		}
 	}

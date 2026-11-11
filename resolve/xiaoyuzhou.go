@@ -67,8 +67,14 @@ func parseXiaoyuzhouEpisodeHTML(pageURL, doc string) (playlist.Track, error) {
 	if audioURL == "" {
 		audioURL = schema.AssociatedMedia.ContentURL
 	}
+	audioURL = strings.TrimSpace(audioURL)
 	if audioURL == "" {
 		return playlist.Track{}, fmt.Errorf("audio URL not found")
+	}
+	if parsedAudio := feedHTTPURL(audioURL); parsedAudio == nil {
+		return playlist.Track{}, fmt.Errorf("invalid audio URL %q", audioURL)
+	} else {
+		audioURL = parsedAudio.String()
 	}
 	if title == "" {
 		title = schema.Name

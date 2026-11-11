@@ -29,6 +29,10 @@ const mp3SyncScan = 64 << 10
 // reads. It covers the header, the side info, the Xing fields and the LAME tag.
 const mp3FrameProbe = 256
 
+// mp3MaxStreamID3 caps how much of an ID3v2 tag a non-seekable stream buffers
+// in memory during the gapless probe.
+const mp3MaxStreamID3 = 4 << 20
+
 // mp3Gapless holds the samples that a gapless decoder drops.
 type mp3Gapless struct {
 	skip    int // at the start: the header frame, the encoder delay and the decoder delay
@@ -62,7 +66,7 @@ func readMP3Gapless(rc io.ReadCloser) (io.ReadCloser, mp3Gapless) {
 		return rc, g
 	}
 	var prefix bytes.Buffer
-	g := parseMP3Gapless(io.TeeReader(rc, &prefix))
+	g := parseMP3GaplessBounded(io.TeeReader(rc, &prefix), mp3MaxStreamID3)
 	return replayReadCloser{Reader: io.MultiReader(&prefix, rc), Closer: rc}, g
 }
 
@@ -75,12 +79,19 @@ type replayReadCloser struct {
 // parseMP3Gapless skips an ID3v2 tag, finds the first MPEG audio frame and
 // parses its gapless metadata. It returns the zero value when there is none.
 func parseMP3Gapless(r io.Reader) mp3Gapless {
+	return parseMP3GaplessBounded(r, 0)
+}
+
+func parseMP3GaplessBounded(r io.Reader, maxID3 int) mp3Gapless {
 	br := bufio.NewReaderSize(r, 4096)
 	if hdr, err := br.Peek(10); err == nil && string(hdr[:3]) == "ID3" {
 		size := int(hdr[6]&0x7f)<<21 | int(hdr[7]&0x7f)<<14 | int(hdr[8]&0x7f)<<7 | int(hdr[9]&0x7f)
 		size += 10
 		if hdr[5]&0x10 != 0 { // footer present
 			size += 10
+		}
+		if maxID3 > 0 && size > maxID3 {
+			return mp3Gapless{}
 		}
 		if _, err := br.Discard(size); err != nil {
 			return mp3Gapless{}

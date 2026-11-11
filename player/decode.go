@@ -94,6 +94,7 @@ func openSSHSource(path string) (sourceResult, error) {
 		return sourceResult{}, fmt.Errorf("ssh stdout pipe: %w", err)
 	}
 	if err := cmd.Start(); err != nil {
+		_ = stdout.Close()
 		return sourceResult{}, fmt.Errorf("ssh start: %w", err)
 	}
 	rc := &sshReadCloser{pipe: stdout, cmd: cmd}
@@ -158,12 +159,17 @@ type stallReader struct {
 	rc      io.ReadCloser
 	cancel  context.CancelFunc
 	timeout time.Duration
+	timer   *time.Timer
 }
 
 func (s *stallReader) Read(p []byte) (int, error) {
-	timer := time.AfterFunc(s.timeout, s.cancel)
+	if s.timer == nil {
+		s.timer = time.AfterFunc(s.timeout, s.cancel)
+	} else {
+		s.timer.Reset(s.timeout)
+	}
 	n, err := s.rc.Read(p)
-	timer.Stop()
+	s.timer.Stop()
 	return n, err
 }
 
@@ -257,6 +263,10 @@ func extFromContentType(ct string) string {
 		return ".wav"
 	case "audio/mp4", "audio/x-m4a":
 		return ".m4a"
+	case "video/mp4", "application/mp4":
+		return ".mp4"
+	case "audio/webm", "video/webm":
+		return ".webm"
 	case "audio/opus":
 		return ".opus"
 	}

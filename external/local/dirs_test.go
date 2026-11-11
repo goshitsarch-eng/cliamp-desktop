@@ -99,6 +99,13 @@ func TestExpandPathEnvAndTilde(t *testing.T) {
 	if got := ExpandPath("plain"); got != "plain" {
 		t.Fatalf("plain expand = %q", got)
 	}
+	literalDollar := filepath.Join(dir, "A$AP Rocky")
+	if err := os.MkdirAll(literalDollar, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if got := ExpandPath(literalDollar); got != literalDollar {
+		t.Fatalf("existing path with $ = %q, want %q", got, literalDollar)
+	}
 }
 
 func TestValidateDirSource(t *testing.T) {

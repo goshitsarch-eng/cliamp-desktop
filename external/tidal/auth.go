@@ -158,12 +158,14 @@ func newClientInteractive(ctx context.Context, clientID, clientSecret string) (*
 		return nil, errors.New("tidal: device authorization failed (client_id may be revoked; set [tidal] client_id in config.toml)")
 	}
 
-	authURL := da.VerificationURIComplete
-	if !strings.HasPrefix(authURL, "http") {
-		authURL = "https://" + authURL
+	authURL := strings.TrimSpace(da.VerificationURIComplete)
+	if !strings.HasPrefix(strings.ToLower(authURL), "http://") && !strings.HasPrefix(strings.ToLower(authURL), "https://") {
+		authURL = "https://" + strings.TrimPrefix(authURL, "//")
 	}
-	authURLObserver.Notify("tidal", authURL)
-	_ = browser.Open(authURL) // best-effort; user can open the URL manually
+	if validURL, err := browser.ValidateURL(authURL); err == nil {
+		authURLObserver.Notify("tidal", validURL)
+		_ = browser.Open(validURL) // best-effort; user can open the URL manually
+	}
 
 	tok, err := pollDeviceToken(ctx, c.http, c.tokenURL, clientID, clientSecret, da)
 	if err != nil {

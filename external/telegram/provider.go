@@ -32,6 +32,7 @@ var (
 	_ provider.CustomStreamer    = (*Provider)(nil)
 	_ provider.TrackPager        = (*Provider)(nil)
 	_ provider.CodeAuthenticator = (*Provider)(nil)
+	_ provider.Closer            = (*Provider)(nil)
 )
 
 const (
@@ -78,6 +79,9 @@ type Provider struct {
 	client     *tgclient.Client
 	api        *tg.Client
 	authReq    chan authRequest
+	runCtx     context.Context
+	runCancel  context.CancelFunc
+	done       chan struct{}
 	mu         sync.Mutex // guards state and connectErr
 	state      provState
 	connectErr error
@@ -101,14 +105,34 @@ func NewFromConfig(cfg config.TelegramConfig) *Provider {
 	if err != nil {
 		cache = os.TempDir()
 	}
+	runCtx, runCancel := context.WithCancel(context.Background())
 	p := &Provider{
-		cfg:      cfg,
-		authReq:  make(chan authRequest),
-		cacheDir: filepath.Join(cache, "cliamp", "telegram"),
-		artCache: make(map[msgKey]string),
+		cfg:       cfg,
+		authReq:   make(chan authRequest),
+		runCtx:    runCtx,
+		runCancel: runCancel,
+		done:      make(chan struct{}),
+		cacheDir:  filepath.Join(cache, "cliamp", "telegram"),
+		artCache:  make(map[msgKey]string),
 	}
 	go p.run()
 	return p
+}
+
+// Close stops the background MTProto client and any in-flight downloads.
+func (p *Provider) Close() {
+	if p == nil {
+		return
+	}
+	if p.runCancel != nil {
+		p.runCancel()
+	}
+	if p.done != nil {
+		select {
+		case <-p.done:
+		case <-time.After(2 * time.Second):
+		}
+	}
 }
 
 func (p *Provider) sessionPath() string { return sessionPath(p.cfg.SessionFile) }
@@ -166,6 +190,9 @@ func (p *Provider) Authenticate(code string) error {
 }
 
 func (p *Provider) run() {
+	if p.done != nil {
+		defer close(p.done)
+	}
 	if err := os.MkdirAll(filepath.Dir(p.sessionPath()), 0o700); err != nil {
 		p.setFailed(err)
 		return
@@ -173,7 +200,11 @@ func (p *Provider) run() {
 	p.client = tgclient.NewClient(p.cfg.AppID, p.cfg.AppHash, tgclient.Options{
 		SessionStorage: &session.FileStorage{Path: p.sessionPath()},
 	})
-	err := p.client.Run(context.Background(), func(ctx context.Context) error {
+	runCtx := p.runCtx
+	if runCtx == nil {
+		runCtx = context.Background()
+	}
+	err := p.client.Run(runCtx, func(ctx context.Context) error {
 		status, err := p.client.Auth().Status(ctx)
 		if err != nil {
 			p.setFailed(err)
@@ -193,6 +224,8 @@ func (p *Provider) run() {
 	})
 	if err != nil {
 		p.setFailed(err)
+	} else if runCtx.Err() != nil {
+		p.setFailed(runCtx.Err())
 	}
 }
 
@@ -250,10 +283,10 @@ func (p *Provider) setNeedsAuth()       { p.setStateLocked(provNeedsAuth, playli
 func (p *Provider) setReady()           { p.setStateLocked(provReady, nil) }
 func (p *Provider) setFailed(err error) { p.setStateLocked(provFailed, err) }
 
-func (p *Provider) currentState() provState {
+func (p *Provider) currentStateAndErr() (provState, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.state
+	return p.state, p.connectErr
 }
 
 // wait returns once the connection is usable. playlist.ErrNeedsAuth means the
@@ -261,14 +294,15 @@ func (p *Provider) currentState() provState {
 func (p *Provider) wait() error {
 	deadline := time.Now().Add(connectWait)
 	for {
-		switch p.currentState() {
+		state, connectErr := p.currentStateAndErr()
+		switch state {
 		case provReady:
 			return nil
 		case provNeedsAuth:
 			return playlist.ErrNeedsAuth
 		case provFailed:
-			if err := p.connectErr; err != nil {
-				return err
+			if connectErr != nil {
+				return connectErr
 			}
 			return errors.New("telegram: connection failed")
 		}
@@ -929,7 +963,7 @@ func parseURI(uri string) (string, int, error) {
 		return "", 0, fmt.Errorf("telegram: invalid track uri %q", uri)
 	}
 	id, err := strconv.Atoi(rest[sep+1:])
-	if err != nil {
+	if err != nil || id <= 0 {
 		return "", 0, fmt.Errorf("telegram: invalid message id in %q", uri)
 	}
 	return rest[:sep], id, nil
@@ -945,13 +979,22 @@ func docDuration(doc *tg.Document) int {
 }
 
 func safeChat(chat string) string {
-	return strings.NewReplacer("/", "_", "\\", "_", ":", "_", "@", "").Replace(chat)
+	cleaned := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, strings.NewReplacer("/", "_", "\\", "_", ":", "_", "@", "").Replace(strings.TrimSpace(chat)))
+	if cleaned == "" || cleaned == "." || cleaned == ".." {
+		return "_invalid"
+	}
+	return cleaned
 }
 
 func extensionFor(doc *tg.Document) string {
 	for _, attribute := range doc.Attributes {
 		if filename, ok := attribute.(*tg.DocumentAttributeFilename); ok {
-			if ext := strings.ToLower(filepath.Ext(filename.FileName)); ext != "" {
+			if ext := strings.ToLower(filepath.Ext(filepath.Base(filename.FileName))); isSafeExt(ext) {
 				return ext
 			}
 		}
@@ -966,4 +1009,17 @@ func extensionFor(doc *tg.Document) string {
 	default:
 		return ".flac"
 	}
+}
+
+func isSafeExt(ext string) bool {
+	if len(ext) < 2 || len(ext) > 9 || ext[0] != '.' {
+		return false
+	}
+	for i := 1; i < len(ext); i++ {
+		c := ext[i]
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') {
+			return false
+		}
+	}
+	return true
 }

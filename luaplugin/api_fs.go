@@ -63,6 +63,20 @@ func loadWriteRules() writeRules {
 		add(&r.deny, filepath.Join(configDir, "config.toml"))
 		add(&r.deny, filepath.Join(configDir, "radios.toml"))
 		add(&r.deny, filepath.Join(configDir, pluginLogName))
+		add(&r.deny, filepath.Join(configDir, "cliamp.log"))
+		add(&r.deny, filepath.Join(configDir, ".plugin-reviews"))
+		add(&r.deny, filepath.Join(configDir, ".desktop-management.lock"))
+		for _, cred := range []string{
+			"spotify_credentials.json",
+			"tidal_credentials.json",
+			"qobuz_credentials.json",
+			"ytmusic_credentials.json",
+		} {
+			add(&r.deny, filepath.Join(configDir, cred))
+		}
+	}
+	if dataDir, err := appdir.DataDir(); err == nil {
+		add(&r.deny, filepath.Join(dataDir, "telegram.session"))
 	}
 	add(&r.deny, ipc.DefaultSocketPath())
 	add(&r.deny, ipc.DefaultSocketPath()+".pid")
@@ -217,10 +231,10 @@ func registerFSAPI(L *lua.LState, cliamp *lua.LTable) {
 			L.ArgError(1, "write not allowed to this path")
 			return 0
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return pushErr(L, err.Error())
 		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			return pushErr(L, err.Error())
 		}
 		L.Push(lua.LTrue)
@@ -235,10 +249,10 @@ func registerFSAPI(L *lua.LState, cliamp *lua.LTable) {
 			L.ArgError(1, "write not allowed to this path")
 			return 0
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return pushErr(L, err.Error())
 		}
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 		if err != nil {
 			return pushErr(L, err.Error())
 		}
@@ -303,7 +317,7 @@ func registerFSAPI(L *lua.LState, cliamp *lua.LTable) {
 			L.ArgError(1, "mkdir not allowed for this path")
 			return 0
 		}
-		if err := os.MkdirAll(path, 0o755); err != nil {
+		if err := os.MkdirAll(path, 0o700); err != nil {
 			return pushErr(L, err.Error())
 		}
 		L.Push(lua.LTrue)

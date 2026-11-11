@@ -14,7 +14,6 @@ type KeyBinding struct {
 	Key         string
 	Plugin      string // display name of the plugin
 	Description string
-	owner       *Plugin
 }
 
 // KeyBindings returns a snapshot of every plugin-registered keybinding that
@@ -26,11 +25,24 @@ type KeyBinding struct {
 func (m *Manager) KeyBindings() []KeyBinding {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	out := make([]KeyBinding, 0, len(m.keyBindDescs))
-	for _, b := range m.keyBindDescs {
-		out = append(out, b)
+	out := make([]KeyBinding, 0, len(m.keyBinds))
+	for key, hooks := range m.keyBinds {
+		for _, h := range hooks {
+			if h.desc != "" {
+				out = append(out, KeyBinding{
+					Key:         key,
+					Plugin:      h.plugin.Name,
+					Description: h.desc,
+				})
+			}
+		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Key == out[j].Key {
+			return out[i].Plugin < out[j].Plugin
+		}
+		return out[i].Key < out[j].Key
+	})
 	return out
 }
 
@@ -39,6 +51,10 @@ func (m *Manager) KeyBindings() []KeyBinding {
 // plugin bound the key. Called by the UI's main key dispatcher for keys the
 // core doesn't handle.
 func (m *Manager) EmitKey(key string) bool {
+	key = normalizeKey(key)
+	if key == "" {
+		return false
+	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if m.closing {
@@ -103,10 +119,7 @@ func (m *Manager) registerKeymapAPI(L *lua.LState, obj *lua.LTable, p *Plugin) {
 			L.Push(lua.LString("key reserved by cliamp: " + key))
 			return 2
 		}
-		m.keyBinds[key] = append(m.keyBinds[key], &luaHook{plugin: p, fn: fn})
-		if description != "" {
-			m.keyBindDescs[key] = KeyBinding{Key: key, Plugin: p.Name, Description: description, owner: p}
-		}
+		m.keyBinds[key] = append(m.keyBinds[key], &luaHook{plugin: p, fn: fn, desc: description})
 		m.mu.Unlock()
 
 		L.Push(lua.LTrue)
@@ -120,9 +133,6 @@ func (m *Manager) registerKeymapAPI(L *lua.LState, obj *lua.LTable, p *Plugin) {
 		m.keyBinds[key] = filterOutPlugin(m.keyBinds[key], p)
 		if len(m.keyBinds[key]) == 0 {
 			delete(m.keyBinds, key)
-		}
-		if desc, ok := m.keyBindDescs[key]; ok && desc.owner == p {
-			delete(m.keyBindDescs, key)
 		}
 		m.mu.Unlock()
 		return 0

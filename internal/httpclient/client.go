@@ -218,6 +218,8 @@ func transportProxy(req *http.Request) (*url.URL, error) {
 	return u, nil
 }
 
+const streamDialTimeout = 15 * time.Second
+
 func newStreamingTransport() *http.Transport {
 	tr := &http.Transport{
 		ResponseHeaderTimeout: 30 * time.Second,
@@ -252,7 +254,9 @@ func newStreamingTransport() *http.Transport {
 			return nil, fmt.Errorf("dial TLS %s: %w", addr, err)
 		}
 		tlsConn := tls.Client(rawConn, config)
-		if err := tlsConn.HandshakeContext(ctx); err != nil {
+		hsCtx, cancel := context.WithTimeout(ctx, streamDialTimeout)
+		defer cancel()
+		if err := tlsConn.HandshakeContext(hsCtx); err != nil {
 			_ = rawConn.Close()
 			return nil, fmt.Errorf("dial TLS %s: %w", addr, err)
 		}
@@ -272,28 +276,51 @@ func newStreamingTransport() *http.Transport {
 // comment for why that was wrong for connections routed through a plain
 // http(s) proxy.
 func dialWithDecision(ctx context.Context, network, addr string) (net.Conn, error) {
+	dialCtx, cancel := context.WithTimeout(ctx, streamDialTimeout)
+	defer cancel()
 	decision, _ := ctx.Value(dialDecisionKey{}).(*dialDecision)
 	var d proxy.Dialer
 	if decision != nil {
 		d = decision.socks5
 	}
 	if d == nil {
-		conn, err := (&net.Dialer{}).DialContext(ctx, network, addr)
+		conn, err := (&net.Dialer{
+			Timeout:   streamDialTimeout,
+			KeepAlive: 30 * time.Second,
+		}).DialContext(dialCtx, network, addr)
 		if err != nil {
 			return nil, fmt.Errorf("dial %s directly: %w", addr, err)
 		}
 		return conn, nil
 	}
 	if cd, ok := d.(proxy.ContextDialer); ok {
-		conn, err := cd.DialContext(ctx, network, addr)
+		conn, err := cd.DialContext(dialCtx, network, addr)
 		if err != nil {
 			return nil, fmt.Errorf("dial %s via SOCKS5: %w", addr, err)
 		}
 		return conn, nil
 	}
-	conn, err := d.Dial(network, addr)
-	if err != nil {
-		return nil, fmt.Errorf("dial %s via SOCKS5: %w", addr, err)
+	type dialRes struct {
+		conn net.Conn
+		err  error
 	}
-	return conn, nil
+	ch := make(chan dialRes, 1)
+	go func() {
+		conn, err := d.Dial(network, addr)
+		ch <- dialRes{conn: conn, err: err}
+	}()
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			return nil, fmt.Errorf("dial %s via SOCKS5: %w", addr, res.err)
+		}
+		return res.conn, nil
+	case <-dialCtx.Done():
+		go func() {
+			if res := <-ch; res.conn != nil {
+				_ = res.conn.Close()
+			}
+		}()
+		return nil, fmt.Errorf("dial %s via SOCKS5: %w", addr, dialCtx.Err())
+	}
 }

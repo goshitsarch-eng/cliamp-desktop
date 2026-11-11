@@ -24,7 +24,11 @@ func registerJSONAPI(L *lua.LState, cliamp *lua.LTable) {
 	// cliamp.json.encode(table) -> string
 	L.SetField(tbl, "encode", L.NewFunction(func(L *lua.LState) int {
 		val := L.Get(1)
-		goVal := luaToGo(val)
+		nodes := 0
+		goVal := luaToGoValue(val, nil, 0, &nodes)
+		if nodes > maxLuaConvertNodes {
+			return pushErr(L, "table exceeds maximum size")
+		}
 		data, err := json.Marshal(goVal)
 		if err != nil {
 			return pushErr(L, err.Error())
@@ -39,16 +43,25 @@ func registerJSONAPI(L *lua.LState, cliamp *lua.LTable) {
 // maxLuaConvertDepth bounds table nesting accepted by luaToGo. Lua can build a
 // deeply nested table cheaply, and unbounded recursion here would overflow the
 // Go stack — a fatal error the plugin sandbox cannot contain.
-const maxLuaConvertDepth = 64
+const (
+	maxLuaConvertDepth = 64
+	maxLuaConvertNodes = 100_000
+)
 
 func luaToGo(val lua.LValue) any {
-	return luaToGoValue(val, nil, 0)
+	nodes := 0
+	return luaToGoValue(val, nil, 0, &nodes)
 }
 
 // luaToGoValue converts val to its Go equivalent. Tables already being
-// converted on the current path (cycles) and tables nested deeper than
-// maxLuaConvertDepth become nil instead of recursing forever.
-func luaToGoValue(val lua.LValue, path map[*lua.LTable]struct{}, depth int) any {
+// converted on the current path (cycles), tables nested deeper than
+// maxLuaConvertDepth, and nodes beyond maxLuaConvertNodes become nil instead of
+// recursing forever or exhausting memory on shared-reference DAGs.
+func luaToGoValue(val lua.LValue, path map[*lua.LTable]struct{}, depth int, nodes *int) any {
+	*nodes++
+	if *nodes > maxLuaConvertNodes {
+		return nil
+	}
 	switch v := val.(type) {
 	case *lua.LNilType:
 		return nil
@@ -76,16 +89,25 @@ func luaToGoValue(val lua.LValue, path map[*lua.LTable]struct{}, depth int) any 
 		// Detect if it's an array (sequential integer keys starting at 1).
 		maxN := v.MaxN()
 		if maxN > 0 {
+			if maxN > maxLuaConvertNodes-*nodes {
+				maxN = max(0, maxLuaConvertNodes-*nodes)
+			}
 			arr := make([]any, 0, maxN)
 			for i := 1; i <= maxN; i++ {
-				arr = append(arr, luaToGoValue(v.RawGetInt(i), path, depth+1))
+				if *nodes > maxLuaConvertNodes {
+					break
+				}
+				arr = append(arr, luaToGoValue(v.RawGetInt(i), path, depth+1, nodes))
 			}
 			return arr
 		}
 		m := make(map[string]any)
 		v.ForEach(func(key, value lua.LValue) {
+			if *nodes > maxLuaConvertNodes {
+				return
+			}
 			if ks, ok := key.(lua.LString); ok {
-				m[string(ks)] = luaToGoValue(value, path, depth+1)
+				m[string(ks)] = luaToGoValue(value, path, depth+1, nodes)
 			}
 		})
 		return m

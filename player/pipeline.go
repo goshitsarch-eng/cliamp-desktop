@@ -108,12 +108,12 @@ func (tp *trackPipeline) setKnownDuration(d time.Duration) {
 	}
 	switch s := tp.decoder.(type) {
 	case *navFFmpegStreamer:
-		if s.total == 0 {
-			s.total = int(s.sr.N(d))
+		if s.Len() == 0 {
+			s.setTotal(int(s.sr.N(d)))
 		}
 	case *localFFmpegStreamer:
-		if s.total == 0 {
-			s.total = int(s.sr.N(d))
+		if s.Len() == 0 {
+			s.setTotal(int(s.sr.N(d)))
 		}
 	}
 }
@@ -238,6 +238,10 @@ func (p *Player) buildPipeline(path string, knownDuration time.Duration) (*track
 		decoder, format, dur, err := factory(path)
 		if err != nil {
 			return nil, fmt.Errorf("custom streamer: %w", err)
+		}
+		if format.SampleRate <= 0 {
+			_ = decoder.Close()
+			return nil, fmt.Errorf("custom streamer: invalid sample rate %d", format.SampleRate)
 		}
 		s := resampleWithHeadroom(p.resampleQuality, format.SampleRate, p.sr, decoder)
 		return &trackPipeline{
@@ -403,8 +407,12 @@ func (p *Player) buildPipeline(path string, knownDuration time.Duration) (*track
 	}
 
 	decoder, format, err := decodeWithExt(rc, ext)
-	if err != nil {
-		rc.Close()
+	if err != nil || format.SampleRate <= 0 {
+		if err == nil {
+			_ = decoder.Close()
+		} else {
+			rc.Close()
+		}
 		if remote {
 			tp, err := p.ffmpegURLPipeline(path, src.live, src.prefetch)
 			if err != nil {

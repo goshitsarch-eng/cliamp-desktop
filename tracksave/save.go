@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/bjarneo/cliamp/internal/fileutil"
 	"github.com/bjarneo/cliamp/playlist"
@@ -56,16 +58,44 @@ func SaveTo(ctx context.Context, track playlist.Track, directory string) (string
 		name = track.Artist + " - " + name
 	}
 	name = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
 		if strings.ContainsRune(`/\\:*?"<>|`, r) {
 			return '_'
 		}
 		return r
 	}, name)
-	destination := filepath.Join(saveDir, name+filepath.Ext(track.Path))
+	name = strings.Trim(name, ". ")
+	name = truncateUTF8Bytes(name, 200)
+	if name == "" {
+		name = "track"
+	}
+	ext := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || strings.ContainsRune(`/\\:*?"<>|`, r) {
+			return -1
+		}
+		return r
+	}, filepath.Ext(track.Path))
+	cleanSaveDir := filepath.Clean(saveDir)
+	destination := filepath.Join(cleanSaveDir, name+ext)
+	if filepath.Dir(destination) != cleanSaveDir {
+		return "", fmt.Errorf("invalid destination filename")
+	}
 	if err := fileutil.CopyFile(track.Path, destination); err != nil {
 		return "", err
 	}
 	return destination, nil
+}
+
+func truncateUTF8Bytes(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	for maxBytes > 0 && !utf8.RuneStart(s[maxBytes]) {
+		maxBytes--
+	}
+	return strings.TrimRight(s[:maxBytes], ". ")
 }
 
 // NeedsDownload reports whether SaveTo downloads track with yt-dlp, which can
@@ -75,6 +105,17 @@ func NeedsDownload(track playlist.Track) bool {
 }
 
 func insideTempDir(path string) bool {
-	relative, err := filepath.Rel(os.TempDir(), path)
+	if fi, err := os.Lstat(path); err != nil || !fi.Mode().IsRegular() {
+		return false
+	}
+	tempDir, err := filepath.EvalSymlinks(os.TempDir())
+	if err != nil {
+		tempDir = filepath.Clean(os.TempDir())
+	}
+	realPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false
+	}
+	relative, err := filepath.Rel(tempDir, realPath)
 	return err == nil && relative != "." && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) && !filepath.IsAbs(relative)
 }

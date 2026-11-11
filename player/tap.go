@@ -3,6 +3,7 @@
 package player
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -12,12 +13,9 @@ import (
 // tap is a streamer wrapper that copies samples into a ring buffer
 // for real-time FFT visualization. It sits in the audio pipeline
 // before the volume control so the visualizer sees pre-volume amplitude.
-//
-// The write position is updated atomically, allowing the audio thread
-// (sole writer) and the visualizer thread to operate without mutex contention.
-// Minor sample tearing at the read boundary is invisible in visualization.
 type tap struct {
 	s           beep.Streamer
+	mu          sync.Mutex
 	buf         [][2]float64
 	pos         atomic.Int64
 	written     atomic.Int64 // total frames written; used by the waveform sample clock
@@ -50,6 +48,10 @@ func newTap(s beep.Streamer, bufSize, sampleRate, speakerFrames int) *tap {
 // Stream passes audio through while capturing stereo frames in the ring buffer.
 func (t *tap) Stream(samples [][2]float64) (int, bool) {
 	n, ok := t.s.Stream(samples)
+	if t.size <= 0 {
+		return n, ok
+	}
+	t.mu.Lock()
 	p := int(t.pos.Load())
 	for i := range n {
 		t.buf[p] = samples[i]
@@ -59,6 +61,7 @@ func (t *tap) Stream(samples [][2]float64) (int, bool) {
 	t.writeAt.Store(t.now().UnixNano())
 	t.pos.Store(int64(p))
 	t.written.Add(int64(n))
+	t.mu.Unlock()
 	return n, ok
 }
 
@@ -109,6 +112,12 @@ func (t *tap) samplesIntoAt(dst []float64, end int64) int {
 	if n == 0 || end <= 0 {
 		return 0
 	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	end = min(end, t.written.Load())
+	if end <= 0 {
+		return 0
+	}
 	n = min(n, int(end))
 	start := int((end - int64(n)) % int64(t.size))
 	if start < 0 {
@@ -127,6 +136,11 @@ func (t *tap) samplesIntoAt(dst []float64, end int64) int {
 // StereoSamplesInto copies the last len(dst) stereo frames into dst.
 func (t *tap) StereoSamplesInto(dst [][2]float64) int {
 	n := min(len(dst), t.size)
+	if n == 0 {
+		return 0
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	p := int(t.pos.Load())
 	start := (p - n + t.size) % t.size
 	first := min(n, t.size-start)

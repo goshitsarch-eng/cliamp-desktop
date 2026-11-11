@@ -59,6 +59,16 @@ func TestParse(t *testing.T) {
 			input:   "ssh://ho=st/path/to/music",
 			wantErr: true,
 		},
+		{
+			name:    "empty host is rejected",
+			input:   "ssh:///path/to/music",
+			wantErr: true,
+		},
+		{
+			name:    "user with dash host is rejected",
+			input:   "ssh://user@-oProxyCommand/path/to/music",
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -94,12 +104,12 @@ func TestSSHArgs(t *testing.T) {
 		{
 			name:   "no port",
 			parsed: Parsed{Host: "myhost", Port: "", Path: "/music"},
-			want:   []string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=5", "myhost"},
+			want:   []string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=5", "--", "myhost"},
 		},
 		{
 			name:   "with port",
 			parsed: Parsed{Host: "user@myhost", Port: "2222", Path: "/music"},
-			want:   []string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=5", "-p", "2222", "user@myhost"},
+			want:   []string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=5", "-p", "2222", "--", "user@myhost"},
 		},
 	}
 	for _, tt := range tests {

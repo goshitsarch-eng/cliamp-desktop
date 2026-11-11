@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
+	"unicode"
 )
 
 // Parsed holds the components of an ssh:// URL.
@@ -22,7 +24,7 @@ func (p Parsed) SSHArgs() []string {
 	if p.Port != "" {
 		args = append(args, "-p", p.Port)
 	}
-	args = append(args, p.Host)
+	args = append(args, "--", p.Host)
 	return args
 }
 
@@ -40,15 +42,34 @@ func Parse(raw string) (Parsed, error) {
 		return Parsed{}, fmt.Errorf("ssh URL missing path: %s", raw)
 	}
 
-	host := u.Hostname()
-	if u.User != nil {
-		host = u.User.Username() + "@" + host
+	hostname := u.Hostname()
+	if hostname == "" {
+		return Parsed{}, fmt.Errorf("invalid ssh URL %q: missing host", raw)
+	}
+	if strings.HasPrefix(hostname, "-") || strings.Contains(hostname, "=") {
+		return Parsed{}, fmt.Errorf("invalid ssh URL %q: host %q contains disallowed characters", raw, hostname)
 	}
 
-	// Reject hostnames that start with - (ssh -o option prefix) or contain =
-	// (= would separate a key/value pair, neither a valid hostname pattern).
-	if strings.HasPrefix(host, "-") || strings.Contains(host, "=") {
-		return Parsed{}, fmt.Errorf("invalid ssh URL %q: host %q contains disallowed characters", raw, host)
+	host := hostname
+	if u.User != nil {
+		if _, hasPassword := u.User.Password(); hasPassword {
+			return Parsed{}, fmt.Errorf("invalid ssh URL %q: password in URL is not supported", raw)
+		}
+		user := u.User.Username()
+		if user == "" || strings.HasPrefix(user, "-") || strings.Contains(user, "=") {
+			return Parsed{}, fmt.Errorf("invalid ssh URL %q: user %q contains disallowed characters", raw, user)
+		}
+		host = user + "@" + hostname
+	}
+	for _, r := range host {
+		if unicode.IsControl(r) || unicode.IsSpace(r) {
+			return Parsed{}, fmt.Errorf("invalid ssh URL %q: host %q contains disallowed characters", raw, host)
+		}
+	}
+	for _, r := range u.Path {
+		if r == 0 || r == '\r' || r == '\n' {
+			return Parsed{}, fmt.Errorf("invalid ssh URL %q: path contains control characters", raw)
+		}
 	}
 
 	port := u.Port()
@@ -56,6 +77,12 @@ func Parse(raw string) (Parsed, error) {
 	if port == "" && u.Host != host {
 		if _, p, err := net.SplitHostPort(u.Host); err == nil {
 			port = p
+		}
+	}
+	if port != "" {
+		n, err := strconv.Atoi(port)
+		if err != nil || n < 1 || n > 65535 {
+			return Parsed{}, fmt.Errorf("invalid ssh URL %q: invalid port %q", raw, port)
 		}
 	}
 

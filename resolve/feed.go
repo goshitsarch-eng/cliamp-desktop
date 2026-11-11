@@ -106,7 +106,7 @@ func Feed(ctx context.Context, feedURL string) ([]playlist.Track, error) {
 				case xml.Name{Local: "title"}:
 					err = dec.DecodeElement(&channelTitle, &token)
 					// Decoded once here, so the tracks share one string.
-					channelTitle = html.UnescapeString(channelTitle)
+					channelTitle = cleanFeedText(channelTitle)
 				case xml.Name{Local: "image"}, xml.Name{Space: itunesNS, Local: "image"}:
 					var image struct {
 						Href string `xml:"href,attr"`
@@ -159,7 +159,7 @@ func Feed(ctx context.Context, feedURL string) ([]playlist.Track, error) {
 							continue
 						}
 						// Publishers put HTML entities such as &quot; inside CDATA, where XML leaves them as is.
-						title := html.UnescapeString(strings.TrimSpace(item.Title))
+						title := cleanFeedText(item.Title)
 						if title == "" {
 							title = "Untitled episode"
 						}
@@ -229,4 +229,15 @@ func feedHTTPURL(raw string) *url.URL {
 		return nil
 	}
 	return u
+}
+
+func cleanFeedText(raw string) string {
+	unescaped := html.UnescapeString(raw)
+	cleaned := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, unescaped)
+	return strings.TrimSpace(cleaned)
 }

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bjarneo/cliamp/applog"
+	"github.com/bjarneo/cliamp/internal/appdir"
 )
 
 const ipcRequestReadTimeout = 60 * time.Second
@@ -124,9 +125,13 @@ func newServer(sockPath string, broker *Broker, brokerOwned bool) (*Server, erro
 		return nil, err
 	}
 
-	// Ensure the parent directory exists.
-	if err := os.MkdirAll(filepath.Dir(sockPath), 0700); err != nil {
+	// Ensure the parent directory exists and tighten the config dir before binding.
+	sockDir := filepath.Dir(sockPath)
+	if err := os.MkdirAll(sockDir, 0700); err != nil {
 		return nil, fmt.Errorf("ipc: mkdir: %w", err)
+	}
+	if cfgDir, err := appdir.Dir(); err == nil && filepath.Clean(sockDir) == filepath.Clean(cfgDir) {
+		_ = os.Chmod(sockDir, 0700)
 	}
 
 	ln, err := listenSocket(sockPath)

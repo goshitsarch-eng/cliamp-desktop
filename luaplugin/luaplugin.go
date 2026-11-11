@@ -149,7 +149,6 @@ type Manager struct {
 	plugins        []*Plugin
 	hooks          map[string][]*luaHook          // event name -> handlers
 	keyBinds       map[string][]*luaHook          // key string -> handlers (global, non-overlay)
-	keyBindDescs   map[string]KeyBinding          // key string -> UI overlay entry (only for binds that supplied a description)
 	reservedKeys   map[string]bool                // core-reserved keys; plugins may not bind these
 	commands       map[string]map[string]*luaHook // plugin name -> command name -> handler
 	visPlugs       []*luaVis                      // Lua visualizers in registration order
@@ -294,20 +293,19 @@ func newManager(allowed []string, publisher EventPublisher) *Manager {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	cmdCtx, cmdCancel := context.WithCancelCause(ctx)
 	return &Manager{
-		hooks:        make(map[string][]*luaHook),
-		keyBinds:     make(map[string][]*luaHook),
-		keyBindDescs: make(map[string]KeyBinding),
-		commands:     make(map[string]map[string]*luaHook),
-		visMap:       make(map[string]*luaVis),
-		namespaces:   make(map[string]string),
-		names:        make(map[string]*Plugin),
-		timers:       newTimerManager(),
-		execs:        newExecManager(allowed),
-		publisher:    publisher,
-		ctx:          ctx,
-		cancel:       cancel,
-		cmdCtx:       cmdCtx,
-		cmdCancel:    cmdCancel,
+		hooks:      make(map[string][]*luaHook),
+		keyBinds:   make(map[string][]*luaHook),
+		commands:   make(map[string]map[string]*luaHook),
+		visMap:     make(map[string]*luaVis),
+		namespaces: make(map[string]string),
+		names:      make(map[string]*Plugin),
+		timers:     newTimerManager(),
+		execs:      newExecManager(allowed),
+		publisher:  publisher,
+		ctx:        ctx,
+		cancel:     cancel,
+		cmdCtx:     cmdCtx,
+		cmdCancel:  cmdCancel,
 	}
 }
 
@@ -402,11 +400,6 @@ func (m *Manager) cleanupPlugin(p *Plugin) {
 			delete(m.keyBinds, key)
 		} else {
 			m.keyBinds[key] = filtered
-		}
-	}
-	for key, desc := range m.keyBindDescs {
-		if desc.owner == p {
-			delete(m.keyBindDescs, key)
 		}
 	}
 	for name, cmds := range m.commands {

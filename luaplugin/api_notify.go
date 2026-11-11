@@ -20,7 +20,7 @@ func registerNotifyAPI(L *lua.LState, cliamp *lua.LTable, p *Plugin) {
 		title := L.CheckString(1)
 		body := L.OptString(2, "")
 
-		args := []string{title}
+		args := []string{"--", title}
 		if body != "" {
 			args = append(args, body)
 		}

@@ -38,8 +38,15 @@ func parsePLS(r io.Reader) ([]plsEntry, error) {
 	lengths := map[int]int{}
 
 	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	firstLine := true
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+		raw := scanner.Text()
+		if firstLine {
+			raw = strings.TrimPrefix(raw, "\ufeff")
+			firstLine = false
+		}
+		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, "[") || strings.HasPrefix(line, ";") {
 			continue
 		}

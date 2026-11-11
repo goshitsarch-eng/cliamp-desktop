@@ -26,19 +26,27 @@ import (
 // current end of file until the downloader appends more data or finishes, so
 // the audio decoder can start before the whole document is on disk.
 type streamSource struct {
-	mu   sync.Mutex
-	cond *sync.Cond
-	file *os.File
-	size int64
-	pos  int64
-	done bool
-	err  error
+	mu        sync.Mutex
+	cond      *sync.Cond
+	file      *os.File
+	totalSize int64
+	size      int64
+	pos       int64
+	done      bool
+	streaming bool
+	err       error
 }
 
 func newStreamSource(file *os.File) *streamSource {
 	source := &streamSource{file: file}
 	source.cond = sync.NewCond(&source.mu)
 	return source
+}
+
+func (s *streamSource) setStreaming(v bool) {
+	s.mu.Lock()
+	s.streaming = v
+	s.mu.Unlock()
 }
 
 // Read implements io.Reader. It waits while the read position is at the end of
@@ -66,7 +74,10 @@ func (s *streamSource) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// Seek implements io.Seeker within the data downloaded so far.
+// Seek implements io.Seeker. SeekEnd uses the known document length so decoders
+// see the full file size before the background transfer finishes, while live
+// playback seeks reject offsets beyond the buffered prefix so Read cannot block
+// while holding speaker.Lock().
 func (s *streamSource) Seek(offset int64, whence int) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -77,12 +88,19 @@ func (s *streamSource) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekCurrent:
 		next = s.pos + offset
 	case io.SeekEnd:
-		next = s.size + offset
+		end := s.size
+		if s.totalSize > end {
+			end = s.totalSize
+		}
+		next = end + offset
 	default:
 		return 0, errors.New("telegram: invalid seek origin")
 	}
 	if next < 0 {
 		return 0, errors.New("telegram: negative seek position")
+	}
+	if s.streaming && whence != io.SeekEnd && !s.done && next > s.size {
+		return s.pos, errors.New("telegram: target position not buffered yet")
 	}
 	s.pos = next
 	return next, nil
@@ -128,7 +146,7 @@ func (p *Provider) openStream(chat string, msgID int) (beep.StreamSeekCloser, be
 	}
 	extension := extensionFor(doc)
 	dir := filepath.Join(p.cacheDir, safeChat(chat))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, beep.Format{}, 0, err
 	}
 	finalPath := filepath.Join(dir, fmt.Sprintf("%d%s", msgID, extension))
@@ -161,16 +179,24 @@ func (p *Provider) openStream(chat string, msgID int) (beep.StreamSeekCloser, be
 	readerFile, err := os.Open(partialPath)
 	if err != nil {
 		writerFile.Close()
+		_ = os.Remove(partialPath)
 		return nil, beep.Format{}, 0, err
 	}
 	source := newStreamSource(readerFile)
-	go p.downloadStream(chat, msgID, doc, source, writerFile, partialPath, finalPath)
+	source.totalSize = doc.Size
+	baseCtx := p.runCtx
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	dlCtx, dlCancel := context.WithTimeout(baseCtx, 30*time.Minute)
+	go p.downloadStream(dlCtx, dlCancel, chat, msgID, doc, source, writerFile, partialPath, finalPath)
 
 	buffer := int64(p.cfg.BufferMB) * 1024 * 1024
 	if p.cfg.BufferMB <= 0 {
 		buffer = 1024 * 1024
 	}
 	if err := source.waitFor(buffer, 3*time.Minute); err != nil {
+		dlCancel()
 		readerFile.Close()
 		return nil, beep.Format{}, 0, err
 	}
@@ -180,9 +206,11 @@ func (p *Provider) openStream(chat string, msgID int) (beep.StreamSeekCloser, be
 
 	streamer, format, err := decode(source, extension)
 	if err != nil {
+		dlCancel()
 		readerFile.Close()
 		return nil, beep.Format{}, 0, err
 	}
+	source.setStreaming(true)
 	return streamer, format, time.Duration(docDuration(doc)) * time.Second, nil
 }
 
@@ -209,8 +237,7 @@ func (s *streamSource) waitFor(size int64, timeout time.Duration) error {
 // downloadStream writes the document into the growing file and renames it when
 // the transfer completes. It owns its context: the caller returns as soon as
 // the buffer is ready and the download must outlive it.
-func (p *Provider) downloadStream(chat string, msgID int, doc *tg.Document, source *streamSource, writerFile *os.File, partialPath, finalPath string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+func (p *Provider) downloadStream(ctx context.Context, cancel context.CancelFunc, chat string, msgID int, doc *tg.Document, source *streamSource, writerFile *os.File, partialPath, finalPath string) {
 	defer cancel()
 	defer writerFile.Close()
 	writer := streamWriter{source: source, file: writerFile}

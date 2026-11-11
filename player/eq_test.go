@@ -4,6 +4,8 @@ import (
 	"math"
 	"sync/atomic"
 	"testing"
+
+	"github.com/gopxl/beep/v2"
 )
 
 func TestBiquadPassthroughAtZeroDB(t *testing.T) {
@@ -98,5 +100,33 @@ func TestEqFreqs(t *testing.T) {
 	// Should have exactly 10 bands
 	if len(eqFreqs) != 10 {
 		t.Errorf("len(eqFreqs) = %d, want 10", len(eqFreqs))
+	}
+}
+
+func TestEQChainAboveNyquistStaysFinite(t *testing.T) {
+	// At 22050 Hz, Nyquist is 11025 Hz, so bands at 12, 14, and 16 kHz exceed
+	// Nyquist and must act as unity passthrough rather than blowing up to NaN/Inf.
+	const nSamples = 4096
+	src := &sineStreamer{freq: 440, sr: 22050, count: nSamples}
+	var gains [10]atomic.Uint64
+	for i := range gains {
+		gains[i].Store(math.Float64bits(12.0))
+	}
+	var chain beep.Streamer = src
+	for i, freq := range eqFreqs {
+		chain = newBiquad(chain, freq, 1.41, &gains[i], 22050)
+	}
+	samples := make([][2]float64, nSamples)
+	n, _ := chain.Stream(samples)
+	if n != nSamples {
+		t.Fatalf("Stream() = %d, want %d", n, nSamples)
+	}
+	for i := range n {
+		for ch := range 2 {
+			v := samples[i][ch]
+			if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 20 {
+				t.Fatalf("sample[%d][%d] = %v, expected finite bounded output", i, ch, v)
+			}
+		}
 	}
 }

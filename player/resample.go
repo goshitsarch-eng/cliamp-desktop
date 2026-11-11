@@ -34,8 +34,11 @@ func (h *headroomStreamer) Err() error { return h.s.Err() }
 // gain reduction beforehand so interpolation overshoot does not clip at the
 // final output stage. When no resampling is needed, s is returned unchanged.
 func resampleWithHeadroom(quality int, from, to beep.SampleRate, s beep.Streamer) beep.Streamer {
-	if from == to {
+	if from <= 0 || to <= 0 || from == to {
 		return s
+	}
+	if quality <= 0 {
+		quality = 1
 	}
 	return beep.Resample(quality, from, to, &headroomStreamer{s: s, gain: resampleHeadroomGain})
 }

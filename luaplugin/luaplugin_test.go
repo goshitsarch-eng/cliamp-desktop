@@ -2072,3 +2072,60 @@ func TestRenderErrorsLogOnceAndSkipStderr(t *testing.T) {
 		})
 	}
 }
+
+func TestTimerValidationAndOwnership(t *testing.T) {
+	m := newTestManager()
+	t.Cleanup(m.Close)
+	p1 := loadTestPlugin(t, m, "owner", `
+		plugin.register({name = "owner", type = "hook"})
+		_G.owner_fired = false
+		_G.id = cliamp.timer.after(0.06, function()
+			_G.owner_fired = true
+		end)
+		-- Zero interval must error cleanly; tiny sub-ns interval must clamp safely.
+		_G.zero_ok = pcall(cliamp.timer.every, 0, function() end)
+		local z = cliamp.timer.every(1e-12, function() end)
+		cliamp.timer.cancel(z)
+	`)
+	p1.mu.Lock()
+	timerID := int(lua.LVAsNumber(p1.L.GetGlobal("id")))
+	zeroOK := p1.L.GetGlobal("zero_ok")
+	p1.mu.Unlock()
+	if zeroOK != lua.LFalse {
+		t.Fatalf("expected timer.every(0) to raise error, got %v", zeroOK)
+	}
+
+	loadTestPlugin(t, m, "intruder", `
+		plugin.register({name = "intruder", type = "hook"})
+		cliamp.timer.cancel(`+fmt.Sprintf("%d", timerID)+`)
+	`)
+	time.Sleep(150 * time.Millisecond)
+	p1.mu.Lock()
+	fired := p1.L.GetGlobal("owner_fired")
+	p1.mu.Unlock()
+	if fired != lua.LTrue {
+		t.Fatal("intruder plugin canceled owner plugin's timer")
+	}
+}
+
+func TestJSONEncodeRejectsDAGBomb(t *testing.T) {
+	m := newTestManager()
+	t.Cleanup(m.Close)
+	p := loadTestPlugin(t, m, "dag-bomb", `
+		plugin.register({name = "dag-bomb", type = "hook"})
+		local t = {x = 1}
+		for i = 1, 25 do
+			t = {a = t, b = t}
+		end
+		local res, err = cliamp.json.encode(t)
+		_G.res = res
+		_G.err = err
+	`)
+	p.mu.Lock()
+	res := p.L.GetGlobal("res")
+	errMsg := p.L.GetGlobal("err")
+	p.mu.Unlock()
+	if res != lua.LNil || errMsg == lua.LNil {
+		t.Fatalf("expected DAG bomb json.encode to return nil, err; got res=%v err=%v", res, errMsg)
+	}
+}

@@ -46,6 +46,9 @@ func newChainedOggStreamer(rc io.ReadCloser, targetSR beep.SampleRate, resampleQ
 	if err != nil {
 		return nil, beep.Format{}, err
 	}
+	if reader.SampleRate() <= 0 || reader.Channels() <= 0 {
+		return nil, beep.Format{}, io.ErrUnexpectedEOF
+	}
 
 	cs := &chainedOggStreamer{
 		rc:              rc,
@@ -119,6 +122,9 @@ func (cs *chainedOggStreamer) chain() error {
 	reader, err := oggvorbis.NewReader(noCloseReader{cs.rc})
 	if err != nil {
 		return err
+	}
+	if reader.SampleRate() <= 0 || reader.Channels() <= 0 {
+		return io.ErrUnexpectedEOF
 	}
 	cs.initDecoder(reader)
 	cs.notifyMeta()
