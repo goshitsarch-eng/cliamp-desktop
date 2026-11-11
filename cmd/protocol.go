@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 )
 
@@ -104,14 +103,4 @@ func handlerExecutable() (string, error) {
 		return exe, nil
 	}
 	return resolved, nil
-}
-
-// runQuiet executes a desktop-integration helper, ignoring a missing binary.
-// These commands refresh caches; the registration itself is the file or key
-// written before them, so a missing helper must not fail the whole command.
-func runQuiet(name string, args ...string) {
-	if _, err := exec.LookPath(name); err != nil {
-		return
-	}
-	_ = exec.Command(name, args...).Run()
 }

@@ -40,6 +40,7 @@ static int caOutputChannels(AudioDeviceID id) {
 	UInt32 sz = 0;
 	if (AudioObjectGetPropertyDataSize(id, &addr, 0, NULL, &sz) != noErr || sz == 0) return 0;
 	AudioBufferList *bl = (AudioBufferList *)malloc(sz);
+	if (bl == NULL) return 0;
 	if (AudioObjectGetPropertyData(id, &addr, 0, NULL, &sz, bl) != noErr) { free(bl); return 0; }
 	int ch = 0;
 	for (UInt32 i = 0; i < bl->mNumberBuffers; i++) ch += bl->mBuffers[i].mNumberChannels;
@@ -51,7 +52,15 @@ static char* caStr(CFStringRef s) {
 	if (s == NULL) return NULL;
 	CFIndex len = CFStringGetMaximumSizeForEncoding(CFStringGetLength(s), kCFStringEncodingUTF8)+1;
 	char *buf = (char*)malloc(len);
-	CFStringGetCString(s, buf, len, kCFStringEncodingUTF8);
+	if (buf == NULL) {
+		CFRelease(s);
+		return NULL;
+	}
+	if (!CFStringGetCString(s, buf, len, kCFStringEncodingUTF8)) {
+		free(buf);
+		CFRelease(s);
+		return NULL;
+	}
 	CFRelease(s);
 	return buf;
 }
@@ -76,12 +85,16 @@ static int caListOutputs(CADev **out, int *count) {
 	AudioObjectPropertyAddress a = {kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
 	UInt32 sz = 0;
 	if (AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &a, 0, NULL, &sz) != noErr) { *count=0; return -1; }
+	if (sz == 0) { *out = NULL; *count = 0; return 0; }
 	int n = sz / sizeof(AudioDeviceID);
 	AudioDeviceID *ids = (AudioDeviceID*)malloc(sz);
+	if (ids == NULL) { *count=0; return -1; }
 	if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &a, 0, NULL, &sz, ids) != noErr) { free(ids); *count=0; return -1; }
 	int oc = 0;
 	for (int i=0; i<n; i++) { if (caOutputChannels(ids[i])>0) oc++; }
+	if (oc == 0) { free(ids); *out = NULL; *count = 0; return 0; }
 	CADev *devs = (CADev*)calloc(oc, sizeof(CADev));
+	if (devs == NULL) { free(ids); *count=0; return -1; }
 	int j = 0;
 	for (int i=0; i<n && j<oc; i++) {
 		if (caOutputChannels(ids[i])<=0) continue;
@@ -108,7 +121,7 @@ func ListAudioDevices() ([]AudioDevice, error) {
 	var cdevs *C.CADev
 	var count C.int
 	if C.caListOutputs(&cdevs, &count) != 0 {
-		return nil, fmt.Errorf("Core Audio: failed to enumerate devices")
+		return nil, fmt.Errorf("core audio: failed to enumerate devices")
 	}
 	defer C.caFreeDevs(cdevs, count)
 
@@ -166,7 +179,7 @@ func SwitchAudioDevice(deviceName string) error {
 	for _, d := range devices {
 		if strings.EqualFold(d.Name, deviceName) || strings.EqualFold(d.Description, deviceName) {
 			if C.caSetDefaultOutput(C.AudioDeviceID(d.Index)) != 0 {
-				return fmt.Errorf("Core Audio: failed to set output to %q", deviceName)
+				return fmt.Errorf("core audio: failed to set output to %q", deviceName)
 			}
 			return nil
 		}

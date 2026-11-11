@@ -5,6 +5,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -158,4 +159,14 @@ func unregisterHandler() (removed, blocked []string, err error) {
 
 func handlerStatus() ([]string, error) {
 	return handlerLocations()
+}
+
+// runQuiet executes a desktop-integration helper, ignoring a missing binary.
+// These commands refresh caches; the registration itself is the file or key
+// written before them, so a missing helper must not fail the whole command.
+func runQuiet(name string, args ...string) {
+	if _, err := exec.LookPath(name); err != nil {
+		return
+	}
+	_ = exec.Command(name, args...).Run()
 }

@@ -56,7 +56,7 @@ buildGoModule {
       src = lib.cleanSource ../.;
       filter = path: _type: !(builtins.elem path excluded);
     };
-  vendorHash = "sha256-cvy2zEPvhmWb/bBOEt6Q/X4gSVzbplMuZLZpgnebB9g=";
+  vendorHash = "sha256-tugHeYuMeFwOPv4Ja3Ksw4RLxrmx/WIhayzcv88MFpw=";
 
   nativeBuildInputs = [
     makeWrapper

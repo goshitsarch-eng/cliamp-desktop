@@ -18,7 +18,7 @@ a manual interface-scale setting, and an embedded PCK in exported builds.
 
 ## Prerequisites
 
-Use Godot 4.7.2 and Go 1.26.10 (`mise.toml`). Native builds must run on their
+Use Godot 4.7.2 and Go 1.26.11 (`mise.toml`). Native builds must run on their
 target operating system; a Linux build does not validate Windows or macOS.
 
 | Platform | Build and runtime prerequisites |
