@@ -60,7 +60,10 @@ func _build() -> void:
 		_render_bindings()
 		if Store.connected and visible:
 			_load_commands())
-	ThemeBuilder.palette_changed.connect(func(_p: Palette) -> void: FormKit.recolor(_muted))
+	ThemeBuilder.palette_changed.connect(func(_p: Palette) -> void:
+		_render_installed()
+		_muted = _muted.filter(func(n: Variant) -> bool: return is_instance_valid(n))
+		FormKit.recolor(_muted))
 
 
 func activate() -> void:
@@ -295,6 +298,8 @@ func _change(action: String, values: Dictionary) -> void:
 
 
 func _restart() -> void:
+	if Store.is_playing() and not await Dialogs.confirm(self, "Restart the player?", "Playback will pause briefly while the player restarts and restores your queue.", "Restart"):
+		return
 	_show_error("")
 	_set_busy(true)
 	var result := await Backend.restart_owned_engine()

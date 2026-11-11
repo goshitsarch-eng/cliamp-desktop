@@ -26,6 +26,7 @@ var _follow_btn: Button
 var _scroll: ScrollContainer
 var _list: VBoxContainer
 var _empty: VBoxContainer
+var _empty_icon: Label
 var _empty_title: Label
 var _empty_text: Label
 var _empty_btn: Button
@@ -55,7 +56,7 @@ func _init() -> void:
 	head_text.add_child(_title)
 	_subtitle = Label.new()
 	_subtitle.add_theme_font_size_override("font_size", 12)
-	_subtitle.modulate = Color(1, 1, 1, 0.65)
+	_subtitle.add_theme_color_override("font_color", ThemeBuilder.palette.muted)
 	_subtitle.clip_text = true
 	head_text.add_child(_subtitle)
 	_refresh_btn = Icons.button("refresh", "Refresh lyrics", refresh)
@@ -77,7 +78,7 @@ func _init() -> void:
 	bar.add_child(bar_row)
 	_status = Label.new()
 	_status.add_theme_font_size_override("font_size", 11)
-	_status.modulate = Color(1, 1, 1, 0.65)
+	_status.add_theme_color_override("font_color", ThemeBuilder.palette.muted)
 	_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	bar_row.add_child(_status)
@@ -105,6 +106,7 @@ func _init() -> void:
 	_scroll.gui_input.connect(_on_scroll_input)
 	_scroll.scroll_started.connect(_stop_following)
 	_scroll.get_v_scroll_bar().scrolling.connect(_stop_following)
+	_scroll.resized.connect(_on_scroll_resized)
 	body.add_child(_scroll)
 	var pad := MarginContainer.new()
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -123,7 +125,8 @@ func _init() -> void:
 	_empty.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_empty.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	body.add_child(_empty)
-	_empty.add_child(Icons.label("lyrics", 48, ThemeBuilder.palette.muted))
+	_empty_icon = Icons.label("lyrics", 48, ThemeBuilder.palette.muted)
+	_empty.add_child(_empty_icon)
 	_empty_title = Label.new()
 	_empty_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_empty_title.add_theme_font_size_override("font_size", 18)
@@ -131,7 +134,7 @@ func _init() -> void:
 	_empty_text = Label.new()
 	_empty_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_empty_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_empty_text.modulate = Color(1, 1, 1, 0.65)
+	_empty_text.add_theme_color_override("font_color", ThemeBuilder.palette.muted)
 	_empty.add_child(_empty_text)
 	_empty_btn = Button.new()
 	_empty_btn.text = "Try again"
@@ -145,8 +148,22 @@ func _init() -> void:
 	add_child(_timer)
 
 	Store.state_changed.connect(_on_state)
-	ThemeBuilder.palette_changed.connect(func(_p: Palette) -> void: _style_lines())
+	ThemeBuilder.palette_changed.connect(_recolor)
 	_show_state()
+
+
+func _recolor(_p: Palette) -> void:
+	var muted := ThemeBuilder.palette.muted
+	_subtitle.add_theme_color_override("font_color", muted)
+	_status.add_theme_color_override("font_color", muted)
+	_empty_icon.add_theme_color_override("font_color", muted)
+	_empty_text.add_theme_color_override("font_color", muted)
+	_style_lines()
+
+
+func _on_scroll_resized() -> void:
+	if _is_active and _synced and _follow and _active >= 0:
+		_scroll_to_line.call_deferred(_active)
 
 
 func activate() -> void:

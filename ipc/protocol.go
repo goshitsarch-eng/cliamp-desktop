@@ -32,6 +32,7 @@ type Request struct {
 	Play     bool        `json:"play,omitempty"`
 	Width    int         `json:"width,omitempty"`
 	Height   int         `json:"height,omitempty"`
+	Code     string      `json:"code,omitempty"`
 }
 
 // Response is the operation-specific data embedded in a successful V2 job.
@@ -77,11 +78,13 @@ type Response struct {
 // ProviderAuthInfo describes an interactive sign-in in this runtime. Idle
 // means no sign-in has started here; it does not inspect stored credentials.
 type ProviderAuthInfo struct {
-	Provider    string `json:"provider"`
-	State       string `json:"state"`
-	Cancellable bool   `json:"cancellable"`
-	URL         string `json:"url,omitempty"`
-	Error       string `json:"error,omitempty"`
+	Provider     string `json:"provider"`
+	State        string `json:"state"`
+	Cancellable  bool   `json:"cancellable"`
+	CodeRequired bool   `json:"code_required,omitempty"`
+	Prompt       string `json:"prompt,omitempty"`
+	URL          string `json:"url,omitempty"`
+	Error        string `json:"error,omitempty"`
 }
 
 // ThemeInfo carries the active theme name and its resolved hex colors.
@@ -118,6 +121,7 @@ type TrackInfo struct {
 	Restricted     bool              `json:"restricted,omitempty"`
 	Feed           bool              `json:"feed,omitempty"`
 	Bookmark       bool              `json:"bookmark,omitempty"`
+	UserRating     int               `json:"user_rating,omitempty"`
 	Unplayable     bool              `json:"unplayable,omitempty"`
 	DirSourced     bool              `json:"dir_sourced,omitempty"`
 	ProviderMeta   map[string]string `json:"provider_meta,omitempty"`
@@ -143,6 +147,7 @@ type ProviderInfo struct {
 	BrowseAlbums    bool   `json:"browse_albums,omitempty"`
 	Catalog         bool   `json:"catalog,omitempty"`
 	Authenticatable bool   `json:"authenticatable,omitempty"`
+	CodeAuth        bool   `json:"code_auth,omitempty"`
 }
 
 type ArtistInfo struct {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/playlist"
+	"github.com/bjarneo/cliamp/provider"
 	"github.com/bjarneo/cliamp/ui"
 )
 
@@ -130,21 +131,36 @@ func (m *Model) handleV2ProviderAuth(jobs *ipc.JobStore, jobID string, request i
 		m.failV2Job(jobs, jobID, v2NotFoundError())
 		return nil
 	}
-	auth, ok := entry.Provider.(playlist.Authenticator)
-	if !ok {
+	auth, isAuth := entry.Provider.(playlist.Authenticator)
+	codeAuth, isCodeAuth := entry.Provider.(provider.CodeAuthenticator)
+	if !isAuth && !isCodeAuth {
 		m.failV2Job(jobs, jobID, v2UnavailableError())
 		return nil
 	}
 	group := providerAuthGroup(entry.Provider)
 	contextAuth, cancellable := entry.Provider.(playlist.ContextAuthenticator)
+	var prompt string
+	if isCodeAuth {
+		prompt = codeAuth.Prompt()
+	}
 	state := m.desktop.auth[group]
 	if request.Cmd == "provider.auth.status" {
-		info := ipc.ProviderAuthInfo{Provider: entry.Key, State: "idle", Cancellable: cancellable}
+		info := ipc.ProviderAuthInfo{
+			Provider: entry.Key, State: "idle", Cancellable: cancellable,
+			CodeRequired: isCodeAuth, Prompt: prompt,
+		}
 		if state != nil {
 			info = state.info
 			info.Provider = entry.Key
+			info.CodeRequired = isCodeAuth
+			info.Prompt = prompt
 		}
 		m.completeV2Job(jobs, jobID, ipc.Response{OK: true, Auth: &info})
+		return nil
+	}
+	code := strings.TrimSpace(request.Code)
+	if isCodeAuth && code == "" {
+		m.failV2Job(jobs, jobID, v2InvalidParamsError())
 		return nil
 	}
 	if state != nil && state.running {
@@ -155,12 +171,20 @@ func (m *Model) handleV2ProviderAuth(jobs *ipc.JobStore, jobID string, request i
 		m.desktop.auth = make(map[string]*ipcProviderAuthState)
 	}
 	state = &ipcProviderAuthState{
-		info:         ipc.ProviderAuthInfo{Provider: entry.Key, State: "authenticating", Cancellable: cancellable},
+		info: ipc.ProviderAuthInfo{
+			Provider: entry.Key, State: "authenticating", Cancellable: cancellable,
+			CodeRequired: isCodeAuth, Prompt: prompt,
+		},
 		providerName: entry.Provider.Name(), jobID: jobID, running: true,
 	}
 	m.desktop.auth[group] = state
 	m.publishIPCProviderAuth(state.info)
-	command := authenticateProviderCmd(auth, entry.Provider.Name(), 0)
+	var command tea.Cmd
+	if isCodeAuth {
+		command = authenticateCodeCmd(codeAuth, code, entry.Provider.Name(), 0)
+	} else {
+		command = authenticateProviderCmd(auth, entry.Provider.Name(), 0)
+	}
 	ctx, exists := jobs.Context(jobID)
 	if !exists {
 		m.failV2Job(jobs, jobID, v2NotFoundError())

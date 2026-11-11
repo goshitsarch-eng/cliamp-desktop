@@ -267,3 +267,24 @@ func TestTopMessageDateMatchesThePeer(t *testing.T) {
 		t.Fatalf("topMessageDate() = %d, want 0 when no message matches the peer", got)
 	}
 }
+
+func TestAuthenticateForwardsTypedCode(t *testing.T) {
+	p := &Provider{
+		state:      provNeedsAuth,
+		connectErr: playlist.ErrNeedsAuth,
+		authReq:    make(chan authRequest, 1),
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- p.Authenticate("12345")
+	}()
+	req := <-p.authReq
+	if req.code != "12345" {
+		req.result <- errors.New("wrong code")
+		t.Fatalf("authRequest.code = %q, want %q", req.code, "12345")
+	}
+	req.result <- nil
+	if err := <-done; err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
+}

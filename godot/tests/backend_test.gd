@@ -13,9 +13,12 @@ func _ready() -> void:
 			"permission_error", "startup_failure_diagnostic", "startup_deadline", "capabilities_and_result",
 			"polls_jobs_once", "conflict_not_retried", "hostile_path_single_argument", "overflow_resync",
 			"auth_events", "spectrum_doubles", "command_timeout", "unsupported_version", "close_idempotent",
-			"setup_via_stdin_only", "frame_without_jobs", "restart_refused_when_not_owned"]:
+			"setup_via_stdin_only", "frame_without_jobs", "restart_refused_when_not_owned",
+			"large_params_spilled_to_file", "restart_owned_preserves_queue"]:
 		_current = t
 		await call(t)
+		await get_tree().process_frame
+		await get_tree().process_frame
 	print("backend_test: %d checks, %d failure(s)" % [_checks, _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -371,5 +374,82 @@ func restart_refused_when_not_owned() -> void:
 	await b.connect_engine()
 	var r: Dictionary = await b.restart_owned_engine()
 	ok(r.get("error", {}).get("code") == "not_owned", "not_owned error")
+	await b.close()
+	b.queue_free()
+
+
+func large_params_spilled_to_file() -> void:
+	var l := FakeLauncher.new()
+	var seen_file := [""]
+	var file_text := [""]
+	l.on_command = func(p: FakeProc) -> bool:
+		var idx := p.args.find("--params-file")
+		if idx >= 0 and idx + 1 < p.args.size():
+			seen_file[0] = p.args[idx + 1]
+			file_text[0] = FileAccess.get_file_as_string(seen_file[0])
+			p.finish_json(FakeLauncher.envelope({"job": {"id": "big-1", "state": "succeeded", "result": {"ok": true}}}))
+			return true
+		return false
+	var b := backend_for(l)
+	var big := "x".repeat(9000)
+	var r: Dictionary = await b.call_op("tracks.replace", {"note": big})
+	ok(not Backend.failed(r), "spilled call succeeded")
+	ok(not seen_file[0].is_empty(), "--params-file used for >8KB payload")
+	ok(JSON.parse_string(file_text[0]) == {"note": big}, "spilled JSON matches payload")
+	ok(not FileAccess.file_exists(seen_file[0]), "temporary params file deleted after call")
+	await b.close()
+	b.queue_free()
+
+
+func restart_owned_preserves_queue() -> void:
+	var l := FakeLauncher.new()
+	var restored_ops: Array = []
+	var new_rev := [0]
+	l.on_command = func(p: FakeProc) -> bool:
+		if p.args.size() > 1 and p.args[1] == "state":
+			if l.daemons.all(func(d: FakeProc) -> bool: return not d.running):
+				p.fail("cliamp is not running (no socket at /tmp/x)")
+				return true
+			if l.daemons.size() == 1:
+				p.finish_json(FakeLauncher.envelope({"snapshot": {
+					"state": "playing", "revision": 5, "playlist_revision": 4, "index": 1,
+					"position": 12.5, "seekable": true, "repeat": "all", "shuffle": true,
+				}}))
+			else:
+				p.finish_json(FakeLauncher.envelope({"snapshot": {
+					"state": "stopped", "revision": 1, "playlist_revision": new_rev[0], "index": -1,
+					"repeat": "off", "shuffle": false,
+				}}))
+			return true
+		if p.args.size() > 2 and p.args[1] == "call":
+			var op := p.args[p.args.size() - 1]
+			if op == "desktop.quit":
+				for d: FakeProc in l.daemons:
+					d.finish()
+				p.finish_json(FakeLauncher.envelope({"job": {"id": "q", "state": "succeeded", "result": {"ok": true}}}))
+				return true
+			if op == "queue.list":
+				p.finish_json(FakeLauncher.envelope({"job": {"id": "ql", "state": "succeeded", "result": {
+					"ok": true, "total": 2, "tracks": [{"path": "/tmp/a.wav", "title": "A"}, {"path": "/tmp/b.wav", "title": "B"}],
+				}}}))
+				return true
+			if op == "playnext.list":
+				p.finish_json(FakeLauncher.envelope({"job": {"id": "pl", "state": "succeeded", "result": {
+					"ok": true, "total": 1, "tracks": [{"path": "/tmp/a.wav", "title": "A", "index": 0}],
+				}}}))
+				return true
+			var params: Variant = JSON.parse_string(p.args[3]) if p.args.size() > 4 and p.args[2] == "--params" else {}
+			restored_ops.append([op, params])
+			new_rev[0] += 1
+			p.finish_json(FakeLauncher.envelope({"job": {"id": "r-%d" % new_rev[0], "state": "succeeded", "result": {"ok": true}}}))
+			return true
+		return false
+	var b := backend_for(l)
+	await b.connect_engine()
+	var r: Dictionary = await b.restart_owned_engine()
+	ok(not Backend.failed(r), "owned engine restarted")
+	ok(l.daemons.size() == 2, "second daemon started")
+	var names := restored_ops.map(func(x: Array) -> String: return x[0])
+	ok(names == ["repeat", "shuffle", "tracks.replace", "queue.enqueue", "queue.play", "seek.absolute"], "restored runtime state in order (got %s)" % str(names))
 	await b.close()
 	b.queue_free()

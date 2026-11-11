@@ -10,17 +10,25 @@ import (
 )
 
 func TestDesktopSourcesResolveBeforeReplacing(t *testing.T) {
-	for _, scenario := range []string{"success", "missing source", "canceled", "queue changed"} {
+	for _, scenario := range []string{"success", "missing source", "broken m3u entry", "canceled", "queue changed"} {
 		t.Run(scenario, func(t *testing.T) {
 			m := newHeadlessModel(t, &headlessEngine{}, nil)
 			m.playlist.Add(playlist.Track{Path: "old.mp3", Title: "Old"})
-			path := filepath.Join(t.TempDir(), "new.mp3")
+			dir := t.TempDir()
+			path := filepath.Join(dir, "new.mp3")
 			if err := os.WriteFile(path, []byte("fixture"), 0600); err != nil {
 				t.Fatal(err)
 			}
 			args := []string{path}
-			if scenario == "missing source" {
+			switch scenario {
+			case "missing source":
 				args = append(args, path+".missing")
+			case "broken m3u entry":
+				m3u := filepath.Join(dir, "broken.m3u")
+				if err := os.WriteFile(m3u, []byte("missing-track.mp3\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				args = []string{m3u}
 			}
 			msg := v2Request(t, "sources.load", ipc.Request{Args: args, Name: "replace", Revision: m.playlist.Revision()})
 			next, cmd := m.Update(msg)

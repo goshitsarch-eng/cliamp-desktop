@@ -82,6 +82,7 @@ static func make_dialog(title: String, content: Control, ok_text: String, cancel
 	var dialog := ConfirmationDialog.new()
 	dialog.title = title
 	dialog.exclusive = true
+	dialog.content_scale_factor = Prefs.ui_scale
 	dialog.min_size = Vector2i(Vector2(min_size) * Prefs.ui_scale)
 	dialog.get_ok_button().text = ok_text
 	dialog.get_cancel_button().text = cancel_text

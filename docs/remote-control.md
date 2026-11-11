@@ -346,18 +346,21 @@ leaving the view without applying.
 ### Provider sign-in
 
 `provider.list` includes `authenticatable: true` for providers implementing an
-interactive sign-in flow. This flag describes capability, not whether the
-account is signed in. These operations require an already configured provider;
+interactive sign-in flow, and `code_auth: true` when sign-in accepts a
+verification code (for example Telegram). These flags describe capability, not
+whether the account is signed in. These operations require an already configured provider;
 they do not create provider settings or replace `cliamp setup`.
 
 ```sh
 cliamp remote events provider.auth
 cliamp remote call provider.auth --params '{"provider":"spotify"}' --wait
+cliamp remote call provider.auth --params '{"provider":"telegram","code":"12345"}' --wait
 cliamp remote call provider.auth.status --params '{"provider":"spotify"}' --wait
 ```
 
 Both operations take `provider`, using its key from `provider.list`.
-`provider.auth` starts sign-in and completes when the provider flow returns.
+`provider.auth` starts sign-in (or submits an optional verification `code` for
+code-authenticated providers) and completes when the provider flow returns.
 `provider.auth.status` returns the latest `auth` object for that provider:
 
 ```json
@@ -366,7 +369,9 @@ Both operations take `provider`, using its key from `provider.list`.
 
 `state` is `idle`, `authenticating`, `authenticated`, `failed`, or `canceled`. `idle` means
 no desktop sign-in attempt has been recorded in this process; stored
-credentials may already work. `authenticated` records successful completion
+credentials may already work. When a code-authenticated provider still requires
+verification, `auth` includes `code_required: true` and an optional `prompt`.
+`authenticated` records successful completion
 of that attempt, not a continuing credential-validity check. `url` appears
 when the provider supplies a browser sign-in URL and is cleared on completion.
 `error` is present after a failed attempt.

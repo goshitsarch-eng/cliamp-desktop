@@ -16,6 +16,8 @@ var _stderr: FileAccess
 var _out_thread: Thread
 var _err_thread: Thread
 var _mutex := Mutex.new()
+var _proc_mutex := Mutex.new()
+var _killed := false
 
 
 ## Returns false when the executable could not be started.
@@ -71,8 +73,25 @@ func write_line(text: String) -> void:
 
 
 func kill() -> void:
-	if running and pid > 0:
+	_proc_mutex.lock()
+	if running and not _killed and pid > 0:
+		_killed = true
 		OS.kill(pid)
+	_proc_mutex.unlock()
+
+
+func _is_running() -> bool:
+	_proc_mutex.lock()
+	var alive := not _killed and pid > 0 and OS.is_process_running(pid)
+	_proc_mutex.unlock()
+	return alive
+
+
+func _exit_code() -> int:
+	_proc_mutex.lock()
+	var code := -1 if _killed or pid <= 0 else OS.get_process_exit_code(pid)
+	_proc_mutex.unlock()
+	return code
 
 
 func _read_stdout() -> void:
@@ -80,11 +99,11 @@ func _read_stdout() -> void:
 		var line := _stdio.get_line()
 		if line.length() > 0:
 			stdout_line.emit.call_deferred(line.strip_edges(false, true))
-		elif _stdio.get_error() != OK or not OS.is_process_running(pid):
+		elif _stdio.get_error() != OK or not _is_running():
 			break
-	while OS.is_process_running(pid):
+	while _is_running():
 		OS.delay_msec(10)
-	_finish.call_deferred(OS.get_process_exit_code(pid))
+	_finish.call_deferred(_exit_code())
 
 
 func _read_stderr() -> void:
@@ -94,7 +113,7 @@ func _read_stderr() -> void:
 			_mutex.lock()
 			stderr_text = (stderr_text + chunk + "\n").right(4096)
 			_mutex.unlock()
-		elif _stderr.get_error() != OK or not OS.is_process_running(pid):
+		elif _stderr.get_error() != OK or not _is_running():
 			break
 
 

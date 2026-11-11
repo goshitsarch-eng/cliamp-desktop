@@ -18,7 +18,7 @@ a manual interface-scale setting, and an embedded PCK in exported builds.
 
 ## Prerequisites
 
-Use Godot 4.7.2 and Go 1.26.6 (`mise.toml`). Native builds must run on their
+Use Godot 4.7.2 and Go 1.26.10 (`mise.toml`). Native builds must run on their
 target operating system; a Linux build does not validate Windows or macOS.
 
 | Platform | Build and runtime prerequisites |
@@ -65,10 +65,11 @@ against the same directory when editing settings.
 Providers or Settings to configure a provider with the existing wizard rules.
 The form masks credentials and passes them privately to the engine over stdin.
 After saving, choose **Restart player** to reload an app-owned engine; the app
-asks before stopping playback. For an attached engine, restart it where it was
-started. Browser sign-in is available on providers that support it. Provider
-setup and credentials remain in the existing cliamp configuration. Never put
-credentials in build scripts or project resources.
+asks before interrupting active playback and restores your queue, play-next list,
+and playback position automatically. For an attached engine, restart it where it
+was started. Browser and verification-code sign-in are available on providers
+that support them. Provider setup and credentials remain in the existing cliamp
+configuration. Never put credentials in build scripts or project resources.
 
 The client talks to the engine by running `cliamp remote ...`, `cliamp visstream`,
 `cliamp preferences ...`, `cliamp setup ...` and `cliamp plugins desktop ...` as

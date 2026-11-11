@@ -317,20 +317,21 @@ func add_source() -> void:
 
 
 func open_command_palette() -> void:
+	var mod := "Cmd" if OS.get_name() == "macOS" else "Ctrl"
 	var actions: Array = [
 		["Play / pause", "Space", func() -> void: Store.run("toggle")],
-		["Previous track", "Ctrl+Left", func() -> void: Store.run("prev")],
-		["Next track", "Ctrl+Right", func() -> void: Store.run("next")],
+		["Previous track", "%s+Left" % mod, func() -> void: Store.run("prev")],
+		["Next track", "%s+Right" % mod, func() -> void: Store.run("next")],
 		["Seek back 10 seconds", "Alt+Left", func() -> void: Store.run("seek", {"value": -10})],
-		["Jump to time", "Ctrl+J", func() -> void: ShellActions.jump_to_time(self)],
+		["Jump to time", "%s+J" % mod, func() -> void: ShellActions.jump_to_time(self)],
 		["Seek forward 10 seconds", "Alt+Right", func() -> void: Store.run("seek", {"value": 10})],
-		["Volume up", "Ctrl+Up", func() -> void: Store.run("volume.adjust", {"value": 1})],
-		["Volume down", "Ctrl+Down", func() -> void: Store.run("volume.adjust", {"value": -1})],
-		["Add files, folder, or URL", "Ctrl+O", add_source],
-		["Search this view", "Ctrl+F", _focus_search],
-		["Download playing track", "Ctrl+S", ShellActions.download],
-		["Undo playlist / queue edit", "Ctrl+Z", _undo],
-		["Compact player", "Ctrl+X", func() -> void: set_compact_player(not _compact_player)],
+		["Volume up", "%s+Up" % mod, func() -> void: Store.run("volume.adjust", {"value": 1})],
+		["Volume down", "%s+Down" % mod, func() -> void: Store.run("volume.adjust", {"value": -1})],
+		["Add files, folder, or URL", "%s+O" % mod, add_source],
+		["Search this view", "%s+F" % mod, _focus_search],
+		["Download playing track", "%s+S" % mod, ShellActions.download],
+		["Undo playlist / queue edit", "%s+Z" % mod, _undo],
+		["Compact player", "%s+X" % mod, func() -> void: set_compact_player(not _compact_player)],
 		["Toggle shuffle", "", func() -> void: Store.run("shuffle", {"name": "toggle"})],
 		["Cycle repeat", "", func() -> void: Store.run("repeat", {"name": "cycle"})],
 	]
@@ -362,17 +363,19 @@ func _shortcut_input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
 	var key := event as InputEventKey
+	var text_focus := _text_focused()
 	var command := (key.ctrl_pressed or key.meta_pressed) and not key.alt_pressed and not key.shift_pressed
+	var global_cmd := ((key.meta_pressed and not key.ctrl_pressed) if OS.get_name() == "macOS" and text_focus else (key.ctrl_pressed or key.meta_pressed)) and not key.alt_pressed and not key.shift_pressed
 	var alt := key.alt_pressed and not key.ctrl_pressed and not key.meta_pressed and not key.shift_pressed
 	var code := key.keycode
-	# These work even while a text field has focus.
-	if command and code == KEY_O:
+	# These work even while a text field has focus (Cmd on macOS so Emacs Ctrl+F/K editing stays intact).
+	if global_cmd and code == KEY_O:
 		add_source()
-	elif command and code == KEY_F:
+	elif global_cmd and code == KEY_F:
 		Store.focus_search_requested.emit()
-	elif (command and code == KEY_K) or (code == KEY_F1 and not key.ctrl_pressed and not key.alt_pressed):
+	elif (global_cmd and code == KEY_K) or (code == KEY_F1 and not key.ctrl_pressed and not key.alt_pressed):
 		open_command_palette()
-	elif _text_focused():
+	elif text_focus:
 		return
 	elif command and code == KEY_RIGHT:
 		Store.run("next")

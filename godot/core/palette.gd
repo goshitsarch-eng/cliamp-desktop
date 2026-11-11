@@ -19,7 +19,9 @@ static func from_engine(theme: Dictionary) -> Palette:
 	var p := Palette.new()
 	var bg = _hex(theme.get("bg"))
 	if bg == null:
-		return p
+		if _hex(theme.get("fg")) == null and _hex(theme.get("bright_fg")) == null and _hex(theme.get("accent")) == null and _hex(theme.get("green")) == null:
+			return p
+		bg = p.background
 	p.background = bg
 	p.dark = relative_luminance(bg) < 0.179
 	p.error = Color("ff8a80") if p.dark else Color("b3261e")

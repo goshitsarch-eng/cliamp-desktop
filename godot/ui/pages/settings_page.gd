@@ -19,6 +19,7 @@ var _speed: OptionButton
 var _device_label: Label
 var _device_list: VBoxContainer
 var _device_error: Label
+var _devices: Array[Dictionary] = []
 var _scale: HSlider
 var _scale_label: Label
 var _scale_timer: Timer
@@ -70,7 +71,8 @@ func _build() -> void:
 	_build_providers(root)
 	_build_preferences(root)
 	_build_advanced(root)
-	var footer := FormKit.muted("Cliamp Desktop  ·  Built for listening.\nCtrl+O  Add music     Ctrl+F  Search", 11)
+	var mod := "Cmd" if OS.get_name() == "macOS" else "Ctrl"
+	var footer := FormKit.muted("Cliamp Desktop  ·  Built for listening.\n%s+O  Add music     %s+F  Search" % [mod, mod], 11)
 	_muted.append(footer)
 	root.add_child(footer)
 
@@ -82,7 +84,10 @@ func _build() -> void:
 
 	Store.state_changed.connect(func(_s: Dictionary) -> void: _sync_playback())
 	Store.connection_changed.connect(_on_connection_changed)
-	ThemeBuilder.palette_changed.connect(func(_p: Palette) -> void: FormKit.recolor(_muted))
+	ThemeBuilder.palette_changed.connect(func(_p: Palette) -> void:
+		FormKit.recolor(_muted)
+		_render_providers()
+		_render_devices())
 	_sync_playback()
 
 
@@ -196,14 +201,23 @@ func _load_devices() -> void:
 	var data := await Backend.call_op("device", {"name": "list"})
 	if generation != _device_generation or not is_inside_tree():
 		return
-	for child in _device_list.get_children():
-		_device_list.remove_child(child)
-		child.queue_free()
 	if Backend.failed(data):
+		_devices = []
+		_render_devices()
 		FormKit.set_error(_device_error, data["error"]["message"])
 		return
 	FormKit.set_error(_device_error, "")
-	for device in Util.objects(data.get("devices")):
+	_devices = Util.objects(data.get("devices"))
+	_render_devices()
+
+
+func _render_devices() -> void:
+	if _device_list == null:
+		return
+	for child in _device_list.get_children():
+		_device_list.remove_child(child)
+		child.queue_free()
+	for device in _devices:
 		_device_list.add_child(_device_row(device))
 
 
@@ -401,7 +415,9 @@ func _save() -> void:
 	var errors := _form.validate_changed()
 	if not errors.is_empty():
 		_view.show_errors(errors)
-		FormKit.set_error(_pref_status, "Fix the highlighted preferences before saving.")
+		var first_key: String = str(errors.keys()[0])
+		var first_label := Util.text(_form.field(first_key).get("label"), first_key)
+		FormKit.set_error(_pref_status, "Fix highlighted preferences (%s: %s)." % [first_label, str(errors[first_key])])
 		return
 	_view.show_errors({})
 	FormKit.set_error(_pref_status, "")
@@ -423,6 +439,8 @@ func _save() -> void:
 
 
 func _restart() -> void:
+	if Store.is_playing() and not await Dialogs.confirm(self, "Restart the player?", "Playback will pause briefly while the player restarts and restores your queue.", "Restart"):
+		return
 	_set_busy(true)
 	FormKit.set_error(_pref_status, "")
 	var result := await Backend.restart_owned_engine()

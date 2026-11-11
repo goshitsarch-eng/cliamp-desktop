@@ -24,7 +24,7 @@ system has been tested.
 | Radio location | Country/category browsing, pinned categories, explicit allow/deny before location inference | `provider.location` and `provider.location.consent` |
 | Subscriptions | Browse subscribed shows, unsubscribe, play/append/queue shows or newest episodes, batch newest with per-feed failures | `provider.subscriptions`, `provider.subscription.load`, `provider.subscriptions.newest` |
 | Episode state | Provider-supplied played and resume markers | `provider.playback_state` |
-| Accounts | Conditional setup forms, private credential submission, browser sign-in/status and cancellation when supported | `setup schema/apply`, `provider.auth`, `provider.auth.status` |
+| Accounts | Conditional setup forms, private credential submission, browser and verification-code sign-in/status, and cancellation when supported | `setup schema/apply`, `provider.auth`, `provider.auth.status` |
 | Lyrics | Synced following, manual scroll, select-to-seek, untimed/live display, shared timing adjustment | `lyrics`, `lyrics.offset`, `lyrics_offset_ms` |
 | Appearance | All engine/Lua visualizers, original ANSI colors, duplicate-name selection by index, fullscreen with transport/volume/title controls, preview/apply/cancel, shared theme colors | `desktop.theme`, `desktop.vis`, preview operations, direct `visualizer.frame` |
 | Plugins | Installed list, source/permission/hash review, exact-content approval, remove, enable/disable, private configuration, commands and registered key actions | `plugins desktop`, `plugin.commands`, `plugin.call`, `plugin.keys`, `plugin.key` |

@@ -5,7 +5,15 @@ extends RefCounted
 
 
 static func initial() -> Dictionary:
-	return {"state": "authenticating", "url": "", "error": "", "cancellable": false, "cancel_requested": false}
+	return {
+		"state": "authenticating",
+		"url": "",
+		"error": "",
+		"cancellable": false,
+		"cancel_requested": false,
+		"code_required": false,
+		"prompt": "",
+	}
 
 
 static func is_terminal(state: String) -> bool:
@@ -15,8 +23,13 @@ static func is_terminal(state: String) -> bool:
 ## Applies a provider.auth.status `auth` object to the flow state.
 static func reduce(current: Dictionary, auth: Dictionary) -> Dictionary:
 	var s := current.duplicate()
+	var code_required: bool = auth.get("code_required") == true or s.get("code_required") == true
+	s["code_required"] = code_required
+	s["prompt"] = Util.text(auth.get("prompt"), Util.text(s.get("prompt")))
 	var next := Util.text(auth.get("state"), s["state"])
-	if next != "idle" or s["state"] != "authenticating":
+	if code_required and next == "idle" and s["state"] != "authenticated" and s["state"] != "submitting_code":
+		s["state"] = "awaiting_code"
+	elif next != "idle" or s["state"] != "authenticating":
 		s["state"] = "canceling" if s["cancel_requested"] and next == "authenticating" else next
 	s["cancellable"] = auth.get("cancellable") == true
 	s["url"] = Util.text(auth.get("url")) if s["state"] == "authenticating" else ""
@@ -51,7 +64,7 @@ static func is_http_url(url: String) -> bool:
 	return not host.is_empty() and not host.begins_with(":")
 
 
-static func message(state: String, url: String) -> String:
+static func message(state: String, url: String, prompt := "") -> String:
 	match state:
 		"authenticated":
 			return "You're connected. Your account is ready to browse."
@@ -61,6 +74,10 @@ static func message(state: String, url: String) -> String:
 			return "Sign-in was canceled. You can try again when you're ready."
 		"canceling":
 			return "Canceling the provider sign-in..."
+		"awaiting_code":
+			return prompt if not prompt.is_empty() else "Enter the verification code from your provider to finish signing in."
+		"submitting_code":
+			return "Verifying your sign-in code..."
 	if url.is_empty():
 		return "Waiting for the provider's sign-in instructions..."
 	return "Open the sign-in page, complete the steps in your browser, then return here."

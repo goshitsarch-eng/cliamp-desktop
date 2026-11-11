@@ -73,6 +73,24 @@ func _prompt() -> void:
 	await get_tree().create_timer(0.3).timeout
 	ok(result[1] and result[0] == null, "cancel returns null")
 
+	var validated := [null, false]
+	var run_valid := func() -> void:
+		validated[0] = await Dialogs.prompt(self, "Save", "Playlist name", "", "", false, "Save", LibraryLogic.playlist_name_error)
+		validated[1] = true
+	run_valid.call()
+	d = await _dialog()
+	edit = _find(d, "LineEdit") as LineEdit
+	edit.text = "bad/name"
+	d.get_ok_button().pressed.emit()
+	await get_tree().create_timer(0.3).timeout
+	ok(not validated[1], "validator rejects path separator in playlist name")
+	d = await _dialog()
+	edit = _find(d, "LineEdit") as LineEdit
+	edit.text = "Good playlist"
+	d.get_ok_button().pressed.emit()
+	await get_tree().create_timer(0.3).timeout
+	ok(validated[1] and validated[0] == "Good playlist", "validator accepts valid playlist name")
+
 
 func _confirm() -> void:
 	var result := [null]

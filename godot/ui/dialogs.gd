@@ -16,6 +16,7 @@ static func open(host: Node, title: String, content: Control, buttons: Array[Str
 	var dialog := ConfirmationDialog.new()
 	dialog.title = title
 	dialog.exclusive = true
+	dialog.content_scale_factor = Prefs.ui_scale
 	dialog.min_size = Vector2i(Vector2(min_size) * Prefs.ui_scale)
 	dialog.get_ok_button().text = buttons[0]
 	var cancel := dialog.get_cancel_button()

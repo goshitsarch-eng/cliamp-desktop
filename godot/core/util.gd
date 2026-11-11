@@ -28,6 +28,27 @@ static func text(value: Variant, fallback := "") -> String:
 	return fallback if s.is_empty() else s
 
 
+## Coerces untrusted metadata to one clean line so embedded newlines or control
+## characters cannot stretch fixed-height row or transport labels.
+static func single_line(value: Variant, fallback := "") -> String:
+	if value == null:
+		return fallback
+	var raw := str(value)
+	var out := ""
+	var prev_space := false
+	for i in raw.length():
+		var code := raw.unicode_at(i)
+		if code < 32 or code == 127:
+			if not prev_space and not out.is_empty():
+				out += " "
+				prev_space = true
+		else:
+			out += raw[i]
+			prev_space = raw[i] == " "
+	var cleaned := out.strip_edges()
+	return fallback if cleaned.is_empty() else cleaned
+
+
 ## "1 track", "2 tracks". JSON numbers arrive as floats, so the count is rounded.
 static func count_of(value: Variant, singular: String, plural := "") -> String:
 	var n := roundi(number(value))

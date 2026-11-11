@@ -37,6 +37,7 @@ var _apply_btn: Button
 var _view: AnsiView
 var _error_box: VBoxContainer
 var _error_label: Label
+var _sub: Label
 var _caption: Label
 var _unsupported: Label
 var _controls: Control
@@ -50,6 +51,7 @@ var _fs_apply: Button
 var _fs_info_btn: Button
 var _fs_title: Label
 var _fs_detail: Label
+var _fs_hint: Label
 var _fs_toggle: Button
 var _fs_volume: Label
 var _fs_error: Label
@@ -73,11 +75,11 @@ func _init() -> void:
 	title.text = Pages.LIST[Pages.index_of("visualizer")]["title"]
 	title.add_theme_font_size_override("font_size", 26)
 	root.add_child(title)
-	var sub := Label.new()
-	sub.text = "Original Cliamp visualizers, including your Lua extensions."
-	sub.add_theme_font_size_override("font_size", 12)
-	sub.modulate = Color(1, 1, 1, 0.65)
-	root.add_child(sub)
+	_sub = Label.new()
+	_sub.text = "Original Cliamp visualizers, including your Lua extensions."
+	_sub.add_theme_font_size_override("font_size", 12)
+	_sub.add_theme_color_override("font_color", ThemeBuilder.palette.muted)
+	root.add_child(_sub)
 
 	_unsupported = Label.new()
 	_unsupported.text = "Visualizers require the desktop-enabled Cliamp engine."
@@ -111,13 +113,14 @@ func _init() -> void:
 	controls.add_child(_apply_btn)
 
 	_canvas_box = PanelContainer.new()
+	_canvas_box.custom_minimum_size = Vector2(0, 180)
 	_canvas_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_canvas_box.clip_contents = true
 	var box := StyleBoxFlat.new()
 	box.bg_color = DEFAULT_BG
 	box.set_corner_radius_all(16)
 	box.set_border_width_all(1)
-	box.border_color = Color(1, 1, 1, 0.06)
+	box.border_color = Color(ThemeBuilder.palette.foreground.r, ThemeBuilder.palette.foreground.g, ThemeBuilder.palette.foreground.b, 0.12 if not ThemeBuilder.palette.dark else 0.06)
 	box.set_content_margin_all(12)
 	_canvas_box.add_theme_stylebox_override("panel", box)
 	root.add_child(_canvas_box)
@@ -142,11 +145,25 @@ func _init() -> void:
 
 	_caption = Label.new()
 	_caption.add_theme_font_size_override("font_size", 11)
-	_caption.modulate = Color(1, 1, 1, 0.65)
+	_caption.add_theme_color_override("font_color", ThemeBuilder.palette.muted)
 	root.add_child(_caption)
 
 	Store.state_changed.connect(_on_state)
+	ThemeBuilder.palette_changed.connect(_recolor)
 	_update_chrome()
+
+
+func _recolor(_p: Palette) -> void:
+	var p := ThemeBuilder.palette
+	_sub.add_theme_color_override("font_color", p.muted)
+	_caption.add_theme_color_override("font_color", p.muted)
+	var canvas_style := _canvas_box.get_theme_stylebox("panel") as StyleBoxFlat
+	if canvas_style != null:
+		canvas_style.border_color = Color(p.foreground.r, p.foreground.g, p.foreground.b, 0.12 if not p.dark else 0.06)
+	if _fs != null and is_instance_valid(_fs):
+		_fs_detail.add_theme_color_override("font_color", p.muted)
+		_fs_hint.add_theme_color_override("font_color", p.muted)
+		_fs_error.add_theme_color_override("font_color", p.error)
 
 
 func _text_button(text: String, callback: Callable) -> Button:
@@ -426,6 +443,7 @@ func _open_fullscreen() -> void:
 		return
 	_fs = Window.new()
 	_fs.title = "Visualizer"
+	_fs.content_scale_factor = Prefs.ui_scale
 	_fs.size = Vector2i(1280, 720)
 	_fs.close_requested.connect(_close_fullscreen)
 	_fs.window_input.connect(_on_fs_input)
@@ -478,7 +496,7 @@ func _open_fullscreen() -> void:
 	_fs_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_fs_detail.clip_text = true
 	_fs_detail.add_theme_font_size_override("font_size", 12)
-	_fs_detail.modulate = Color(1, 1, 1, 0.65)
+	_fs_detail.add_theme_color_override("font_color", ThemeBuilder.palette.muted)
 	_fs_info_box.add_child(_fs_detail)
 	var transport := HBoxContainer.new()
 	transport.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -501,12 +519,12 @@ func _open_fullscreen() -> void:
 	_fs_volume.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	transport.add_child(_fs_volume)
 	_transport_button(transport, "volume_up", "Raise volume (+)", "volume.adjust", {"value": 1})
-	var hint := Label.new()
-	hint.text = "Space: play / pause · T: track information · V: visualizer · Esc: exit"
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.add_theme_font_size_override("font_size", 11)
-	hint.modulate = Color(1, 1, 1, 0.65)
-	bcol.add_child(hint)
+	_fs_hint = Label.new()
+	_fs_hint.text = "Space: play / pause · T: track information · V: visualizer · Esc: exit"
+	_fs_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_fs_hint.add_theme_font_size_override("font_size", 11)
+	_fs_hint.add_theme_color_override("font_color", ThemeBuilder.palette.muted)
+	bcol.add_child(_fs_hint)
 	_fs_error = Label.new()
 	_fs_error.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_fs_error.add_theme_color_override("font_color", ThemeBuilder.palette.error)

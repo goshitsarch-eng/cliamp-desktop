@@ -5,6 +5,8 @@ extends Page
 var _preset: OptionButton
 var _sliders: Array[VSlider] = []
 var _db_labels: Array[Label] = []
+var _muted_labels: Array[Label] = []
+var _top_icon: Label
 var _dragging: Array[bool] = []
 var _building := true
 
@@ -32,7 +34,8 @@ func _init() -> void:
 	var sub := Label.new()
 	sub.text = "A ten-band equalizer, shaped around your sound."
 	sub.add_theme_font_size_override("font_size", 12)
-	sub.modulate = Color(1, 1, 1, 0.65)
+	sub.add_theme_color_override("font_color", ThemeBuilder.palette.muted)
+	_muted_labels.append(sub)
 	root.add_child(sub)
 
 	var card := PanelContainer.new()
@@ -48,7 +51,8 @@ func _init() -> void:
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", 10)
 	col.add_child(top)
-	top.add_child(Icons.label("equalizer", 22, ThemeBuilder.palette.accent))
+	_top_icon = Icons.label("equalizer", 22, ThemeBuilder.palette.accent)
+	top.add_child(_top_icon)
 	var heading := Label.new()
 	heading.text = "Equalizer"
 	heading.add_theme_font_size_override("font_size", 16)
@@ -76,9 +80,10 @@ func _init() -> void:
 		db.text = EqLogic.db_text(0.0)
 		db.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		db.add_theme_font_size_override("font_size", 10)
-		db.modulate = Color(1, 1, 1, 0.65)
+		db.add_theme_color_override("font_color", ThemeBuilder.palette.muted)
 		c.add_child(db)
 		_db_labels.append(db)
+		_muted_labels.append(db)
 		var s := VSlider.new()
 		s.min_value = EqLogic.MIN_DB
 		s.max_value = EqLogic.MAX_DB
@@ -95,13 +100,15 @@ func _init() -> void:
 		f.text = EqLogic.LABELS[i]
 		f.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		f.add_theme_font_size_override("font_size", 11)
-		f.modulate = Color(1, 1, 1, 0.65)
+		f.add_theme_color_override("font_color", ThemeBuilder.palette.muted)
+		_muted_labels.append(f)
 		c.add_child(f)
 	var axis := Label.new()
 	axis.text = "Frequency · Hz"
 	axis.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	axis.add_theme_font_size_override("font_size", 10)
-	axis.modulate = Color(1, 1, 1, 0.65)
+	axis.add_theme_color_override("font_color", ThemeBuilder.palette.muted)
+	_muted_labels.append(axis)
 	col.add_child(axis)
 
 	var spectrum_card := PanelContainer.new()
@@ -116,7 +123,15 @@ func _init() -> void:
 
 	_building = false
 	Store.state_changed.connect(func(_s: Dictionary) -> void: _sync())
+	ThemeBuilder.palette_changed.connect(_recolor)
 	_sync()
+
+
+func _recolor(_p: Palette) -> void:
+	var p := ThemeBuilder.palette
+	_top_icon.add_theme_color_override("font_color", p.accent)
+	for l in _muted_labels:
+		l.add_theme_color_override("font_color", p.muted)
 
 
 func activate() -> void:

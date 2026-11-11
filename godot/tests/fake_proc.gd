@@ -12,14 +12,16 @@ var killed := false
 var executable := ""
 var args := PackedStringArray()
 var input_lines: Array[String] = []
-var launcher: FakeLauncher
+var launcher_ref: WeakRef
 
 
 func start(exe: String, arguments: PackedStringArray) -> bool:
 	executable = exe
 	args = arguments
 	running = true
-	launcher.dispatch(self)
+	var l: FakeLauncher = launcher_ref.get_ref() if launcher_ref != null else null
+	if l != null:
+		l.dispatch(self)
 	return true
 
 

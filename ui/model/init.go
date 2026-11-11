@@ -243,6 +243,7 @@ func (m *Model) SetVisualizer(name string) bool {
 	if !ok {
 		return false
 	}
+	m.desktop.initialVisualizer = ""
 	m.vis.Mode = mode
 	m.vis.RequestRefresh()
 	m.refreshChrome()

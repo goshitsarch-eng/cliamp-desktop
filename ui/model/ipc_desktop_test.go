@@ -401,3 +401,50 @@ func TestDesktopOpenLocalSourcesThroughURLLoad(t *testing.T) {
 		})
 	}
 }
+
+type desktopCodeAuthProvider struct {
+	commandsTestProvider
+	gotCode string
+}
+
+func (*desktopCodeAuthProvider) Prompt() string { return "Enter Telegram code" }
+
+func (p *desktopCodeAuthProvider) Authenticate(code string) error {
+	p.gotCode = code
+	return nil
+}
+
+func TestDesktopCodeAuthenticatorAndTrackUserRating(t *testing.T) {
+	tgProv := &desktopCodeAuthProvider{commandsTestProvider: commandsTestProvider{name: "Telegram"}}
+	m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: "telegram", Name: "Telegram", Provider: tgProv}})
+
+	list := runV2(t, &m, "provider.list", ipc.Request{})
+	if len(list.Providers) != 1 || !list.Providers[0].Authenticatable || !list.Providers[0].CodeAuth {
+		t.Fatalf("provider.list = %+v", list.Providers)
+	}
+	status := runV2(t, &m, "provider.auth.status", ipc.Request{Provider: "telegram"})
+	if status.Auth == nil || !status.Auth.CodeRequired || status.Auth.Prompt != "Enter Telegram code" || status.Auth.State != "idle" {
+		t.Fatalf("provider.auth.status = %+v", status.Auth)
+	}
+	if bad := runV2(t, &m, "provider.auth", ipc.Request{Provider: "telegram"}); bad.Error != ipc.V2ErrorCodeInvalidParams {
+		t.Fatalf("provider.auth without code = %+v", bad)
+	}
+	done := runV2(t, &m, "provider.auth", ipc.Request{Provider: "telegram", Code: " 654321 "})
+	if !done.OK || tgProv.gotCode != "654321" || done.Auth == nil || done.Auth.State != "authenticated" {
+		t.Fatalf("provider.auth with code = %+v, gotCode=%q", done, tgProv.gotCode)
+	}
+
+	m.SetDesktopVisualizer("Wave")
+	if !m.SetVisualizer("Bars") {
+		t.Fatal("SetVisualizer(Bars) failed")
+	}
+	vis := runV2(t, &m, "desktop.vis", ipc.Request{Name: "list"})
+	if vis.Visualizer != "Bars" {
+		t.Fatalf("explicit SetVisualizer overwritten by initialVisualizer: %+v", vis)
+	}
+
+	roundTrip := ipcTrackFromInfo(ipcTrackInfo(playlist.Track{Path: "/music/song.flac", UserRating: 4}, 0, 0, false))
+	if roundTrip.UserRating != 4 {
+		t.Fatalf("UserRating round-trip = %d, want 4", roundTrip.UserRating)
+	}
+}

@@ -76,6 +76,7 @@ func _init() -> void:
 	_chrome = VBoxContainer.new()
 	add_child(_chrome)
 	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 140)
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	var pad := MarginContainer.new()
@@ -134,6 +135,27 @@ func reload() -> void:
 
 func is_busy() -> bool:
 	return _busy
+
+
+func handles_escape() -> bool:
+	return _search.has_focus() or not _search.text.is_empty() or not _trail.is_empty()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not is_visible_in_tree() or not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	var key := event as InputEventKey
+	var plain := not (key.ctrl_pressed or key.alt_pressed or key.meta_pressed or key.shift_pressed)
+	if key.keycode == KEY_ESCAPE and plain:
+		if _search.has_focus() or not _search.text.is_empty():
+			if not _search.text.is_empty():
+				_search.text = ""
+				_on_search_changed("")
+			_search.release_focus()
+			get_viewport().set_input_as_handled()
+		elif not _trail.is_empty() and not _busy:
+			_go_back()
+			get_viewport().set_input_as_handled()
 
 
 func _provider_key() -> String:
@@ -195,6 +217,7 @@ func _show(view: ProviderBrowse.View, push := true, append := false) -> void:
 	_loading = true
 	_error = ""
 	if not append:
+		_notice = ""
 		_items = []
 		_filter = ""
 		_pinned_only = false
@@ -212,6 +235,9 @@ func _show(view: ProviderBrowse.View, push := true, append := false) -> void:
 		_error = result["error"]["message"]
 		_render()
 		return
+	var partial_err := Util.text(result.get("error"))
+	if not partial_err.is_empty():
+		_notice = partial_err
 	var rows := Util.objects(result.get(view.kind))
 	var prior := Util.object(_response.get("listening")) if append else {}
 	_response = result.duplicate()
@@ -373,7 +399,8 @@ func _search_provider(query: String) -> void:
 	var q := query.strip_edges()
 	match ProviderBrowse.search_plan(query, _view, _browse, _response, _provider):
 		"catalog":
-			await _show(ProviderBrowse.View.new("provider.catalog.search", "playlists", "Station catalog" if q.is_empty() else "Station search", {"query": q}))
+			var kind_word := "Show" if _browse.get("shows") == true else "Station"
+			await _show(ProviderBrowse.View.new("provider.catalog.search", "playlists", "%s catalog" % kind_word if q.is_empty() else "%s search" % kind_word, {"query": q}))
 		"clear":
 			_filter = ""
 			_render_list()
@@ -617,8 +644,12 @@ func _details(track: Dictionary) -> void:
 		var text := RichTextLabel.new()
 		text.fit_content = true
 		text.selection_enabled = true
+		text.context_menu_enabled = true
+		text.bbcode_enabled = false
+		text.scroll_active = false
 		text.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 		text.text = value
+		text.add_theme_color_override("default_color", ThemeBuilder.palette.foreground)
 		text.accessibility_name = fields[key]
 		box.add_child(text)
 		var gap := Control.new()
@@ -683,7 +714,8 @@ func _render_footer() -> void:
 	var more := _items.size() < _total or _catalog_more
 	_footer.visible = more
 	if more:
-		_footer.text = "Load more stations" if _catalog_more else "Load more - %d of %d" % [_items.size(), _total]
+		var more_noun := "shows" if _browse.get("shows") == true else "stations"
+		_footer.text = "Load more %s" % more_noun if _catalog_more else "Load more - %d of %d" % [_items.size(), _total]
 		_footer.accessibility_name = _footer.text
 		_footer.disabled = _loading
 
@@ -811,7 +843,7 @@ func _breadcrumbs() -> Control:
 	var titles := VBoxContainer.new()
 	titles.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	titles.add_child(_text(_view.title, 20, null, true))
-	titles.add_child(_text("%d %s" % [_total, ProviderBrowse.count_noun(_view.kind)], 11, p.muted))
+	titles.add_child(_text(ProviderBrowse.count_label(_total, _view.kind), 11, p.muted))
 	row.add_child(titles)
 	if _is_tracks() and not _items.is_empty() and _operations.has("provider.collection") and not ProviderBrowse.collection_source(_view.operation).is_empty():
 		var add := Button.new()

@@ -67,8 +67,9 @@ func _ready() -> void:
 	add_child(_refresh_timer)
 
 
-## Looks for the sidecar in the order CLIAMP_BINARY, next to the app, macOS
-## Resources, then PATH.
+## Looks for the sidecar in the order CLIAMP_BINARY, macOS Resources, next to
+## the app (when distinct from the GUI executable on case-insensitive volumes),
+## then PATH.
 func resolve_executable() -> String:
 	if not executable.is_empty():
 		return executable
@@ -76,15 +77,21 @@ func resolve_executable() -> String:
 	if not configured.is_empty():
 		executable = configured
 		return executable
-	var file := "cliamp.exe" if OS.get_name() == "Windows" else "cliamp"
-	var dir := OS.get_executable_path().get_base_dir()
-	if FileAccess.file_exists(dir.path_join(file)):
-		executable = dir.path_join(file)
-	elif OS.get_name() == "macOS" and FileAccess.file_exists(dir.get_base_dir().path_join("Resources").path_join(file)):
-		executable = dir.get_base_dir().path_join("Resources").path_join(file)
-	else:
-		executable = file
+	executable = pick_sidecar_path(OS.get_executable_path(), OS.get_name(), func(p: String) -> bool: return FileAccess.file_exists(p))
 	return executable
+
+
+static func pick_sidecar_path(exe_path: String, os_name: String, exists_fn: Callable) -> String:
+	var file := "cliamp.exe" if os_name == "Windows" else "cliamp"
+	var dir := exe_path.get_base_dir()
+	if os_name == "macOS":
+		var bundled := dir.get_base_dir().path_join("Resources").path_join(file)
+		if exists_fn.call(bundled):
+			return bundled
+	var beside := dir.path_join(file)
+	if beside.to_lower() != exe_path.to_lower() and exists_fn.call(beside):
+		return beside
+	return file
 
 
 func connect_engine() -> Dictionary:
@@ -423,12 +430,25 @@ func read_frame(width: int, height: int) -> Dictionary:
 
 
 ## Submits an operation and waits for its job to finish.
-func call_op(operation: String, params := {}) -> Dictionary:
+func call_op(operation: String, params := {}, track_job := true) -> Dictionary:
 	var c := await connect_engine()
 	if failed(c):
 		return c
 	var deadline := Time.get_ticks_msec() + int(operation_timeout * 1000.0)
-	var response := await _command(["remote", "call", "--params", encode_json(params), operation])
+	var encoded := encode_json(params)
+	var temp_path := ""
+	var call_args := ["remote", "call", "--params", encoded, operation]
+	if encoded.length() > 8192:
+		var temp := FileAccess.create_temp(FileAccess.WRITE, "cliamp-params", "json", true)
+		if temp != null:
+			temp_path = temp.get_path_absolute()
+			temp.store_string(encoded)
+			temp.flush()
+			temp.close()
+			call_args = ["remote", "call", "--params-file", temp_path, operation]
+	var response := await _command(call_args)
+	if not temp_path.is_empty():
+		DirAccess.remove_absolute(temp_path)
 	while true:
 		if failed(response):
 			return response
@@ -436,7 +456,8 @@ func call_op(operation: String, params := {}) -> Dictionary:
 		if not (job is Dictionary) or not (job.get("id") is String):
 			return fail("invalid_response", "cliamp returned no operation job.")
 		var state := str(job.get("state"))
-		_record_job(job, operation, str(params.get("provider", "")) if operation == "provider.auth" else "")
+		if track_job:
+			_record_job(job, operation, str(params.get("provider", "")) if operation == "provider.auth" else "")
 		if state == "succeeded" or state == "failed" or state == "canceled":
 			if job.get("snapshot") is Dictionary:
 				_publish_snapshot(job["snapshot"])
@@ -594,6 +615,7 @@ func restart_owned_engine() -> Dictionary:
 		return fail("closed", "The player connection is closed.")
 	if not owns_daemon():
 		return fail("not_owned", "This player was started elsewhere. Restart it there to load the new provider settings.")
+	var preserved := await _capture_runtime_state() if connected else {}
 	connected = false
 	_reconnect_pending = false
 	_stop_streams()
@@ -603,7 +625,112 @@ func restart_owned_engine() -> Dictionary:
 	_connecting = true
 	var result := await _connect()
 	_connecting = false
+	if not failed(result) and not preserved.is_empty():
+		await _restore_runtime_state(preserved)
 	return result
+
+
+func _capture_runtime_state() -> Dictionary:
+	for attempt in 2:
+		var snap := await _read_snapshot()
+		if failed(snap):
+			return {}
+		var state: Dictionary = snap["snapshot"]
+		var rev: Variant = state.get("playlist_revision")
+		var queue := await _read_all_tracks("queue.list")
+		var playnext := await _read_all_tracks("playnext.list")
+		if queue.is_empty() and playnext.is_empty():
+			return {"snapshot": state, "queue": queue, "playnext": playnext}
+		var verify := await _read_snapshot()
+		if failed(verify) or verify["snapshot"].get("playlist_revision") == rev:
+			return {"snapshot": verify["snapshot"] if not failed(verify) else state, "queue": queue, "playnext": playnext}
+	return {}
+
+
+func _read_all_tracks(operation: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var offset := 0
+	while true:
+		var page := await call_op(operation, {"offset": offset, "limit": 200}, false)
+		if failed(page):
+			break
+		var rows := Util.objects(page.get("tracks"))
+		if rows.is_empty():
+			break
+		out.append_array(rows)
+		offset += rows.size()
+		var total: Variant = page.get("total")
+		if total is int or total is float:
+			if offset >= int(total):
+				break
+		elif rows.size() < 200:
+			break
+	return out
+
+
+func _restore_runtime_state(preserved: Dictionary) -> void:
+	var state: Dictionary = Util.object(preserved.get("snapshot"))
+	var queue: Array = preserved.get("queue", [])
+	var playnext: Array = preserved.get("playnext", [])
+	var cur := await _read_snapshot()
+	if failed(cur):
+		return
+	var cur_snap: Dictionary = cur["snapshot"]
+	var repeat_mode := Util.text(state.get("repeat")).to_lower()
+	if not repeat_mode.is_empty() and repeat_mode != Util.text(cur_snap.get("repeat")).to_lower():
+		await call_op("repeat", {"name": repeat_mode}, false)
+	if state.get("shuffle") is bool and state.get("shuffle") != cur_snap.get("shuffle"):
+		await call_op("shuffle", {"name": "on" if state["shuffle"] else "off"}, false)
+	if not queue.is_empty():
+		var idx := clampi(int(Util.number(state.get("index"), 0)), 0, queue.size() - 1)
+		cur = await _read_snapshot()
+		if failed(cur):
+			return
+		var rev: Variant = cur["snapshot"].get("playlist_revision", 0)
+		var first := queue.slice(0, 1000)
+		var replaced := await call_op("tracks.replace", {
+			"tracks": first,
+			"play": false,
+			"index": mini(idx, first.size() - 1),
+			"if_revision": rev,
+		}, false)
+		if failed(replaced):
+			return
+		var offset := 1000
+		while offset < queue.size():
+			cur = await _read_snapshot()
+			if failed(cur):
+				return
+			var appended := await call_op("tracks.append", {
+				"tracks": queue.slice(offset, offset + 1000),
+				"play": false,
+				"if_revision": cur["snapshot"].get("playlist_revision", 0),
+			}, false)
+			if failed(appended):
+				return
+			offset += 1000
+		for entry in playnext:
+			if entry is Dictionary and (entry.get("index") is int or entry.get("index") is float):
+				var q_idx := int(entry["index"])
+				if q_idx >= 0 and q_idx < queue.size():
+					cur = await _read_snapshot()
+					if failed(cur):
+						break
+					await call_op("queue.enqueue", {"index": q_idx, "if_revision": cur["snapshot"].get("playlist_revision", 0)}, false)
+		var prev_state := Util.text(state.get("state"), "stopped")
+		if prev_state == "playing" or prev_state == "paused":
+			cur = await _read_snapshot()
+			if not failed(cur):
+				var played := await call_op("queue.play", {"index": idx, "if_revision": cur["snapshot"].get("playlist_revision", 0)}, false)
+				if not failed(played):
+					if prev_state == "paused":
+						await call_op("pause", {}, false)
+					var pos := Util.number(state.get("position"))
+					if pos > 0.5 and state.get("seekable") == true:
+						await call_op("seek.absolute", {"value": pos}, false)
+	var final_snap := await _read_snapshot()
+	if not failed(final_snap):
+		_publish_snapshot(final_snap["snapshot"])
 
 
 func _stop_owned_daemon() -> Dictionary:

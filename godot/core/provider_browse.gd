@@ -84,7 +84,8 @@ static func routes(browse: Dictionary, provider: Dictionary) -> Array[Dictionary
 	if browse.get("subscriptions") == true:
 		out.append({"label": "Subscriptions", "icon": "subscriptions", "mode": "subscriptions", "entry": null})
 	if provider.get("catalog") == true:
-		out.append({"label": "Station catalog", "icon": "radio", "mode": "catalog", "entry": null})
+		var shows: bool = browse.get("shows") == true
+		out.append({"label": "Show catalog" if shows else "Station catalog", "icon": "podcasts" if shows else "radio", "mode": "catalog", "entry": null})
 	if Util.object(browse.get("location")).get("needed") == true:
 		out.append({"label": "Local radio", "icon": "location_on", "mode": "location", "entry": null})
 	return out
@@ -147,6 +148,15 @@ static func count_noun(kind: String) -> String:
 		"genres":
 			return "categories"
 	return kind
+
+
+static func count_label(total: int, kind: String) -> String:
+	match kind:
+		"genres":
+			return Util.count_of(total, "category", "categories")
+		"tracks", "playlists", "subscriptions", "albums", "artists":
+			return Util.count_of(total, kind.trim_suffix("s"))
+	return "%d %s" % [total, count_noun(kind)]
 
 
 static func filter_text(item: Dictionary) -> String:

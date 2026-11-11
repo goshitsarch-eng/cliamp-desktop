@@ -131,8 +131,11 @@ func runIPCProviderDesktop(ctx context.Context, result *ipcProviderDesktopResult
 			response.Playlist = request.Playlist
 		} else {
 			items, err := ipcProviderPlaylistInfos(provider.Entry{Key: response.Provider, Provider: p})
-			if err != nil {
+			if err != nil && len(items) == 0 {
 				return err
+			}
+			if err != nil {
+				response.Error = err.Error()
 			}
 			response.Playlists, response.Total = ipcPage(items, request.Offset, request.Limit, 200)
 		}
@@ -223,8 +226,11 @@ func runIPCProviderDesktop(ctx context.Context, result *ipcProviderDesktopResult
 			}
 			response.Place = place
 			items, err := ipcProviderPlaylistInfos(provider.Entry{Key: response.Provider, Provider: p})
-			if err != nil {
+			if err != nil && len(items) == 0 {
 				return err
+			}
+			if err != nil {
+				response.Error = err.Error()
 			}
 			response.Playlists, response.Total = ipcPage(items, request.Offset, request.Limit, 200)
 		}
@@ -255,8 +261,11 @@ func runIPCProviderDesktop(ctx context.Context, result *ipcProviderDesktopResult
 			return err
 		}
 		items, err := ipcProviderPlaylistInfos(provider.Entry{Key: response.Provider, Provider: p})
-		if err != nil {
+		if err != nil && len(items) == 0 {
 			return err
+		}
+		if err != nil {
+			response.Error = err.Error()
 		}
 		response.Playlists, response.Total = ipcPage(items, request.Offset, request.Limit, 200)
 	case "provider.subscriptions":

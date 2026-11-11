@@ -36,6 +36,8 @@ var provider_seed: Dictionary = {}
 var provider_action := ""
 
 var _theme_key := ""
+var _snapshot_key := ""
+var _bands_silent := false
 var _state_at_ms := 0
 var _refreshing := false
 
@@ -109,7 +111,7 @@ func position() -> float:
 
 func title() -> String:
 	var t := track()
-	return Util.text(t.get("title"), "Make room for your music." if t.is_empty() else Util.basename(Util.text(t.get("path"))))
+	return Util.single_line(t.get("title"), "Make room for your music." if t.is_empty() else Util.single_line(Util.basename(Util.text(t.get("path"))), "Untitled track"))
 
 
 ## Revision guard for queue and play-next edits.
@@ -180,6 +182,7 @@ func accept_state(new_state: Dictionary) -> void:
 	var text := Util.text(new_state.get("notice"))
 	if not text.is_empty() and new_state.get("notice") != state.get("notice"):
 		notify(text, new_state.get("notice_error") == true)
+	var snap_key := JSON.stringify(new_state)
 	state = new_state
 	_state_at_ms = Time.get_ticks_msec()
 	connected = true
@@ -189,6 +192,9 @@ func accept_state(new_state: Dictionary) -> void:
 	if key != _theme_key:
 		_theme_key = key
 		ThemeBuilder.apply_engine_theme(colors)
+	if snap_key == _snapshot_key and new_state.get("state") != "playing":
+		return
+	_snapshot_key = snap_key
 	state_changed.emit(state)
 
 
@@ -199,7 +205,15 @@ func _on_event(envelope: Dictionary) -> void:
 
 
 func _on_spectrum(values: PackedFloat32Array) -> void:
+	var silent := true
+	for v in values:
+		if v > 0.0005:
+			silent = false
+			break
 	bands = values
+	if silent and _bands_silent and not values.is_empty():
+		return
+	_bands_silent = silent
 	bands_changed.emit(values)
 
 

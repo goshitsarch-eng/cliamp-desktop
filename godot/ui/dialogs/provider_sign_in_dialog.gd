@@ -17,6 +17,8 @@ var _closed := false
 var _flow: Dictionary = ProviderAuth.initial()
 var _job: BackendJob
 var _previous_jobs: Dictionary = {}
+var _code_text := ""
+var _code_edit: LineEdit
 
 
 ## Resolves true when the account connected.
@@ -31,6 +33,7 @@ func _run(host: Node, provider_key: String, provider_name: String) -> bool:
 	_dialog = AcceptDialog.new()
 	_dialog.title = "Connect " + _name
 	_dialog.exclusive = true
+	_dialog.content_scale_factor = Prefs.ui_scale
 	_dialog.min_size = Vector2i(Vector2(470, 0) * Prefs.ui_scale)
 	_dialog.get_ok_button().hide()
 	_body = VBoxContainer.new()
@@ -72,9 +75,17 @@ func _sign_in() -> void:
 	_previous_jobs = {}
 	for job: BackendJob in Backend.current_jobs():
 		_previous_jobs[job.id] = true
-	_timer.start()
 	_render()
-	_status()
+	var initial_status := await Backend.call_op("provider.auth.status", {"provider": _provider})
+	if _closed:
+		return
+	if not Backend.failed(initial_status) and initial_status.get("auth") is Dictionary:
+		var initial_auth: Dictionary = initial_status["auth"]
+		if initial_auth.get("code_required") == true:
+			_apply(initial_auth)
+			return
+		_apply(initial_auth)
+	_timer.start()
 	var result := await Backend.call_op("provider.auth", {"provider": _provider})
 	if _closed:
 		return
@@ -94,6 +105,31 @@ func _sign_in() -> void:
 		return
 	_flow["state"] = "authenticated"
 	_timer.stop()
+	_render()
+
+
+func _submit_code() -> void:
+	if _closed or _flow["state"] != "awaiting_code":
+		return
+	var code := (_code_edit.text if is_instance_valid(_code_edit) else _code_text).strip_edges()
+	_code_text = code
+	if code.is_empty():
+		_flow["error"] = "Enter your verification code to continue."
+		_render()
+		return
+	_flow["state"] = "submitting_code"
+	_flow["error"] = ""
+	_render()
+	var result := await Backend.call_op("provider.auth", {"provider": _provider, "code": code})
+	if _closed:
+		return
+	if Backend.failed(result):
+		_flow["state"] = "awaiting_code"
+		_flow["error"] = result["error"]["message"]
+		_render()
+		return
+	_code_text = ""
+	_flow["state"] = "authenticated"
 	_render()
 
 
@@ -175,19 +211,32 @@ func _copy_link() -> void:
 func _render() -> void:
 	if _closed:
 		return
+	_code_edit = null
 	for child in _body.get_children():
 		_body.remove_child(child)
 		child.queue_free()
 	var state: String = _flow["state"]
 	var url: String = _flow["url"]
-	if state in ["authenticating", "idle", "canceling"]:
+	if state in ["authenticating", "idle", "canceling", "submitting_code"]:
 		var bar := ProgressBar.new()
 		bar.indeterminate = true
 		bar.show_percentage = false
 		bar.custom_minimum_size = Vector2(0, 4)
 		_body.add_child(bar)
 	_body.add_child(_spacer(14))
-	_body.add_child(_label(ProviderAuth.message(state, url)))
+	_body.add_child(_label(ProviderAuth.message(state, url, Util.text(_flow.get("prompt")))))
+	if state == "awaiting_code" or state == "submitting_code":
+		_body.add_child(_spacer(12))
+		_code_edit = LineEdit.new()
+		_code_edit.text = _code_text
+		_code_edit.placeholder_text = "Verification code"
+		_code_edit.accessibility_name = "Verification code"
+		_code_edit.editable = state == "awaiting_code"
+		_code_edit.text_changed.connect(func(t: String) -> void: _code_text = t)
+		_code_edit.text_submitted.connect(func(_t: String) -> void: _submit_code())
+		_body.add_child(_code_edit)
+		if state == "awaiting_code":
+			_code_edit.grab_focus.call_deferred()
 	if not url.is_empty() and state == "authenticating":
 		_body.add_child(_spacer(12))
 		var link := RichTextLabel.new()
@@ -223,6 +272,10 @@ func _render() -> void:
 	_body.add_child(_spacer(14))
 	var buttons := HBoxContainer.new()
 	buttons.alignment = BoxContainer.ALIGNMENT_END
+	if state == "awaiting_code" or state == "submitting_code":
+		var submit := _button("Submit code", _submit_code)
+		submit.disabled = state != "awaiting_code"
+		buttons.add_child(submit)
 	if state == "authenticating" and _flow["cancellable"] and _job != null and _job.cancellable:
 		buttons.add_child(_button("Cancel sign-in", _cancel))
 	if state == "failed" or state == "canceled":

@@ -79,6 +79,7 @@ func _rebuild(jobs: Array) -> void:
 		var empty := Label.new()
 		empty.text = "Provider loading, downloads, and sign-in will appear here."
 		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		empty.custom_minimum_size.x = 460
 		_list.add_child(empty)
 		return
 	for job: BackendJob in sorted:
@@ -129,6 +130,8 @@ func _tile(job: BackendJob) -> Control:
 		if not job.cancellable:
 			var note := Label.new()
 			note.text = "This provider cannot cancel its sign-in flow."
+			note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			note.custom_minimum_size.x = 380
 			note.add_theme_font_size_override("font_size", 12)
 			body.add_child(note)
 		var cancel := Icons.button("close", "Cancel operation", _cancel.bind(job.id))

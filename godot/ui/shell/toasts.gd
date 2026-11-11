@@ -55,10 +55,19 @@ func show_notice(message: String, is_error := false) -> void:
 	var label := Label.new()
 	label.text = message
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.custom_minimum_size = Vector2(minf(520.0, maxf(160.0, size.x - 80.0)), 0)
+	var max_w := minf(520.0, maxf(160.0, size.x - 80.0))
+	label.custom_minimum_size = Vector2(max_w, 0)
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.add_theme_color_override("font_color", fg)
-	row.add_child(label)
+	if message.length() > 220 or message.count("\n") > 3:
+		var sc := ScrollContainer.new()
+		sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		sc.custom_minimum_size = Vector2(max_w, minf(120.0, maxf(64.0, size.y * 0.2)))
+		sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sc.add_child(label)
+		row.add_child(sc)
+	else:
+		row.add_child(label)
 	var close := Icons.button("close", "Dismiss notice", func() -> void: _dismiss(center), 16)
 	for key in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 		close.add_theme_color_override(key, fg)

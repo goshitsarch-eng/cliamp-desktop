@@ -158,3 +158,42 @@ func test_dialog_wrapping_labels_get_a_minimum_width() -> void:
 	assert_float(fixed.custom_minimum_size.x).is_equal(300.0)
 	assert_float(plain.custom_minimum_size.x).is_equal(0.0)
 	box.free()
+
+
+func test_palette_resolves_custom_theme_without_bg() -> void:
+	var p := Palette.from_engine({"fg": "#cdd6f4", "accent": "#89b4fa"})
+	assert_bool(p.dark).is_true()
+	assert_bool(p.accent.is_equal_approx(Palette.new().accent)).is_false()
+
+
+func test_single_line_strips_newlines_and_controls() -> void:
+	assert_str(Util.single_line("Line 1\r\nLine 2\tOK")).is_equal("Line 1 Line 2 OK")
+	assert_str(LibraryLogic.title_of({"title": "A\nB", "path": "/tmp/a.wav"})).is_equal("A B")
+
+
+func test_provider_auth_supports_verification_code_flow() -> void:
+	var flow := ProviderAuth.initial()
+	flow = ProviderAuth.reduce(flow, {"state": "idle", "code_required": true, "prompt": "Enter Telegram login code"})
+	assert_str(flow["state"]).is_equal("awaiting_code")
+	assert_str(ProviderAuth.message(flow["state"], "", flow["prompt"])).is_equal("Enter Telegram login code")
+	assert_bool(ProviderAuth.is_terminal(flow["state"])).is_false()
+
+
+func test_provider_browse_pluralizes_and_labels_shows() -> void:
+	var show_routes := ProviderBrowse.routes({"shows": true}, {"catalog": true})
+	assert_bool(show_routes.any(func(r: Dictionary) -> bool: return r["label"] == "Show catalog" and r["icon"] == "podcasts")).is_true()
+	assert_str(ProviderBrowse.count_label(1, "genres")).is_equal("1 category")
+	assert_str(ProviderBrowse.count_label(2, "genres")).is_equal("2 categories")
+	assert_str(ProviderBrowse.count_label(1, "tracks")).is_equal("1 track")
+	assert_str(ProviderBrowse.count_label(3, "playlists")).is_equal("3 playlists")
+
+
+func test_macos_bundle_sidecar_never_picks_app_binary_on_case_insensitive_fs() -> void:
+	var exe := "/Applications/Cliamp.app/Contents/MacOS/Cliamp"
+	var res := "/Applications/Cliamp.app/Contents/Resources/cliamp"
+	var case_insensitive := func(p: String) -> bool:
+		return p.to_lower() == exe.to_lower() or p == res
+	assert_str(Backend.pick_sidecar_path(exe, "macOS", case_insensitive)).is_equal(res)
+	var missing_res := func(p: String) -> bool:
+		return p.to_lower() == exe.to_lower()
+	assert_str(Backend.pick_sidecar_path(exe, "macOS", missing_res)).is_equal("cliamp")

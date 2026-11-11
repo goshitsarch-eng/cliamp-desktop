@@ -265,10 +265,10 @@ func TestProviderSearchCatalog(t *testing.T) {
 	}
 	base := []playlist.PlaylistInfo{
 		{ID: "f:" + s.FeedURL, Name: "[subscribed] First Show", TrackCount: 12, Section: "Subscriptions", Favorite: true},
-		{ID: "c:" + s.FeedURL, Name: "[subscribed] First Show", TrackCount: 12, Section: "Top Shows (US)"},
+		{ID: "c:" + s.FeedURL, Name: "[subscribed] First Show", TrackCount: 12, Section: "Top Shows (US)", Favorite: true},
 	}
 	results := []playlist.PlaylistInfo{
-		{ID: "s:" + s.FeedURL, Name: "[subscribed] First Show", TrackCount: 12, Section: "Search Results"},
+		{ID: "s:" + s.FeedURL, Name: "[subscribed] First Show", TrackCount: 12, Section: "Search Results", Favorite: true},
 		{ID: "s:https://example.com/second", Name: "Second Show", TrackCount: 8, Section: "Search Results"},
 	}
 	checkProviderPlaylists(t, p, base)

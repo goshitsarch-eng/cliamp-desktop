@@ -20,7 +20,8 @@ static func save(host: Node, tracks: Array) -> bool:
 	var provider := Util.text(selected.get("provider"))
 	var name := Util.text(selected.get("id"))
 	if selected.get("new") == true:
-		var value: Variant = await Dialogs.prompt(host, "Create playlist", "Playlist name", "", "", false, "Create")
+		var validator := LibraryLogic.playlist_name_error if provider == "local" else Callable()
+		var value: Variant = await Dialogs.prompt(host, "Create playlist", "Playlist name", "", "", false, "Create", validator)
 		if value == null:
 			return false
 		var created: Variant = await Store.run("playlist.create", {"provider": provider, "playlist": value})

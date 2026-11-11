@@ -200,6 +200,14 @@ func _fetch(operation: String, params: Dictionary, kind := "tracks", append := f
 	var generation := _load_generation
 	var requested: Variant = Store.state.get("playlist_revision")
 	requested = int(requested) if requested is int or requested is float else null
+	var prev_marked_paths := {}
+	if quiet and not append and _selecting:
+		for p: int in _marked.keys():
+			if p >= 0 and p < _items.size():
+				var mp := Util.text(LibraryLogic.track_of(_items[p], _kind).get("path"))
+				if not mp.is_empty():
+					prev_marked_paths[mp] = true
+	var target_count := maxi(PAGE_LIMIT, _items.size()) if quiet and not append else PAGE_LIMIT
 	_request = operation
 	_params = params
 	_kind = kind
@@ -231,9 +239,26 @@ func _fetch(operation: String, params: Dictionary, kind := "tracks", append := f
 		return
 	var items := Util.objects(data.get(kind))
 	var listening := Util.object(data.get("listening")).duplicate()
+	var total_count := int(Util.number(data.get("total"), items.size()))
+	if quiet and not append and operation != "provider.catalog" and target_count > PAGE_LIMIT:
+		var goal := mini(target_count, total_count)
+		while items.size() < goal:
+			var extra_req := params.duplicate()
+			extra_req["limit"] = PAGE_LIMIT
+			extra_req["offset"] = items.size()
+			var extra := await Backend.call_op(operation, extra_req)
+			if generation != _load_generation:
+				return
+			if Backend.failed(extra) or extra.get("ok") == false:
+				break
+			var page := Util.objects(extra.get(kind))
+			if page.is_empty():
+				break
+			items.append_array(page)
+			listening.merge(Util.object(extra.get("listening")), true)
 	if (kind == "tracks" or kind == "history") and not items.is_empty() and Store.supports("provider.playback_state"):
 		var tracks: Array = []
-		for item in items:
+		for item in items.slice(0, 1000):
 			tracks.append(Util.object(item.get("track")) if kind == "history" else item)
 		var status := await Backend.call_op("provider.playback_state", {"tracks": tracks})
 		if generation != _load_generation:
@@ -261,6 +286,11 @@ func _fetch(operation: String, params: Dictionary, kind := "tracks", append := f
 		_items.append_array(items)
 	else:
 		_items = items
+		if not prev_marked_paths.is_empty() and _selecting:
+			for idx in _items.size():
+				var mp := Util.text(LibraryLogic.track_of(_items[idx], _kind).get("path"))
+				if prev_marked_paths.has(mp):
+					_marked[idx] = true
 	_total = int(Util.number(data.get("total"), _items.size()))
 	_sorts = Util.objects(data.get("sorts"))
 	if operation == "queue.list" or operation == "playnext.list":
@@ -274,6 +304,12 @@ func _fetch(operation: String, params: Dictionary, kind := "tracks", append := f
 	_loading = false
 	_rebuild_data()
 	_render()
+	if (operation == "queue.list" or operation == "playnext.list") and _active:
+		var latest: Variant = Store.state.get("playlist_revision")
+		latest = int(latest) if latest is int or latest is float else null
+		if latest != _list_revision:
+			_last_revision = latest
+			_fetch.call_deferred(_request, _params, "tracks", false, true)
 
 
 func _fail_load(message: String) -> void:
@@ -303,7 +339,7 @@ func _on_state(state: Dictionary) -> void:
 
 func _signature() -> String:
 	var t := Store.track()
-	return "%s|%s|%s|%s|%s" % [t.get("path"), t.get("title"), t.get("artist"), Store.is_playing(), Store.state.get("total")]
+	return "%s|%s|%s|%s|%s|%d" % [t.get("path"), t.get("title"), t.get("artist"), Store.is_playing(), Store.state.get("total"), roundi(Util.number(Store.state.get("duration")))]
 
 
 func _on_lists_stale() -> void:
@@ -376,7 +412,7 @@ func _build() -> void:
 
 	_selection_bar = _hscroll()
 	_selection_row = HBoxContainer.new()
-	_selection_bar.add_child(_selection_row)
+	_selection_bar.add_child(_margined(_selection_row, 0, 0, 0, 6))
 	var selection_margin := _margined(_selection_bar, 32, 0, 24, 8)
 	selection_margin.visible = false
 	_selection_bar.set_meta("wrapper", selection_margin)
@@ -760,6 +796,9 @@ func _bind_row(row: Control, k: int) -> void:
 	var track := LibraryLogic.track_of(item, _kind)
 	var now := Store.track()
 	var current: bool = now.get("path") != null and track.get("path") == now.get("path")
+	var dur := Util.number(track.get("duration_secs"))
+	if dur <= 0.0 and current:
+		dur = Util.number(Store.state.get("duration"))
 	var label := Util.text(track.get("title"), "track %d" % (pos + 1))
 	(row as TrackRow).apply({
 		"position": pos,
@@ -767,7 +806,7 @@ func _bind_row(row: Control, k: int) -> void:
 		"artist": LibraryLogic.artist_of(track),
 		"album": LibraryLogic.history_date(item.get("played_at")) if _kind == "history" else Util.text(track.get("album"), "—"),
 		"listening": LibraryLogic.listening_text(Util.object(_listening.get(Util.text(track.get("path"))))),
-		"duration": "LIVE" if track.get("realtime") == true else Util.duration_or_unknown(track.get("duration_secs")),
+		"duration": "LIVE" if track.get("realtime") == true else Util.duration_or_unknown(dur),
 		"bookmark": track.get("bookmark") == true,
 		"current": current,
 		"playing": Store.is_playing(),
@@ -1035,7 +1074,7 @@ func _load_collection() -> void:
 
 
 func _save_queue() -> void:
-	var playlist_name: Variant = await Dialogs.prompt(self, "Save queue as playlist", "Playlist name")
+	var playlist_name: Variant = await Dialogs.prompt(self, "Save queue as playlist", "Playlist name", "", "", false, "Save", LibraryLogic.playlist_name_error)
 	if playlist_name == null:
 		return
 	var params := {"provider": "local", "playlist": playlist_name}

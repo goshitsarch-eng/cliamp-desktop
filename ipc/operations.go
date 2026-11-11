@@ -162,7 +162,7 @@ func DefaultOperationRegistry() *OperationRegistry {
 		{Name: "playnext.move", Description: "move a play-next entry", Parameters: []string{"index", "to", "if_revision"}},
 		{Name: "playnext.clear", Description: "clear play-next entries", Parameters: []string{"if_revision"}},
 		{Name: "provider.list", Description: "list configured providers"},
-		{Name: "provider.auth", Description: "start interactive provider sign-in", Async: true, Parameters: []string{"provider"}},
+		{Name: "provider.auth", Description: "start interactive provider sign-in", Async: true, Parameters: []string{"provider", "code"}},
 		{Name: "provider.auth.status", Description: "read interactive provider sign-in state", Parameters: []string{"provider"}},
 		{Name: "provider.playlists", Description: "list provider playlists", Async: true, Parameters: []string{"provider", "offset", "limit"}},
 		{Name: "provider.tracks", Description: "list provider tracks", Async: true, Parameters: []string{"provider", "playlist", "offset", "limit"}},

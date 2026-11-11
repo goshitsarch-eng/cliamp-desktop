@@ -151,7 +151,7 @@ func (p *Provider) Authenticate(code string) error {
 	if err := p.wait(); err != nil && !errors.Is(err, playlist.ErrNeedsAuth) {
 		return err
 	}
-	req := authRequest{result: make(chan error, 1)}
+	req := authRequest{code: code, result: make(chan error, 1)}
 	select {
 	case p.authReq <- req:
 	case <-time.After(5 * time.Second):

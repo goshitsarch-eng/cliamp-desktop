@@ -33,13 +33,14 @@ static func open(host: Node) -> bool:
 func _run(host: Node) -> bool:
 	_dialog = AcceptDialog.new()
 	_dialog.exclusive = true
+	_dialog.content_scale_factor = Prefs.ui_scale
 	_dialog.min_size = Vector2i(Vector2(560, 0) * Prefs.ui_scale)
 	_dialog.get_ok_button().hide()
 	_body = VBoxContainer.new()
 	_body.custom_minimum_size = Vector2(540, 0)
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(560, 440) * Prefs.ui_scale
+	scroll.custom_minimum_size = Vector2(560, 440)
 	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_body)
 	_dialog.add_child(scroll)
@@ -199,7 +200,7 @@ func _render_saved() -> void:
 	_body.add_child(_label("Your account settings have been saved in Cliamp's credential store."))
 	_body.add_child(_spacer(10))
 	if Backend.owns_daemon():
-		_body.add_child(_label("Restart the player to load the provider. This stops current playback."))
+		_body.add_child(_label("Restart the player to load the provider. Your current queue and playback state are restored after restart."))
 	else:
 		_body.add_child(_label("This app is connected to an existing Cliamp player. Restart that player, then reconnect this app to load the provider."))
 

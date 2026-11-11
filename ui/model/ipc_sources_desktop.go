@@ -2,6 +2,8 @@ package model
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -45,10 +47,30 @@ func (m *Model) handleV2DesktopSources(ctx context.Context, jobs *ipc.JobStore, 
 				result.err = err
 				return result
 			}
+			for _, track := range tracks {
+				if err := verifyResolvedDesktopTrack(track); err != nil {
+					result.err = err
+					return result
+				}
+			}
 			result.tracks = append(result.tracks, tracks...)
 		}
 		return result
 	}
+}
+
+func verifyResolvedDesktopTrack(track playlist.Track) error {
+	if track.Stream || playlist.IsURL(track.Path) || strings.HasPrefix(track.Path, "ssh://") {
+		return nil
+	}
+	info, err := os.Stat(track.Path)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("not a regular audio file: %s", track.Path)
+	}
+	return nil
 }
 
 func (m *Model) handleIPCDesktopSources(result ipcSourcesDesktopResult) tea.Cmd {

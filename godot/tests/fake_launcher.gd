@@ -25,11 +25,16 @@ func make_backend(options := {}) -> Node:
 	backend.shutdown_timeout = options.get("shutdown_timeout", 0.05)
 	backend.refresh_interval = 3600.0
 	backend.reconnect_delay = 0.005
-	var launcher := self
+	var launcher_weak: WeakRef = weakref(self)
 	backend.proc_factory = func() -> Object:
 		var p := FakeProc.new()
-		p.launcher = launcher
+		p.launcher_ref = launcher_weak
 		return p
+	backend.tree_exiting.connect(func() -> void:
+		var inst: FakeLauncher = launcher_weak.get_ref()
+		if inst != null:
+			inst.on_command = Callable()
+		backend.proc_factory = Callable())
 	return backend
 
 

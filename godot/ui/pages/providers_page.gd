@@ -99,7 +99,7 @@ func refresh() -> void:
 
 
 func handles_escape() -> bool:
-	return false
+	return _active and _browser.visible and _browser.handles_escape()
 
 
 func _provider_entry() -> Dictionary:
@@ -207,7 +207,7 @@ func _add_to_playlist(track: Dictionary) -> void:
 	if dialog == null:
 		Store.notify("Saving to a playlist is not available yet.", true)
 		return
-	await dialog.open(self, [track])
+	await dialog.save(self, [track])
 
 
 func _toggle_favorite(track: Dictionary) -> void:

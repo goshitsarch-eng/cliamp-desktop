@@ -227,7 +227,8 @@ func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 			_, browseAlbums := entry.Provider.(provider.AlbumBrowser)
 			_, catalog := entry.Provider.(provider.CatalogLoader)
 			_, authenticatable := entry.Provider.(playlist.Authenticator)
-			items = append(items, ipc.ProviderInfo{Key: entry.Key, Name: entry.Name, Searchable: searchable, BrowseArtists: browseArtists, BrowseAlbums: browseAlbums, Catalog: catalog, Authenticatable: authenticatable})
+			_, codeAuth := entry.Provider.(provider.CodeAuthenticator)
+			items = append(items, ipc.ProviderInfo{Key: entry.Key, Name: entry.Name, Searchable: searchable, BrowseArtists: browseArtists, BrowseAlbums: browseAlbums, Catalog: catalog, Authenticatable: authenticatable || codeAuth, CodeAuth: codeAuth})
 		}
 		request.Reply <- ipc.Response{OK: true, Providers: items}
 		return nil
@@ -771,8 +772,8 @@ func ipcTrackInfo(track playlist.Track, index, queuePosition int, favorite bool)
 		EmbeddedLyrics: track.EmbeddedLyrics,
 		TrackNumber:    track.TrackNumber, DurationSecs: track.DurationSecs, Index: index,
 		QueuePosition: queuePosition, Stream: track.Stream, Realtime: track.Realtime,
-		Restricted: track.Restricted, Feed: track.Feed, Bookmark: favorite, Unplayable: track.Unplayable,
-		DirSourced: track.DirSourced, ProviderMeta: maps.Clone(track.ProviderMeta),
+		Restricted: track.Restricted, Feed: track.Feed, Bookmark: favorite, UserRating: track.UserRating,
+		Unplayable: track.Unplayable, DirSourced: track.DirSourced, ProviderMeta: maps.Clone(track.ProviderMeta),
 	}
 }
 
@@ -783,7 +784,7 @@ func ipcTrackFromInfo(info ipc.TrackInfo) playlist.Track {
 		EmbeddedLyrics: info.EmbeddedLyrics,
 		TrackNumber:    info.TrackNumber, DurationSecs: info.DurationSecs,
 		Stream: info.Stream || playlist.IsURL(info.Path), Realtime: info.Realtime,
-		Restricted: info.Restricted, Feed: info.Feed, Unplayable: info.Unplayable,
-		DirSourced: info.DirSourced, ProviderMeta: maps.Clone(info.ProviderMeta),
+		Restricted: info.Restricted, Feed: info.Feed, UserRating: info.UserRating,
+		Unplayable: info.Unplayable, DirSourced: info.DirSourced, ProviderMeta: maps.Clone(info.ProviderMeta),
 	}
 }
