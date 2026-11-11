@@ -748,6 +748,11 @@ func (m *Model) plMgrFinishUndo(undo plManagerUndo) {
 	m.plManager.undo = plManagerUndo{}
 	m.plMgrRefreshList()
 	if m.plManager.screen == plMgrScreenTracks && m.plManager.selPlaylist == undo.name {
+		if len(undo.tracks) == 0 && len(undo.doc) > 0 && m.localProvider != nil {
+			if tracks, err := m.localProvider.Tracks(undo.name); err == nil {
+				undo.tracks = tracks
+			}
+		}
 		m.plMgrRestoreTracks(undo.tracks, undo.missingLocal)
 		m.plManager.marked = make(map[int]bool)
 		m.plMgrRecomputeFilter()

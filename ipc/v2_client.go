@@ -34,7 +34,7 @@ func SendV2WithDeadline(sockPath string, request V2Request, deadline time.Durati
 	if _, err := conn.Write(append(data, '\n')); err != nil {
 		return V2Response{}, fmt.Errorf("write: %w", err)
 	}
-	scanner := newFrameScanner(conn)
+	scanner := newResponseFrameScanner(conn)
 	if !scanner.Scan() {
 		if err := scanner.Err(); err != nil {
 			return V2Response{}, fmt.Errorf("read response: %w", err)
@@ -84,7 +84,7 @@ func SubscribeV2(sockPath string, id json.RawMessage, topics []string) (*V2Event
 	if _, err := conn.Write(append(data, '\n')); err != nil {
 		return fail(fmt.Errorf("write subscribe request: %w", err))
 	}
-	scanner := newFrameScanner(conn)
+	scanner := newResponseFrameScanner(conn)
 	if !scanner.Scan() {
 		if err := scanner.Err(); err != nil {
 			return fail(fmt.Errorf("read subscribe response: %w", err))

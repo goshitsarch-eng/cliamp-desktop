@@ -137,6 +137,7 @@ type PlaylistInfo struct {
 	DurationSecs int    `json:"duration_secs,omitempty"`
 	Favoritable  bool   `json:"favoritable,omitempty"`
 	Favorite     bool   `json:"favorite,omitempty"`
+	CanAdd       bool   `json:"can_add,omitempty"`
 }
 
 type ProviderInfo struct {

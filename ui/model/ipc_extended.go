@@ -133,7 +133,8 @@ func (m *Model) handleIPCURLResult(result ipcURLLoadResult) tea.Cmd {
 	// idle, which is the right default for a plain append.
 	wasStopped := !m.player.IsPlaying()
 	start := m.appendTracks(result.tracks...)
-	result.request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(result.tracks, m.trackFavoriteLookup(true)), Total: len(result.tracks)}
+	firstPage, total := ipcPage(result.tracks, 0, 200, 200)
+	result.request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(firstPage, m.trackFavoriteLookup(true)), Total: total}
 	if result.request.Play {
 		m.stopPlayback()
 		m.player.ClearPreload()
@@ -551,9 +552,16 @@ func ipcProviderPlaylistInfos(entry provider.Entry) ([]ipc.PlaylistInfo, error) 
 	if err != nil && len(lists) == 0 {
 		return nil, err
 	}
+	_, appendOne := entry.Provider.(provider.PlaylistWriter)
+	_, appendMany := entry.Provider.(provider.PlaylistBatchWriter)
+	filter, hasFilter := entry.Provider.(provider.PlaylistTargetFilter)
 	items := make([]ipc.PlaylistInfo, len(lists))
 	for i, list := range lists {
-		items[i] = ipc.PlaylistInfo{ID: list.ID, Name: list.Name, Provider: entry.Key, Section: list.Section, TrackCount: list.TrackCount, DurationSecs: list.DurationSecs, Favorite: list.Favorite}
+		canAdd := appendOne || appendMany
+		if canAdd && hasFilter {
+			canAdd = filter.CanAddToPlaylist(list)
+		}
+		items[i] = ipc.PlaylistInfo{ID: list.ID, Name: list.Name, Provider: entry.Key, Section: list.Section, TrackCount: list.TrackCount, DurationSecs: list.DurationSecs, Favorite: list.Favorite, CanAdd: canAdd}
 		if shows, ok := entry.Provider.(provider.ShowLister); ok {
 			items[i].Show = shows.IsShowID(list.ID)
 		}
@@ -632,7 +640,8 @@ func (m *Model) handleIPCProviderLoad(result ipcProviderLoadResult) tea.Cmd {
 	}
 	m.setHeaderStateFromTracks(result.tracks)
 	m.plCursor = result.start
-	result.request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(result.tracks, m.trackFavoriteLookup(true)), Playlist: result.request.Playlist, Total: len(result.tracks)}
+	firstPage, total := ipcPage(result.tracks, 0, 200, 200)
+	result.request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(firstPage, m.trackFavoriteLookup(true)), Playlist: result.request.Playlist, Total: total}
 	return m.playCurrentTrack()
 }
 

@@ -79,7 +79,9 @@ func (m *Model) handleIPCDesktopSources(result ipcSourcesDesktopResult) tea.Cmd 
 		return nil
 	}
 	if result.err != nil {
-		m.completeV2Job(result.jobs, result.jobID, ipc.Response{OK: false, Error: result.err.Error()})
+		err := v2InternalError()
+		err.Detail = result.err.Error()
+		m.failV2Job(result.jobs, result.jobID, err)
 		return nil
 	}
 	if result.request.Revision != m.playlist.Revision() {
@@ -87,7 +89,9 @@ func (m *Model) handleIPCDesktopSources(result ipcSourcesDesktopResult) tea.Cmd 
 		return nil
 	}
 	if len(result.tracks) == 0 {
-		m.completeV2Job(result.jobs, result.jobID, ipc.Response{OK: false, Error: "no playable tracks found"})
+		err := v2InternalError()
+		err.Detail = "no playable tracks found"
+		m.failV2Job(result.jobs, result.jobID, err)
 		return nil
 	}
 	request := result.request

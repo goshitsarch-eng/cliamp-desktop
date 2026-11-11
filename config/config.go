@@ -1325,9 +1325,12 @@ type KeyValue struct {
 // the way Load reads them, so section "ytmusic" also edits [youtube] or [yt].
 // A missing section is added at the end, and a missing file is created.
 func SaveSection(section string, kv []KeyValue, owned []string) error {
+	if section == "" || strings.ContainsAny(section, "\r\n[]#\x00") {
+		return fmt.Errorf("save [%s]: invalid section name", section)
+	}
 	for _, e := range kv {
-		if strings.ContainsAny(e.Key+e.Value, "\r\n") {
-			return fmt.Errorf("save [%s] %s: a key or value holds a line break", section, e.Key)
+		if e.Key == "" || strings.ContainsAny(e.Key, "\r\n=[]#\x00") || strings.ContainsAny(e.Value, "\r\n\x00") {
+			return fmt.Errorf("save [%s] %s: invalid key or value", section, e.Key)
 		}
 	}
 	return update(func(data string) string { return editSection(data, section, kv, owned) })

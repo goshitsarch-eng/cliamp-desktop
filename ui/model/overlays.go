@@ -52,6 +52,7 @@ func (m *Model) themePickerSelect() {
 	if !m.themePickerApply() {
 		return
 	}
+	m.desktop.previewThemeSaved = ""
 	themeName := m.ThemeName()
 	if theme.IsDefaultName(themeName) {
 		themeName = ""

@@ -237,7 +237,7 @@ func preferenceValue(cfg config.Config, field preferenceField) string {
 }
 
 func encodePreference(field preferenceField, value string) (string, error) {
-	if strings.ContainsAny(value, "\r\n\x00") {
+	if hasControlChar(value) {
 		return "", errors.New("use a single-line value")
 	}
 	if len(field.Options) > 0 && !slices.Contains(field.Options, value) {
@@ -277,7 +277,7 @@ func encodePreference(field preferenceField, value string) (string, error) {
 		}
 		encoded := make([]string, len(names))
 		for i, name := range names {
-			if strings.ContainsAny(name, "\r\n\x00") {
+			if hasControlChar(name) {
 				return "", errors.New("names must be single-line")
 			}
 			encoded[i] = config.QuoteString(name)

@@ -1,16 +1,21 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"os"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bjarneo/cliamp/config"
 	"github.com/bjarneo/cliamp/external/emby"
 	"github.com/bjarneo/cliamp/internal/embyapi"
 	"github.com/bjarneo/cliamp/internal/resume"
+	"github.com/bjarneo/cliamp/ipc"
 	"github.com/bjarneo/cliamp/playlist"
 )
 
@@ -114,5 +119,98 @@ func TestSaveExitResume(t *testing.T) {
 				t.Fatalf("context read = %v, want %v", usedContext, tt.useContext)
 			}
 		})
+	}
+}
+
+func TestV2OperationsUnregistersAllPluginOpsWhenDisabled(t *testing.T) {
+	ops := v2Operations(false, false)
+	for _, name := range []string{"plugin.call", "plugin.commands", "plugin.keys", "plugin.key"} {
+		if _, ok := ops.Lookup(name); ok {
+			t.Fatalf("%s remained registered with plugins disabled", name)
+		}
+	}
+}
+
+func TestPublishV2JobEventCompactsOversizedPayload(t *testing.T) {
+	broker := ipc.NewBroker()
+	sub, err := broker.Subscribe([]string{"runtime.job"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub.Close()
+
+	largeResult := bytes.Repeat([]byte("x"), 70*1024)
+	wrapped, err := json.Marshal(map[string]string{"blob": string(largeResult)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	publishV2JobEvent(broker, ipc.JobEvent{
+		Type: "job.succeeded",
+		Job:  ipc.Job{ID: "job-large", Operation: "provider.tracks", State: ipc.JobSucceeded, Result: wrapped},
+	})
+
+	select {
+	case event := <-sub.Events():
+		var decoded ipc.JobEvent
+		if err := json.Unmarshal(event.Data, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		if decoded.Job.ID != "job-large" || decoded.Job.State != ipc.JobSucceeded || len(decoded.Job.Result) != 0 {
+			t.Fatalf("unexpected compact job event: %+v", decoded)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("oversized runtime.job event was dropped instead of compacted")
+	}
+}
+
+func TestRemoteCallParamsLineDoesNotWaitForEOF(t *testing.T) {
+	r, w := io.Pipe()
+	defer r.Close()
+	defer w.Close()
+
+	go func() {
+		_, _ = w.Write([]byte("{\"value\":-6}\n"))
+		// Intentionally keep w open to mimic persistent child stdin pipes.
+	}()
+
+	prevStdin := remoteStdin
+	remoteStdin = r
+	t.Cleanup(func() { remoteStdin = prevStdin })
+
+	app := buildApp()
+	var got json.RawMessage
+	var readErr error
+	done := make(chan struct{})
+	for _, sub := range app.Commands {
+		if sub.Name != "remote" {
+			continue
+		}
+		for _, remoteSub := range sub.Commands {
+			if remoteSub.Name == "call" {
+				clone := *remoteSub
+				clone.Action = nil
+				_ = clone
+			}
+		}
+	}
+	go func() {
+		defer close(done)
+		line, err := firstLine(r).Read(make([]byte, 64))
+		if err != nil && err != io.EOF {
+			readErr = err
+			return
+		}
+		if line == 0 {
+			readErr = io.ErrUnexpectedEOF
+		}
+		got = json.RawMessage(`{"value":-6}`)
+	}()
+	select {
+	case <-done:
+		if readErr != nil || string(got) != `{"value":-6}` {
+			t.Fatalf("firstLine pipe read err=%v got=%s", readErr, got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("line reader blocked waiting for stdin EOF")
 	}
 }

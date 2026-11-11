@@ -14,7 +14,10 @@ import (
 	"github.com/bjarneo/cliamp/internal/fileutil"
 )
 
-const manifestName = ".trust.json"
+const (
+	manifestName = ".trust.json"
+	lockName     = ".trust.lock"
+)
 
 var (
 	ErrUntrusted    = errors.New("plugin is not trusted")
@@ -104,9 +107,25 @@ func ApproveHash(dir, name, path, hash string, permissions []string) error {
 	return approve(dir, name, path, hash, append([]string{}, permissions...))
 }
 
+func lockTrustDir(dir string) (func() error, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("create plugin trust dir: %w", err)
+	}
+	unlock, err := fileutil.LockFile(filepath.Join(dir, lockName))
+	if err != nil {
+		return nil, fmt.Errorf("lock plugin trust manifest: %w", err)
+	}
+	return unlock, nil
+}
+
 // approve records hash for name. It records permissions when they are not
 // nil, and removes the recorded permissions otherwise.
 func approve(dir, name, path, hash string, permissions []string) error {
+	unlock, err := lockTrustDir(dir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = unlock() }()
 	got, err := HashFile(path)
 	if err != nil {
 		return err
@@ -133,6 +152,11 @@ func approve(dir, name, path, hash string, permissions []string) error {
 // Revoke removes the approval of name. It leaves the manifest as it is when
 // the manifest has no approval for name.
 func Revoke(dir, name string) error {
+	unlock, err := lockTrustDir(dir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = unlock() }()
 	m, err := Load(dir)
 	if err != nil {
 		return err

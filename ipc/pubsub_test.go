@@ -198,3 +198,42 @@ func TestBrokerRejectedRetainDoesNotConsumeSequence(t *testing.T) {
 		t.Fatal("timed out waiting for event")
 	}
 }
+
+func TestBroker32RetainedTopicsLeavesRoomForLiveEvent(t *testing.T) {
+	broker := NewBroker()
+	topics := make([]string, maxTopicsPerSubscription)
+	for i := range topics {
+		topics[i] = fmt.Sprintf("plugin.retained.t%02d", i)
+		if err := broker.Publish(topics[i], json.RawMessage(`{"retained":true}`), true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sub, err := broker.Subscribe(topics)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub.Close()
+	if err := broker.Publish(topics[0], json.RawMessage(`{"live":true}`), false); err != nil {
+		t.Fatal(err)
+	}
+	var gotLive bool
+	for range maxTopicsPerSubscription + 1 {
+		select {
+		case event, ok := <-sub.Events():
+			if !ok {
+				t.Fatal("subscriber disconnected on first live event after 32 retained topics")
+			}
+			if event.Event == overflowEventTopic {
+				t.Fatal("unexpected overflow on first live event")
+			}
+			if !event.Retained && string(event.Data) == `{"live":true}` {
+				gotLive = true
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out reading replayed and live events")
+		}
+	}
+	if !gotLive {
+		t.Fatal("did not receive live event after retained replay")
+	}
+}

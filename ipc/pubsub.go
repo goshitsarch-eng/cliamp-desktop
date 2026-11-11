@@ -126,12 +126,18 @@ func (b *Broker) Publish(topic string, data json.RawMessage, retain bool) error 
 				Time:     time.Now().Unix(),
 				Data:     json.RawMessage(`{"resync_required":true}`),
 			}
-			sub.events <- overflow
+			select {
+			case sub.events <- overflow:
+			default:
+			}
 			delete(b.subscribers, id)
 			close(sub.events)
 			continue
 		}
-		sub.events <- event
+		select {
+		case sub.events <- event:
+		default:
+		}
 	}
 	return nil
 }
@@ -161,10 +167,7 @@ func (b *Broker) Subscribe(topics []string) (*Subscription, error) {
 	}
 	b.nextSub++
 	id := b.nextSub
-	capacity := subscriberBufferSize
-	if len(set) > capacity {
-		capacity = len(set)
-	}
+	capacity := max(subscriberBufferSize, len(set)+2)
 	ch := make(chan Event, capacity)
 	sub := &subscriber{topics: set, events: ch}
 	b.subscribers[id] = sub

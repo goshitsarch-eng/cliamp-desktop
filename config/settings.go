@@ -15,7 +15,7 @@ type Setting struct {
 // It preserves unknown settings and comments like the individual savers do.
 func SaveSettings(settings []Setting) error {
 	for _, setting := range settings {
-		if setting.Key == "" || strings.ContainsAny(setting.Section, "\r\n[]") || strings.ContainsAny(setting.Key, "\r\n=[]") || strings.ContainsAny(setting.Value, "\r\n") {
+		if !validTOMLKey(setting.Key) || (setting.Section != "" && !validTOMLSection(setting.Section)) || hasDisallowedTOMLControl(setting.Value) {
 			return errors.New("invalid preference setting")
 		}
 	}
@@ -32,4 +32,36 @@ func SaveSettings(settings []Setting) error {
 		}
 		return data
 	})
+}
+
+func validTOMLKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	for i := range len(key) {
+		c := key[i]
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func validTOMLSection(section string) bool {
+	for part := range strings.SplitSeq(section, ".") {
+		if !validTOMLKey(part) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasDisallowedTOMLControl(value string) bool {
+	for i := range len(value) {
+		c := value[i]
+		if (c < 0x20 && c != '\t') || c == 0x7f {
+			return true
+		}
+	}
+	return false
 }

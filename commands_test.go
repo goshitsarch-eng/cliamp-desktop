@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	cli "github.com/urfave/cli/v3"
 
@@ -570,17 +571,34 @@ func TestReadRemoteCallParams(t *testing.T) {
 		{
 			name:    "params and params-file mutually exclusive",
 			args:    []string{"cliamp", "remote", "call", "test.op", "--params", `{}`, "--params-file", validFile},
-			wantErr: "--params, --params-file, and --params-stdin are mutually exclusive",
+			wantErr: "--params, --params-file, --params-stdin, and --params-line are mutually exclusive",
 		},
 		{
 			name:    "params and params-stdin mutually exclusive",
 			args:    []string{"cliamp", "remote", "call", "test.op", "--params", `{}`, "--params-stdin"},
-			wantErr: "--params, --params-file, and --params-stdin are mutually exclusive",
+			wantErr: "--params, --params-file, --params-stdin, and --params-line are mutually exclusive",
 		},
 		{
 			name:    "params-file and params-stdin mutually exclusive",
 			args:    []string{"cliamp", "remote", "call", "test.op", "--params-file", validFile, "--params-stdin"},
-			wantErr: "--params, --params-file, and --params-stdin are mutually exclusive",
+			wantErr: "--params, --params-file, --params-stdin, and --params-line are mutually exclusive",
+		},
+		{
+			name:    "params and params-line mutually exclusive",
+			args:    []string{"cliamp", "remote", "call", "test.op", "--params", `{}`, "--params-line"},
+			wantErr: "--params, --params-file, --params-stdin, and --params-line are mutually exclusive",
+		},
+		{
+			name:  "params-line reads first newline-terminated JSON object",
+			args:  []string{"cliamp", "remote", "call", "test.op", "--params-line"},
+			stdin: "{\"query\": \"lofi\"}\nignored trailing bytes",
+			want:  `{"query": "lofi"}`,
+		},
+		{
+			name:    "params-line empty stdin",
+			args:    []string{"cliamp", "remote", "call", "test.op", "--params-line"},
+			stdin:   "\n",
+			wantErr: "parameters input is empty",
 		},
 		{
 			name:    "stdin exceeds size limit",
@@ -701,5 +719,57 @@ func TestRemoteCallParamsIntegration(t *testing.T) {
 
 	if !strings.Contains(stdout, `"ok":true`) && !strings.Contains(stdout, `"ok": true`) {
 		t.Errorf("stdout = %q, want response containing ok: true", stdout)
+	}
+}
+
+func TestDesktopSubcommandsFinishOnUnclosedPipe(t *testing.T) {
+	cfgDir := t.TempDir()
+	t.Setenv("CLIAMP_CONFIG_DIR", cfgDir)
+	t.Setenv("HOME", cfgDir)
+	t.Setenv("XDG_CONFIG_HOME", cfgDir)
+	t.Setenv("XDG_DATA_HOME", cfgDir)
+
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{name: "setup schema", args: []string{"cliamp", "setup", "schema"}},
+		{name: "plugins desktop list", args: []string{"cliamp", "plugins", "desktop", "list"}},
+		{name: "preferences schema", args: []string{"cliamp", "preferences", "schema"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pr, pw := io.Pipe()
+			defer pw.Close()
+			defer pr.Close()
+
+			go func() {
+				_, _ = pw.Write([]byte("{}\n"))
+				// Keep pw open, matching Godot's execute_with_pipe stdin behavior.
+			}()
+
+			var out strings.Builder
+			app := buildApp()
+			app.Reader = pr
+			app.Writer = &out
+
+			done := make(chan error, 1)
+			go func() {
+				done <- app.Run(t.Context(), tc.args)
+			}()
+
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatalf("%s returned error: %v", tc.name, err)
+				}
+				if !strings.Contains(out.String(), `"ok"`) && !strings.Contains(out.String(), `"providers"`) && !strings.Contains(out.String(), `"plugins"`) && !strings.Contains(out.String(), `"fields"`) {
+					t.Fatalf("%s output = %q, want JSON payload", tc.name, out.String())
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatalf("%s blocked waiting for EOF on unclosed stdin pipe", tc.name)
+			}
+		})
 	}
 }

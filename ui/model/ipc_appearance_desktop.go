@@ -14,11 +14,18 @@ import (
 // to commit, as the terminal pickers do.
 func (m *Model) handleV2AppearancePreview(msg V2RequestMsg, request ipc.Request) tea.Cmd {
 	if request.Cmd == "desktop.theme.preview" {
-		m.themes = theme.LoadAll()
-		if !m.SetTheme(request.Name) {
-			m.failV2Job(msg.Jobs, msg.JobID, v2NotFoundError())
-			return nil
+		saved := m.desktop.previewThemeSaved
+		if saved == "" {
+			saved = m.ThemeName()
 		}
+		if !m.SetTheme(request.Name) {
+			m.themes = theme.LoadAll()
+			if !m.SetTheme(request.Name) {
+				m.failV2Job(msg.Jobs, msg.JobID, v2NotFoundError())
+				return nil
+			}
+		}
+		m.desktop.previewThemeSaved = saved
 	} else {
 		var params struct {
 			Index *int `json:"index"`

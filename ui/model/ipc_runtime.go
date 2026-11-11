@@ -37,36 +37,50 @@ type ipcRuntimeState struct {
 }
 
 type ipcRuntimeFingerprint struct {
-	playlistRevision uint64
-	state            string
-	trackPath        string
-	favorite         bool // ♥ state of the playing track
-	logicalPath      string
-	detached         bool
-	index            int
-	total            int
-	playNextTotal    int
-	volume           float64
-	playlist         string
-	shuffle          bool
-	repeat           string
-	mono             bool
-	speed            float64
-	eq               [10]float64
-	eqPreset         string
-	device           string
-	visualizer       string
-	theme            string
-	lyricsOffsetMS   int64
-	notice           string
-	noticeError      bool
-	streamTitle      string
-	streamError      string
-	// buffering, durationSecs and seekable change when a buffering track
-	// starts, so the new clock gets its own event.
+	playback ipcPlaybackFingerprint
+	playlist ipcPlaylistFingerprint
+	settings ipcSettingsFingerprint
+	notice   ipcNoticeFingerprint
+}
+
+type ipcPlaybackFingerprint struct {
+	state        string
+	trackPath    string
+	favorite     bool // ♥ state of the playing track
+	logicalPath  string
+	detached     bool
+	streamTitle  string
+	streamError  string
 	buffering    bool
 	durationSecs int64
 	seekable     bool
+}
+
+type ipcPlaylistFingerprint struct {
+	playlistRevision uint64
+	index            int
+	total            int
+	playNextTotal    int
+	playlist         string
+}
+
+type ipcSettingsFingerprint struct {
+	volume         float64
+	shuffle        bool
+	repeat         string
+	mono           bool
+	speed          float64
+	eq             [10]float64
+	eqPreset       string
+	device         string
+	visualizer     string
+	theme          string
+	lyricsOffsetMS int64
+}
+
+type ipcNoticeFingerprint struct {
+	notice      string
+	noticeError bool
 }
 
 // SetIPCBroker enables GUI-facing V2 state events. It must be called before
@@ -725,7 +739,7 @@ func (m *Model) runtimeSnapshot() ipc.RuntimeSnapshot {
 	bands := m.player.EQBands()
 	snapshot.EQBands = append([]float64(nil), bands[:]...)
 	if m.vis != nil {
-		snapshot.Visualizer = m.vis.ModeName()
+		snapshot.Visualizer = m.snapshotVisualizerName()
 	}
 	if m.themeIdx >= 0 && m.themeIdx < len(m.themes) {
 		entry := m.themes[m.themeIdx]
@@ -739,12 +753,29 @@ func (m *Model) runtimeSnapshot() ipc.RuntimeSnapshot {
 	return snapshot
 }
 
+func (m *Model) snapshotVisualizerName() string {
+	if m.vis == nil {
+		return ""
+	}
+	if m.desktop.initialVisualizer != "" {
+		if mode, ok := m.vis.ModeByName(m.desktop.initialVisualizer); ok {
+			names := m.vis.AllModeNames()
+			if int(mode) >= 0 && int(mode) < len(names) {
+				return names[mode]
+			}
+		}
+	}
+	return m.vis.ModeName()
+}
+
 func (m *Model) publishIPCRuntimeState() {
 	if m.ipcRuntime == nil || m.ipcRuntime.broker == nil || m.player == nil || m.playlist == nil {
 		return
 	}
 	fingerprint := m.runtimeFingerprint()
-	if m.ipcRuntime.initialized && fingerprint == m.ipcRuntime.last {
+	wasInitialized := m.ipcRuntime.initialized
+	prev := m.ipcRuntime.last
+	if wasInitialized && fingerprint == prev {
 		return
 	}
 	m.ipcRuntime.initialized = true
@@ -755,69 +786,125 @@ func (m *Model) publishIPCRuntimeState() {
 	if err != nil {
 		return
 	}
-	for _, topic := range []string{ipcRuntimeEventState, ipcRuntimeEventPlayback, ipcRuntimeEventPlaylist, ipcRuntimeEventSettings} {
-		_ = m.ipcRuntime.broker.Publish(topic, payload, true)
+	_ = m.ipcRuntime.broker.Publish(ipcRuntimeEventState, payload, true)
+	if !wasInitialized || fingerprint.playback != prev.playback {
+		_ = m.ipcRuntime.broker.Publish(ipcRuntimeEventPlayback, payload, true)
+	}
+	if !wasInitialized || fingerprint.playlist != prev.playlist {
+		_ = m.ipcRuntime.broker.Publish(ipcRuntimeEventPlaylist, payload, true)
+	}
+	if !wasInitialized || fingerprint.settings != prev.settings {
+		_ = m.ipcRuntime.broker.Publish(ipcRuntimeEventSettings, payload, true)
 	}
 }
 
 func (m *Model) runtimeFingerprint() ipcRuntimeFingerprint {
-	fingerprint := ipcRuntimeFingerprint{playlist: m.runtimePlaylist(), device: m.audioDevice}
-	fingerprint.playlistRevision = m.playlist.Revision()
-	fingerprint.index = m.playlist.Index()
-	fingerprint.total = m.playlist.Len()
-	fingerprint.playNextTotal = m.playlist.QueueLen()
-	fingerprint.shuffle = m.playlist.Shuffled()
-	fingerprint.repeat = m.playlist.Repeat().String()
-	fingerprint.volume = m.player.Volume()
-	fingerprint.mono = m.player.Mono()
-	fingerprint.speed = m.player.Speed()
-	fingerprint.eq = m.player.EQBands()
-	fingerprint.eqPreset = m.EQPresetName()
-	fingerprint.detached = m.playbackDetached
-	fingerprint.streamTitle = m.streamTitle
-	fingerprint.buffering = m.buffering
+	var fingerprint ipcRuntimeFingerprint
+	fingerprint.playlist = ipcPlaylistFingerprint{
+		playlist:         m.runtimePlaylist(),
+		playlistRevision: m.playlist.Revision(),
+		index:            m.playlist.Index(),
+		total:            m.playlist.Len(),
+		playNextTotal:    m.playlist.QueueLen(),
+	}
+	fingerprint.settings = ipcSettingsFingerprint{
+		device:         m.audioDevice,
+		shuffle:        m.playlist.Shuffled(),
+		repeat:         m.playlist.Repeat().String(),
+		volume:         m.player.Volume(),
+		mono:           m.player.Mono(),
+		speed:          m.player.Speed(),
+		eq:             m.player.EQBands(),
+		eqPreset:       m.EQPresetName(),
+		visualizer:     m.snapshotVisualizerName(),
+		theme:          m.ThemeName(),
+		lyricsOffsetMS: m.lyrics.offset.Milliseconds(),
+	}
+	fingerprint.playback.detached = m.playbackDetached
+	fingerprint.playback.streamTitle = m.streamTitle
+	fingerprint.playback.buffering = m.buffering
 	_, duration := m.playbackClock()
-	fingerprint.durationSecs = int64(duration / time.Second)
-	fingerprint.seekable = m.player.Seekable()
+	fingerprint.playback.durationSecs = int64(duration / time.Second)
+	fingerprint.playback.seekable = m.player.Seekable()
 	if m.player.IsPlaying() && !m.player.IsPaused() {
-		fingerprint.state = "playing"
+		fingerprint.playback.state = "playing"
 	} else if m.player.IsPaused() {
-		fingerprint.state = "paused"
+		fingerprint.playback.state = "paused"
 	} else {
-		fingerprint.state = "stopped"
+		fingerprint.playback.state = "stopped"
 	}
 	if track, _ := m.currentPlaybackTrack(); track.Path != "" {
-		fingerprint.trackPath = track.Path
-		fingerprint.favorite = m.playlistTrackFavorited(track)
+		fingerprint.playback.trackPath = track.Path
+		fingerprint.playback.favorite = m.playlistTrackFavorited(track)
 	}
 	if track, _ := m.playlist.Current(); track.Path != "" {
-		fingerprint.logicalPath = track.Path
+		fingerprint.playback.logicalPath = track.Path
 	}
-	if m.vis != nil {
-		fingerprint.visualizer = m.vis.ModeName()
+	fingerprint.notice = ipcNoticeFingerprint{
+		notice:      m.status.text,
+		noticeError: m.status.kind == feedbackError,
 	}
-	fingerprint.theme = m.ThemeName()
-	fingerprint.lyricsOffsetMS = m.lyrics.offset.Milliseconds()
-	fingerprint.notice = m.status.text
-	fingerprint.noticeError = m.status.kind == feedbackError
 	if err := m.player.StreamErr(); err != nil {
-		fingerprint.streamError = err.Error()
+		fingerprint.playback.streamError = err.Error()
 	}
 	return fingerprint
 }
 
 func (m *Model) v2BandsResponse() ipc.Response {
 	response := ipc.Response{OK: true}
-	if m.headless {
-		// The low-power tick is too slow for a spectrum client, so each
-		// request analyzes the audio that plays now.
-		m.tickVisualizer(time.Now())
-	}
+	now := time.Now()
 	if m.vis != nil {
-		response.Visualizer = m.vis.ModeName()
+		response.Visualizer = m.snapshotVisualizerName()
+		if m.vis.Mode == ui.VisNone || m.vis.UsesRawSamples() || (!m.headless && !m.visualizerVisible()) {
+			response.Bands = m.tickSpectrumVisualizer(now)
+			return response
+		}
+		if m.headless {
+			// The low-power tick is too slow for a spectrum client, so each
+			// request analyzes the audio that plays now.
+			m.tickVisualizer(now)
+		}
 		response.Bands = append([]float64(nil), m.vis.SmoothedBands()...)
 	}
 	return response
+}
+
+func (m *Model) tickSpectrumVisualizer(now time.Time) []float64 {
+	if m.player == nil {
+		return nil
+	}
+	if m.desktop.spectrumVis == nil {
+		v := ui.NewVisualizer(float64(m.player.SampleRate()))
+		v.Cols = 80
+		v.Rows = ui.DefaultVisRows
+		v.Mode = ui.VisBars
+		m.desktop.spectrumVis = v
+	}
+	v := m.desktop.spectrumVis
+	playing := m.player.IsPlaying() && !m.player.IsPaused()
+	paused := m.player.IsPlaying() && m.player.IsPaused()
+	v.Tick(ui.VisTickContext{
+		Now:     now,
+		Playing: playing,
+		Paused:  paused,
+		Analyze: func(spec ui.VisAnalysisSpec) []float64 {
+			spec = ui.NormalizeAnalysisSpec(spec)
+			if paused {
+				return v.Analyze(nil, spec)
+			}
+			buf := v.EnsureSampleBuf(spec.FFTSize)
+			n := m.player.SamplesInto(buf)
+			if m.visVolumeLinked {
+				gain := math.Pow(10, m.player.Volume()/20)
+				for i := range n {
+					buf[i] *= gain
+				}
+			}
+			start := max(0, n-spec.FFTSize)
+			return v.Analyze(buf[start:n], spec)
+		},
+	})
+	return append([]float64(nil), v.SmoothedBands()...)
 }
 
 func (m *Model) v2PlaylistResponse() ipc.Response {

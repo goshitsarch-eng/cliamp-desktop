@@ -6,8 +6,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-
-	"github.com/bjarneo/cliamp/ipc"
 )
 
 // The offset is shared with terminal controls and persisted by the same saver.
@@ -27,7 +25,9 @@ func (m *Model) handleV2LyricsOffset(msg V2RequestMsg) tea.Cmd {
 			return nil
 		}
 		if err := m.saveConfigFloat("lyrics_offset_ms", value, 0); err != nil {
-			m.completeV2Job(msg.Jobs, msg.JobID, ipc.Response{OK: false, Error: err.Error()})
+			v2Err := v2InternalError()
+			v2Err.Detail = err.Error()
+			m.failV2Job(msg.Jobs, msg.JobID, v2Err)
 			return nil
 		}
 		m.lyrics.offset = time.Duration(value) * time.Millisecond

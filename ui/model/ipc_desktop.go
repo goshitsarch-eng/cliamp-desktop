@@ -16,6 +16,8 @@ import (
 
 type ipcDesktopState struct {
 	initialVisualizer string
+	previewThemeSaved string
+	spectrumVis       *ui.Visualizer
 	auth              map[string]*ipcProviderAuthState
 }
 
@@ -138,7 +140,8 @@ func (m *Model) handleV2ProviderAuth(jobs *ipc.JobStore, jobID string, request i
 		return nil
 	}
 	group := providerAuthGroup(entry.Provider)
-	contextAuth, cancellable := entry.Provider.(playlist.ContextAuthenticator)
+	contextAuth, hasContextAuth := entry.Provider.(playlist.ContextAuthenticator)
+	cancellable := hasContextAuth && !isCodeAuth
 	var prompt string
 	if isCodeAuth {
 		prompt = codeAuth.Prompt()
@@ -152,6 +155,7 @@ func (m *Model) handleV2ProviderAuth(jobs *ipc.JobStore, jobID string, request i
 		if state != nil {
 			info = state.info
 			info.Provider = entry.Key
+			info.Cancellable = cancellable
 			info.CodeRequired = isCodeAuth
 			info.Prompt = prompt
 		}
@@ -195,8 +199,8 @@ func (m *Model) handleV2ProviderAuth(jobs *ipc.JobStore, jobID string, request i
 		if cancellable {
 			return ipcProviderAuthDoneMsg{group: group, jobs: jobs, jobID: jobID, err: contextAuth.AuthenticateContext(ctx)}
 		}
-		// Legacy providers explicitly report cancellable=false. Keep their
-		// busy state until Authenticate returns, even after job cancellation.
+		// Legacy and verification-code providers explicitly report cancellable=false.
+		// Keep their busy state until Authenticate returns, even after job cancellation.
 		result := command().(provAuthDoneMsg)
 		return ipcProviderAuthDoneMsg{group: group, jobs: jobs, jobID: jobID, err: result.err}
 	}
@@ -247,10 +251,26 @@ func providerAuthGroup(p playlist.Provider) string {
 // startTUIProviderAuth shares the busy state with graphical clients and other
 // provider aliases. The actual TUI completion retains its generation checks.
 func (m *Model) startTUIProviderAuth(auth playlist.Authenticator) tea.Cmd {
+	gen, ok := m.beginTUIProviderAuth(false, "")
+	if !ok {
+		return nil
+	}
+	return authenticateProviderCmd(auth, m.provider.Name(), gen)
+}
+
+func (m *Model) startTUICodeAuth(ca provider.CodeAuthenticator, code string) tea.Cmd {
+	gen, ok := m.beginTUIProviderAuth(true, ca.Prompt())
+	if !ok {
+		return nil
+	}
+	return authenticateCodeCmd(ca, code, m.authCode.name, gen)
+}
+
+func (m *Model) beginTUIProviderAuth(codeRequired bool, prompt string) (uint64, bool) {
 	group := providerAuthGroup(m.provider)
 	if state := m.desktop.auth[group]; state != nil && state.running {
 		m.status.Warning("Sign-in already in progress", statusTTLDefault)
-		return nil
+		return 0, false
 	}
 	if m.desktop.auth == nil {
 		m.desktop.auth = make(map[string]*ipcProviderAuthState)
@@ -264,12 +284,12 @@ func (m *Model) startTUIProviderAuth(auth playlist.Authenticator) tea.Cmd {
 	}
 	gen := nextRequest(&m.requests.auth)
 	state := &ipcProviderAuthState{
-		info:         ipc.ProviderAuthInfo{Provider: key, State: "authenticating"},
+		info:         ipc.ProviderAuthInfo{Provider: key, State: "authenticating", CodeRequired: codeRequired, Prompt: prompt},
 		providerName: m.provider.Name(), running: true, tui: true, tuiGen: gen,
 	}
 	m.desktop.auth[group] = state
 	m.publishIPCProviderAuth(state.info)
-	return authenticateProviderCmd(auth, m.provider.Name(), gen)
+	return gen, true
 }
 
 func (m *Model) handleIPCProviderTUIAuthDone(msg provAuthDoneMsg) {

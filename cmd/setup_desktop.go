@@ -227,9 +227,22 @@ func readSetupValues(input io.Reader) (map[string]string, error) {
 		if len(value) == 0 || value[0] != '"' || json.Unmarshal(value, &text) != nil {
 			return nil, errors.New("provider setup input must be a JSON object of strings")
 		}
+		if hasControlChar(text) {
+			return nil, errors.New("provider setup values must not contain control characters")
+		}
 		values[key] = text
 	}
 	return values, nil
+}
+
+func hasControlChar(s string) bool {
+	for i := range len(s) {
+		c := s[i]
+		if c < 0x20 || c == 0x7f {
+			return true
+		}
+	}
+	return false
 }
 
 func writeSetupError(output io.Writer, err error) error {

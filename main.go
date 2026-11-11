@@ -425,7 +425,7 @@ func saveOnExit(final tea.Model, headless bool, resumeServer *embyapi.Provider) 
 	}
 	// Headless mode has no theme keys, so it keeps the saved theme.
 	if !headless {
-		themeName := fm.ThemeName()
+		themeName := fm.CommittedThemeName()
 		if theme.IsDefaultName(themeName) {
 			themeName = ""
 		}
@@ -513,7 +513,7 @@ func v2Operations(headless, plugins bool) *ipc.OperationRegistry {
 		operations.Unregister("theme", "vis")
 	}
 	if !plugins {
-		operations.Unregister("plugin.call", "plugin.commands")
+		operations.Unregister("plugin.call", "plugin.commands", "plugin.keys", "plugin.key")
 	}
 	return operations
 }
@@ -622,10 +622,22 @@ func publishV2JobEvents(done <-chan struct{}, jobs *ipc.JobStore, broker *ipc.Br
 		case <-done:
 			return
 		case event := <-jobs.Events():
-			data, err := json.Marshal(event)
-			if err == nil {
-				_ = broker.Publish("runtime.job", data, false)
-			}
+			publishV2JobEvent(broker, event)
+		}
+	}
+}
+
+func publishV2JobEvent(broker *ipc.Broker, event ipc.JobEvent) {
+	data, err := json.Marshal(event)
+	if err != nil {
+		return
+	}
+	if err := broker.Publish("runtime.job", data, false); errors.Is(err, ipc.ErrPayloadTooLarge) {
+		compact := event
+		compact.Job.Result = nil
+		compact.Job.Snapshot = nil
+		if compactData, marshalErr := json.Marshal(compact); marshalErr == nil {
+			_ = broker.Publish("runtime.job", compactData, false)
 		}
 	}
 }

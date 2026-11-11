@@ -222,12 +222,14 @@ func (m *Model) SetSeekStepLarge(d time.Duration) {
 func (m *Model) SetTheme(name string) bool {
 	if theme.IsDefaultName(name) {
 		m.themeIdx = -1
+		m.desktop.previewThemeSaved = ""
 		applyThemeAll(theme.Default())
 		return true
 	}
 	for i, t := range m.themes {
 		if strings.EqualFold(t.Name, name) {
 			m.themeIdx = i
+			m.desktop.previewThemeSaved = ""
 			applyThemeAll(t)
 			return true
 		}
@@ -320,6 +322,18 @@ func (m Model) ThemeName() string {
 		return theme.DefaultName
 	}
 	return m.themes[m.themeIdx].Name
+}
+
+// CommittedThemeName returns the persisted theme name, ignoring any
+// uncommitted desktop or TUI theme preview.
+func (m Model) CommittedThemeName() string {
+	if m.desktop.previewThemeSaved != "" {
+		return m.desktop.previewThemeSaved
+	}
+	if m.themePicker.visible && m.themePicker.savedName != "" {
+		return m.themePicker.savedName
+	}
+	return m.ThemeName()
 }
 
 // Init starts the tick timer and requests the terminal size. A headless

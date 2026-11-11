@@ -448,3 +448,49 @@ func TestDesktopCodeAuthenticatorAndTrackUserRating(t *testing.T) {
 		t.Fatalf("UserRating round-trip = %d, want 4", roundTrip.UserRating)
 	}
 }
+
+func TestCommittedThemeIgnoresPreviewAndSpectrumWorksInNoneAndWaveModes(t *testing.T) {
+	engine := &headlessEngine{tone: true}
+	engine.playing = true
+	m := newHeadlessModel(t, engine, nil, playlist.Track{Path: "/music/tone.flac"})
+	t.Cleanup(func() { applyThemeAll(theme.Default()) })
+
+	m.SetDesktopVisualizer("None")
+	if snap := m.runtimeSnapshot(); snap.Visualizer != "None" {
+		t.Fatalf("snapshot visualizer before activation = %q, want None", snap.Visualizer)
+	}
+	for _, mode := range []string{"None", "Wave"} {
+		if resp := runV2(t, &m, "desktop.vis", ipc.Request{Name: mode}); !resp.OK {
+			t.Fatalf("set %s = %+v", mode, resp)
+		}
+		reply := make(chan V2RequestResult, 1)
+		next, _ := m.Update(V2RequestMsg{Request: ipc.V2Request{Method: "spectrum.get"}, Reply: reply})
+		m = next.(Model)
+		res := <-reply
+		var bands ipc.Response
+		if err := json.Unmarshal(res.Result.Result, &bands); err != nil {
+			t.Fatal(err)
+		}
+		if len(bands.Bands) != ui.DefaultSpectrumBands || slices.Max(bands.Bands) <= 0 {
+			t.Fatalf("mode %s returned empty/zero spectrum bands: %+v", mode, bands)
+		}
+	}
+
+	t.Cleanup(func() { applyThemeAll(theme.Default()) })
+	m.themes = theme.LoadAll()
+	if !m.SetTheme("nord") {
+		t.Fatal("SetTheme(nord) failed")
+	}
+	if resp := runV2(t, &m, "desktop.theme.preview", ipc.Request{Name: "dracula"}); !resp.OK {
+		t.Fatalf("preview theme = %+v", resp)
+	}
+	if got := m.CommittedThemeName(); !strings.EqualFold(got, "nord") {
+		t.Fatalf("CommittedThemeName during preview = %q, want nord", got)
+	}
+	if resp := runV2(t, &m, "desktop.theme", ipc.Request{Name: "dracula"}); !resp.OK {
+		t.Fatalf("commit theme = %+v", resp)
+	}
+	if got := m.CommittedThemeName(); !strings.EqualFold(got, "dracula") {
+		t.Fatalf("CommittedThemeName after commit = %q, want dracula", got)
+	}
+}

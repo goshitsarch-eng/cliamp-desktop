@@ -11,7 +11,7 @@ import (
 
 const (
 	maxOperationBatchSize = 1_000
-	maxOperationLimit     = 10_000
+	maxOperationLimit     = 1_000
 )
 
 // Operation describes a runtime capability exposed through V2. Validation is

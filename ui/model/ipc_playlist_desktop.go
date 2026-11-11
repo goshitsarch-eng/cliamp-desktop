@@ -21,9 +21,12 @@ import (
 
 // The owner loop serializes edits to each saved playlist, while network/disk
 // work remains in commands. A single saved edit per playlist is undoable.
+const maxDesktopSavedPlaylistUndo = 16
+
 type ipcPlaylistDesktopState struct {
-	busy map[string]bool
-	undo map[string]ipcSavedPlaylistUndo
+	busy      map[string]bool
+	undo      map[string]ipcSavedPlaylistUndo
+	undoOrder []string
 }
 
 type ipcPlaylistDocument struct {
@@ -195,17 +198,13 @@ func (m *Model) handleV2DesktopPlaylistRequest(ctx context.Context, jobs *ipc.Jo
 		}
 	}
 	undo, hasUndo := state.undo[key]
+	captureTUIUndoAfter := false
 	if request.Cmd == "playlist.undo" && !hasUndo {
 		// The terminal and desktop also share the local manager's undo slot.
 		if entry.Key == "local" && m.plManager.undo.kind != plUndoNone && m.plManager.undo.name == request.Playlist {
 			old := m.plManager.undo
 			undo.before = ipcPlaylistDocument{name: old.name, exists: true, raw: old.doc != nil, document: append([]byte(nil), old.doc...), tracks: cloneTracks(old.tracks)}
-			var err error
-			undo.after, err = captureDesktopPlaylist(entry.Provider, old.name)
-			if err != nil {
-				m.failDesktopPlaylistJob(jobs, jobID, err)
-				return nil
-			}
+			captureTUIUndoAfter = true
 			hasUndo = true
 		}
 		if !hasUndo {
@@ -223,6 +222,14 @@ func (m *Model) handleV2DesktopPlaylistRequest(ctx context.Context, jobs *ipc.Jo
 			return msg
 		}
 		if request.Cmd == "playlist.undo" {
+			if captureTUIUndoAfter {
+				after, err := captureDesktopPlaylist(entry.Provider, undo.before.name)
+				if err != nil {
+					msg.err = err
+					return msg
+				}
+				undo.after = after
+			}
 			msg.err = restoreDesktopPlaylist(entry.Provider, undo)
 			msg.clearUndo = msg.err == nil
 			if undo.before.name != undo.after.name {
@@ -320,11 +327,6 @@ func captureDesktopPlaylist(p playlist.Provider, name string) (ipcPlaylistDocume
 			return result, err
 		}
 		result.exists, result.document = true, append([]byte(nil), doc...)
-		result.tracks, err = p.Tracks(name)
-		if err != nil {
-			return result, err
-		}
-		result.tracks = cloneTracks(result.tracks)
 		return result, nil
 	}
 	if _, ok := p.(provider.PlaylistSaver); !ok {
@@ -614,16 +616,16 @@ func (m *Model) handleIPCPlaylistDesktopDone(msg ipcPlaylistDesktopDoneMsg) tea.
 	}
 	if msg.clearUndo {
 		for _, key := range msg.keys {
-			delete(state.undo, key)
+			deleteDesktopSavedUndo(state, key)
 		}
 		if msg.provider == "local" {
 			m.plManager.undo = plManagerUndo{}
 		}
 	} else if msg.undo != nil {
 		for _, key := range msg.keys {
-			delete(state.undo, key)
+			deleteDesktopSavedUndo(state, key)
 		}
-		state.undo[playlistDesktopKey(msg.provider, msg.undo.after.name)] = *msg.undo
+		putDesktopSavedUndo(state, playlistDesktopKey(msg.provider, msg.undo.after.name), *msg.undo)
 		if msg.provider == "local" && msg.undo.before.exists && msg.undo.before.name == msg.undo.after.name {
 			m.plManager.undo = plManagerUndo{kind: plUndoTracks, name: msg.undo.before.name, doc: append([]byte(nil), msg.undo.before.document...), tracks: cloneTracks(msg.undo.before.tracks)}
 		}
@@ -633,6 +635,22 @@ func (m *Model) handleIPCPlaylistDesktopDone(msg ipcPlaylistDesktopDoneMsg) tea.
 	}
 	m.completeV2Job(msg.jobs, msg.jobID, msg.result)
 	return nil
+}
+
+func deleteDesktopSavedUndo(state *ipcPlaylistDesktopState, key string) {
+	delete(state.undo, key)
+	state.undoOrder = slices.DeleteFunc(state.undoOrder, func(k string) bool { return k == key })
+}
+
+func putDesktopSavedUndo(state *ipcPlaylistDesktopState, key string, entry ipcSavedPlaylistUndo) {
+	deleteDesktopSavedUndo(state, key)
+	for len(state.undoOrder) >= maxDesktopSavedPlaylistUndo {
+		oldest := state.undoOrder[0]
+		state.undoOrder = state.undoOrder[1:]
+		delete(state.undo, oldest)
+	}
+	state.undo[key] = entry
+	state.undoOrder = append(state.undoOrder, key)
 }
 
 func (m *Model) failDesktopPlaylistJob(jobs *ipc.JobStore, jobID string, err error) {
@@ -788,9 +806,15 @@ func (m *Model) handleV2QueueRemoveMany(jobs *ipc.JobStore, jobID string, reques
 		m.completeV2Job(jobs, jobID, m.v2PlayNextResponse())
 		return m.rearmStalePreload()
 	}
+	queueTracks := m.playlist.Tracks()
+	shuffled := m.playlist.Shuffled()
 	selected := make([]playlist.Track, len(indexes))
+	nths := make([]int, len(indexes))
 	for i, index := range indexes {
 		selected[i], _ = m.playlist.Track(index)
+		if !shuffled {
+			nths[i] = explicitOccurrenceAt(queueTracks, index)
+		}
 	}
 	if loaded := m.writableLoadedPlaylist(); loaded != "" {
 		for _, track := range selected {
@@ -811,8 +835,8 @@ func (m *Model) handleV2QueueRemoveMany(jobs *ipc.JobStore, jobID string, reques
 			return nil
 		}
 		err = updater.UpdatePlaylist(loaded, func(tracks []playlist.Track) ([]playlist.Track, error) {
-			for _, track := range selected {
-				index := slices.IndexFunc(tracks, func(candidate playlist.Track) bool { return !candidate.DirSourced && candidate.Path == track.Path })
+			for i, track := range selected {
+				index := findSavedExplicitTrack(tracks, track.Path, nths[i])
 				if index < 0 {
 					return nil, errDesktopPlaylistConflict
 				}

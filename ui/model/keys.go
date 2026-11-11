@@ -253,11 +253,15 @@ func (m *Model) handleAuthCodeKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.authCode.err = "Enter the code the app received."
 			return nil
 		}
+		cmd := m.startTUICodeAuth(ca, code)
+		if cmd == nil {
+			return nil
+		}
 		m.authCode.active = false
 		m.provPane.signIn = false
 		m.provPane.loading = true
 		m.err = nil
-		return authenticateCodeCmd(ca, code, m.authCode.name, nextRequest(&m.requests.auth))
+		return cmd
 	default:
 		if m.editText("auth-code", &m.authCode.input, msg) {
 			m.authCode.err = ""

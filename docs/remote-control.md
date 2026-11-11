@@ -198,7 +198,9 @@ row by path.
 
 Use IDs returned by `provider.playlists` for subsequent provider operations.
 Radio favorite IDs are stable `f:<station URL>` values, not positional
-`f:<index>` values.
+`f:<index>` values. When the provider supports saved-playlist writes, each
+`provider.playlists` entry also includes `can_add` so clients can filter
+writable targets without per-playlist `playlist.capabilities` requests.
 
 Request provider list responses with `offset` and `limit` when the provider
 supports paging. Use `playlist.replace` to save a GUI-created order, sort, or
@@ -241,6 +243,7 @@ cliamp remote capabilities
 cliamp remote call queue.enqueue --params '{"index":4,"if_revision":18}' --wait
 cliamp remote call provider.search --params-file params.json --wait
 printf '{"index":4,"if_revision":18}\n' | cliamp remote call queue.enqueue --params-stdin --wait
+printf '{"index":4,"if_revision":18}\n' | cliamp remote call queue.enqueue --params-line --wait
 cliamp remote job JOB_ID
 cliamp remote cancel JOB_ID
 cliamp remote events runtime.state runtime.job
@@ -249,8 +252,9 @@ cliamp remote events runtime.state runtime.job
 `remote call` prints the V2 response as JSON and can submit every listed
 operation. Use it in scripts and to validate a GUI integration. Pass parameters
 via `--params '<json>'`, from a file via `--params-file <path>`, or via stdin
-using `--params-file -` or `--params-stdin` to avoid exposing sensitive
-parameters in process argument lists (`ps` / `/proc`).
+using `--params-file -`, `--params-stdin`, or `--params-line` (which reads one
+newline-terminated JSON object without waiting for stdin EOF) to avoid exposing
+sensitive parameters in process argument lists (`ps` / `/proc`).
 
 Named CLI commands such as `cliamp volume`, `cliamp seek`, `cliamp load`, and
 `cliamp plugins call` use V2 jobs internally. `volume` sets an absolute dB

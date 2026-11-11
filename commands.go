@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -362,7 +363,13 @@ func pluginsDesktopCommand() *cli.Command {
 	command := &cli.Command{Name: "desktop", Usage: "manage plugins with exact-content review and JSON stdin"}
 	for _, action := range []string{"list", "prepare", "review", "apply", "trust", "remove", "configure"} {
 		command.Commands = append(command.Commands, &cli.Command{Name: action, Action: func(ctx context.Context, c *cli.Command) error {
-			return pluginmgr.Desktop(action, firstLine(c.Reader), c.Writer)
+			var input io.Reader
+			if action == "list" {
+				input = nonTerminalFirstLine(c.Reader)
+			} else {
+				input = firstLine(c.Reader)
+			}
+			return pluginmgr.Desktop(action, input, c.Writer)
 		}})
 	}
 	return command
@@ -449,7 +456,7 @@ func setupCommand() *cli.Command {
 				Usage: "describe provider setup as JSON; read form values from stdin",
 				Flags: []cli.Flag{&cli.StringFlag{Name: "provider", Usage: "provider key (omit to list providers)"}},
 				Action: func(ctx context.Context, c *cli.Command) error {
-					return cmd.SetupSchema(c.String("provider"), firstLine(c.Reader), c.Writer)
+					return cmd.SetupSchema(c.String("provider"), nonTerminalFirstLine(c.Reader), c.Writer)
 				},
 			},
 			{
@@ -1270,11 +1277,12 @@ func remoteCommand() *cli.Command {
 					&cli.StringFlag{Name: "params", Usage: "JSON object passed as operation parameters", Value: "{}"},
 					&cli.StringFlag{Name: "params-file", Usage: "read JSON parameters from a file, or - for stdin"},
 					&cli.BoolFlag{Name: "params-stdin", Usage: "read JSON parameters from stdin"},
+					&cli.BoolFlag{Name: "params-line", Usage: "read one newline-terminated JSON parameter object from stdin"},
 					&cli.BoolFlag{Name: "wait", Usage: "wait for a submitted job to finish"},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					if c.Args().Len() == 0 {
-						return fmt.Errorf("usage: cliamp remote call <operation> [--params '{}' | --params-file <path> | --params-stdin]")
+						return fmt.Errorf("usage: cliamp remote call <operation> [--params '{}' | --params-file <path> | --params-stdin | --params-line]")
 					}
 					params, err := readRemoteCallParams(c)
 					if err != nil {
@@ -1377,6 +1385,7 @@ func readRemoteCallParamsFrom(c *cli.Command, stdin io.Reader) (json.RawMessage,
 	hasParams := c.IsSet("params")
 	hasFile := c.IsSet("params-file")
 	hasStdin := c.Bool("params-stdin")
+	hasLine := c.Bool("params-line")
 
 	count := 0
 	if hasParams {
@@ -1388,12 +1397,30 @@ func readRemoteCallParamsFrom(c *cli.Command, stdin io.Reader) (json.RawMessage,
 	if hasStdin {
 		count++
 	}
+	if hasLine {
+		count++
+	}
 	if count > 1 {
-		return nil, errors.New("--params, --params-file, and --params-stdin are mutually exclusive")
+		return nil, errors.New("--params, --params-file, --params-stdin, and --params-line are mutually exclusive")
 	}
 
 	var data []byte
-	if hasStdin || (hasFile && c.String("params-file") == "-") {
+	if hasLine {
+		if f, ok := stdin.(*os.File); ok && term.IsTerminal(f.Fd()) {
+			return nil, errors.New("cannot read parameters from terminal stdin; pipe data or use --params")
+		}
+		line, err := bufio.NewReader(io.LimitReader(stdin, maxRemoteParamsSize+1)).ReadBytes('\n')
+		if err != nil && err != io.EOF {
+			return nil, fmt.Errorf("reading parameters from stdin: %w", err)
+		}
+		data = line
+		if len(data) > maxRemoteParamsSize {
+			return nil, fmt.Errorf("parameters exceed maximum allowed size of %d bytes", maxRemoteParamsSize)
+		}
+		if len(bytes.TrimSpace(data)) == 0 {
+			return nil, errors.New("parameters input is empty")
+		}
+	} else if hasStdin || (hasFile && c.String("params-file") == "-") {
 		if f, ok := stdin.(*os.File); ok && term.IsTerminal(f.Fd()) {
 			return nil, errors.New("cannot read parameters from terminal stdin; pipe data or use --params")
 		}
@@ -1440,7 +1467,7 @@ func readRemoteCallParamsFrom(c *cli.Command, stdin io.Reader) (json.RawMessage,
 
 	data = bytes.TrimSpace(data)
 	if !json.Valid(data) {
-		if hasFile || hasStdin {
+		if hasFile || hasStdin || hasLine {
 			return nil, errors.New("parameters must be valid JSON")
 		}
 		return nil, errors.New("--params must be a JSON object")

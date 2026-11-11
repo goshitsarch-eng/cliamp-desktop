@@ -696,7 +696,7 @@ func TestV2SnapshotNamesTheLoadedList(t *testing.T) {
 			if got := m.runtimeSnapshot().Playlist; got != tc.want {
 				t.Fatalf("snapshot playlist = %q, want %q", got, tc.want)
 			}
-			if got := m.runtimeFingerprint().playlist; got != tc.want {
+			if got := m.runtimeFingerprint().playlist.playlist; got != tc.want {
 				t.Fatalf("fingerprint playlist = %q, want %q", got, tc.want)
 			}
 		})

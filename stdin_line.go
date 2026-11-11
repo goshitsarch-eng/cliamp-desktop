@@ -3,7 +3,10 @@ package main
 import (
 	"bufio"
 	"io"
+	"os"
 	"strings"
+
+	"github.com/charmbracelet/x/term"
 )
 
 // maxInputLine bounds one JSON request line read from stdin.
@@ -19,6 +22,18 @@ func firstLine(r io.Reader) io.Reader {
 		return errReader{err}
 	}
 	return strings.NewReader(line)
+}
+
+// nonTerminalFirstLine skips reading when r is an interactive terminal so
+// read-only schema and list commands do not block waiting for Enter.
+func nonTerminalFirstLine(r io.Reader) io.Reader {
+	if r == nil {
+		return nil
+	}
+	if f, ok := r.(*os.File); ok && term.IsTerminal(f.Fd()) {
+		return nil
+	}
+	return firstLine(r)
 }
 
 type errReader struct{ err error }

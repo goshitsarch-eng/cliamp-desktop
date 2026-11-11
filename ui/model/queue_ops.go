@@ -130,15 +130,17 @@ func (m *Model) removeTrack(idx int, recordUndo bool) (tea.Cmd, error) {
 	savedIdx := -1
 	persisted := false
 	if loaded != "" {
+		nth := 0
+		if !m.playlist.Shuffled() {
+			nth = explicitOccurrenceAt(m.playlist.Tracks(), idx)
+		}
 		if updater, ok := m.localProvider.(playlistUpdater); ok {
 			err := updater.UpdatePlaylist(loaded, func(tracks []playlist.Track) ([]playlist.Track, error) {
 				// Another writer or a new file in a directory source can
 				// have shifted indexes since the queue was loaded. Match the
-				// persisted explicit track by path so the wrong track is
-				// never removed.
-				savedIdx = slices.IndexFunc(tracks, func(candidate playlist.Track) bool {
-					return !candidate.DirSourced && candidate.Path == track.Path
-				})
+				// persisted explicit track by path and occurrence so the wrong
+				// duplicate or track is never removed.
+				savedIdx = findSavedExplicitTrack(tracks, track.Path, nth)
 				if savedIdx < 0 {
 					return nil, fmt.Errorf("selected track is no longer in %q", loaded)
 				}
@@ -184,6 +186,41 @@ func (m *Model) removeTrack(idx int, recordUndo bool) (tea.Cmd, error) {
 		m.status.Showf(statusTTLDefault, "Removed from queue: %s%s", track.DisplayName(), undoHint)
 	}
 	return m.rearmStalePreload(), nil
+}
+
+// explicitOccurrenceAt returns how many earlier non-directory tracks in queue
+// share queue[idx].Path.
+func explicitOccurrenceAt(queue []playlist.Track, idx int) int {
+	if idx < 0 || idx >= len(queue) {
+		return 0
+	}
+	target := queue[idx].Path
+	nth := 0
+	for i := range idx {
+		if !queue[i].DirSourced && queue[i].Path == target {
+			nth++
+		}
+	}
+	return nth
+}
+
+// findSavedExplicitTrack returns the index of the nth non-directory track with
+// path in saved, falling back to the last matching occurrence if an external
+// writer removed earlier duplicates, or -1 if absent.
+func findSavedExplicitTrack(saved []playlist.Track, path string, nth int) int {
+	seen := 0
+	lastMatch := -1
+	for i, candidate := range saved {
+		if candidate.DirSourced || candidate.Path != path {
+			continue
+		}
+		lastMatch = i
+		if seen == nth {
+			return i
+		}
+		seen++
+	}
+	return lastMatch
 }
 
 // pathRow names a row of a track list by its path and by the count of

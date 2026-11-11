@@ -151,6 +151,14 @@ func desktopAction(action string, request desktopRequest) (map[string]any, error
 		}
 		return map[string]any{"restart_required": true}, nil
 	case "remove":
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return nil, errors.New("could not create plugin directory")
+		}
+		unlock, err := fileutil.LockFile(filepath.Join(dir, ".desktop-management.lock"))
+		if err != nil {
+			return nil, errors.New("could not lock plugin directory")
+		}
+		defer unlock()
 		path, err := installedPluginPath(dir, request.Name)
 		if err != nil {
 			return nil, err
@@ -176,7 +184,7 @@ func desktopAction(action string, request desktopRequest) (map[string]any, error
 		}
 		var values []config.Setting
 		for key, value := range request.Values {
-			if key == "" || strings.ContainsAny(key, " \t\r\n[]=.\x00") || strings.ContainsAny(value, "\r\n\x00") {
+			if !validPluginConfigKey(key) || hasPluginControlChar(value) {
 				return nil, errors.New("invalid plugin configuration field")
 			}
 			encoded := config.QuoteString(value)
@@ -278,6 +286,29 @@ func validDesktopPluginName(name string) bool {
 	return validateName(name) == nil && !strings.ContainsAny(name, "\r\n[]=\x00")
 }
 
+func validPluginConfigKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	for i := range len(key) {
+		c := key[i]
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func hasPluginControlChar(s string) bool {
+	for i := range len(s) {
+		c := s[i]
+		if c < 0x20 || c == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
 func ensurePluginAbsent(dir, name string) error {
 	for _, path := range []string{filepath.Join(dir, name+".lua"), filepath.Join(dir, name)} {
 		if _, err := os.Lstat(path); !os.IsNotExist(err) {
@@ -317,6 +348,7 @@ func saveDesktopReview(dir, action, name, source string, body []byte) (desktopRe
 	if err := os.MkdirAll(path, 0o700); err != nil {
 		return review, errors.New("could not store plugin review")
 	}
+	pruneExpiredDesktopReviews(path)
 	data, err := json.Marshal(review)
 	if err != nil {
 		return review, errors.New("could not encode plugin review")
@@ -327,11 +359,35 @@ func saveDesktopReview(dir, action, name, source string, body []byte) (desktopRe
 	return review, nil
 }
 
+func pruneExpiredDesktopReviews(reviewDir string) {
+	entries, err := os.ReadDir(reviewDir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-24 * time.Hour)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		if info, err := entry.Info(); err == nil && info.ModTime().Before(cutoff) {
+			_ = os.Remove(filepath.Join(reviewDir, entry.Name()))
+		}
+	}
+}
+
 func approveDesktopReview(dir, action string, request desktopRequest) error {
 	nonce, err := hex.DecodeString(request.Token)
 	if err != nil || len(nonce) != 32 {
 		return errors.New("a valid plugin review is required")
 	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return errors.New("could not create plugin directory")
+	}
+	unlock, err := fileutil.LockFile(filepath.Join(dir, ".desktop-management.lock"))
+	if err != nil {
+		return errors.New("could not lock plugin directory")
+	}
+	defer unlock()
 	path := filepath.Join(reviewDirectory(dir), request.Token+".json")
 	file, err := os.Open(path)
 	if err != nil {
@@ -344,6 +400,7 @@ func approveDesktopReview(dir, action string, request desktopRequest) error {
 	}
 	var review desktopReview
 	if json.Unmarshal(data, &review) != nil || time.Since(review.Created) > 24*time.Hour || time.Since(review.Created) < 0 {
+		_ = os.Remove(path)
 		return errors.New("plugin review expired; review the plugin again")
 	}
 	wanted := "install"
@@ -360,14 +417,6 @@ func approveDesktopReview(dir, action string, request desktopRequest) error {
 	if err != nil || !slices.Equal(metadata.Permissions, review.Permissions) {
 		return errors.New("review permissions changed; review the plugin again")
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return errors.New("could not create plugin directory")
-	}
-	unlock, err := fileutil.LockFile(filepath.Join(dir, ".desktop-management.lock"))
-	if err != nil {
-		return errors.New("could not lock plugin directory")
-	}
-	defer unlock()
 	if _, err := plugintrust.Load(dir); err != nil {
 		return errors.New("plugin trust manifest could not be read")
 	}
