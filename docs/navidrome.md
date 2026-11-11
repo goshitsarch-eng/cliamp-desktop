@@ -32,6 +32,8 @@ When these environment variables are set, Cliamp authenticates with the Navidrom
 
 Use the arrow keys to browse playlists. Press Enter to load one. Cliamp adds its tracks to the local playlist and starts playback. Navidrome streams the original file or a transcode, depending on its [transcoding settings](#transcoding).
 
+From the native search overlay (`Ctrl+F`) you can also add tracks to your server playlists or create new ones with the `p` key — changes are written back to Navidrome via the Subsonic `createPlaylist`/`updatePlaylist` endpoints.
+
 ## Controls
 
 When focused on the provider panel:
@@ -93,6 +95,14 @@ in the playlist, the Local playlists, and the browser track list.
 The local favorite is the source of truth. If the server rejects the call, the
 local favorite stays and the status bar shows a warning. A song that you star in
 the Navidrome web UI does not appear as a favorite in cliamp.
+
+### Ratings
+
+In the playlist, press `*` and then `0` through `5` to rate the selected
+Navidrome track. `0` removes its rating. cliamp waits for Navidrome to accept the
+change before updating the playlist, the `★N` playing-track label, and Linux
+MPRIS `xesam:userRating`. A failed request leaves the prior rating in place and
+names the error in the status line.
 
 ### Album sort order
 

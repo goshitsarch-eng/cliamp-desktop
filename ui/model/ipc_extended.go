@@ -71,6 +71,7 @@ type ipcProviderLoadResult struct {
 	provider string // Name of the provider that served the tracks
 	loaded   string
 	source   string // Provider key and ID for the runtime snapshot
+	start    int    // Index of the track that playback starts on
 	err      error
 }
 
@@ -346,12 +347,18 @@ func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 	case "provider.playlists":
 		return func() tea.Msg {
 			items, err := ipcProviderPlaylistInfos(entry)
-			if err != nil {
+			if err != nil && len(items) == 0 {
 				request.Reply <- ipc.Response{OK: false, Error: err.Error()}
 				return nil
 			}
 			page, total := ipcPage(items, request.Offset, request.Limit, 200)
-			request.Reply <- ipc.Response{OK: true, Playlists: page, Total: total}
+			// Rows with an error means a partial list: send the rows, and
+			// carry the reason so a client can tell it is not the whole set.
+			resp := ipc.Response{OK: true, Playlists: page, Total: total}
+			if err != nil {
+				resp.Error = err.Error()
+			}
+			request.Reply <- resp
 			return nil
 		}
 	case "provider.catalog":
@@ -380,6 +387,25 @@ func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 		}
 	case "provider.tracks":
 		favorite := m.trackFavoriteLookup(false)
+		if window, ok := entry.Provider.(provider.TrackWindow); ok {
+			return func() tea.Msg {
+				limit := request.Limit
+				if limit <= 0 || limit > 200 {
+					limit = 100
+				}
+				tracks, more, err := window.TracksWindow(request.Playlist, request.Offset, limit)
+				if err != nil {
+					request.Reply <- ipc.Response{OK: false, Error: err.Error()}
+					return nil
+				}
+				total := request.Offset + len(tracks)
+				if more {
+					total++
+				}
+				request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(tracks, favorite), Playlist: request.Playlist, Total: total}
+				return nil
+			}
+		}
 		return func() tea.Msg {
 			tracks, err := entry.Provider.Tracks(request.Playlist)
 			if err != nil {
@@ -394,7 +420,7 @@ func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 		name := entry.Provider.Name()
 		return func() tea.Msg {
 			tracks, err := entry.Provider.Tracks(request.Playlist)
-			return ipcProviderLoadResult{request: request, tracks: tracks, provider: name, loaded: request.Playlist, source: entry.Key + ":" + request.Playlist, err: err}
+			return ipcProviderLoadResult{request: request, tracks: tracks, provider: name, loaded: request.Playlist, source: entry.Key + ":" + request.Playlist, start: request.Index, err: err}
 		}
 	case "provider.search":
 		favorite := m.trackFavoriteLookup(false)
@@ -514,9 +540,14 @@ func (m *Model) handleIPCLibrary(request ipcLibraryRequest) tea.Cmd {
 	}
 }
 
+// ipcProviderPlaylistInfos lists a provider's playlists in IPC form.
 func ipcProviderPlaylistInfos(entry provider.Entry) ([]ipc.PlaylistInfo, error) {
 	lists, err := entry.Provider.Playlists()
-	if err != nil {
+	// A provider may degrade to a usable subset (Bandcamp's Library rows
+	// when the playlist endpoint is down) by returning rows and an error
+	// together. Hand back both: callers give the rows to the client and
+	// report the error as a warning, the way the TUI renders them.
+	if err != nil && len(lists) == 0 {
 		return nil, err
 	}
 	items := make([]ipc.PlaylistInfo, len(lists))
@@ -534,7 +565,7 @@ func ipcProviderPlaylistInfos(entry provider.Entry) ([]ipc.PlaylistInfo, error) 
 			}
 		}
 	}
-	return items, nil
+	return items, err
 }
 
 func ipcMutationCmd(ctx context.Context, reply chan ipc.Response, mutate func() error) tea.Cmd {
@@ -584,18 +615,22 @@ func (m *Model) handleIPCProviderLoad(result ipcProviderLoadResult) tea.Cmd {
 		result.request.Reply <- ipc.Response{OK: false, Error: result.err.Error()}
 		return nil
 	}
+	// Index 0 still loads an empty list.
+	if result.start > 0 && result.start >= len(result.tracks) {
+		result.request.Reply <- ipc.Response{OK: false, Error: "track index out of range"}
+		return nil
+	}
 	// This replaces the queue wholesale, so retire any in-flight paged load:
 	// its later pages would otherwise still pass the generation guard and
 	// append onto the list loaded here.
 	m.retireTracksPaging()
-	m.replacePlaylist(result.tracks)
+	m.replacePlaylistAt(result.tracks, result.start)
 	m.setLoadedLocalPlaylist(result.provider, result.loaded)
 	if m.loadedPlaylist == "" {
 		m.playlistSource = result.source
 	}
 	m.setHeaderStateFromTracks(result.tracks)
-	m.playlist.SetIndex(0)
-	m.plCursor = 0
+	m.plCursor = result.start
 	result.request.Reply <- ipc.Response{OK: true, Tracks: ipcTrackInfos(result.tracks, m.trackFavoriteLookup(true)), Playlist: result.request.Playlist, Total: len(result.tracks)}
 	return m.playCurrentTrack()
 }

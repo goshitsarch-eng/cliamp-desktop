@@ -2,7 +2,7 @@
 
 [![Docs on contextowl.co](https://contextowl.co/uploads/_brand/badge-docs.svg)](https://contextowl.co)
 
-A retro terminal music player inspired by Winamp. Play local files, streams, podcasts, YouTube, YouTube Music, SoundCloud, Mixcloud, Bilibili, Spotify, Qobuz, Tidal, NetEase Cloud Music, Yandex Music, Xiaoyuzhou (小宇宙), Navidrome, Lyrion, Plex, Jellyfin, Emby, and Audiobookshelf. Use the spectrum visualizer, parametric EQ, and playlists.
+A retro terminal music player inspired by Winamp. Play local files, streams, podcasts, YouTube, YouTube Music, SoundCloud, Mixcloud, Bilibili, Spotify, Qobuz, Tidal, Bandcamp purchases, NetEase Cloud Music, Yandex Music, Xiaoyuzhou (小宇宙), Navidrome, Lyrion, Plex, Jellyfin, Emby, Audiobookshelf, and Telegram. Use the spectrum visualizer, parametric EQ, and playlists.
 
 **[cliamp.stream](https://cliamp.stream)** | **[docs](https://whiterose.org.contextowl.co/docs/cliamp)** | **[android](https://github.com/cliamp/cliamp-mobile)** | **[discord](https://discord.gg/4VpCzXPuj2)**
 
@@ -107,8 +107,8 @@ Download from [GitHub Releases](https://github.com/bjarneo/cliamp/releases/lates
 > sound server. See [Troubleshooting](#troubleshooting).
 >
 > **Windows:** Download and extract `cliamp-windows-amd64.zip` from Releases. It
-> includes the codec DLLs that Spotify requires. If `HOME` is not set, cliamp stores
-> its config under `%APPDATA%\cliamp`.
+> includes the codec DLLs that Spotify requires. On Windows, cliamp stores
+> its config under `%APPDATA%\cliamp` unless `HOME` names another directory.
 
 **Optional runtime dependencies** for all platforms and install methods:
 
@@ -135,13 +135,13 @@ cliamp https://example.com/stream  # play a URL
 
 Press `Ctrl+K` to see all keybindings.
 
-**Configure remote providers** such as Navidrome, Lyrion, Plex, Jellyfin, Emby, Audiobookshelf, Spotify, Qobuz, Tidal, Mixcloud, YouTube Music, and NetEase Cloud Music with the interactive wizard:
+**Configure remote providers** such as Navidrome, Lyrion, Bandcamp, Plex, Jellyfin, Emby, Audiobookshelf, Spotify, Qobuz, Tidal, Mixcloud, YouTube Music, NetEase Cloud Music, and Telegram with the interactive wizard:
 
 ```sh
 cliamp setup
 ```
 
-The wizard guides you through each provider. It writes the provider keys into the section of that provider in your config file (`~/.config/cliamp/config.toml`, or `%APPDATA%\cliamp\config.toml` on Windows when `HOME` is unset). It keeps your other keys and comments. It validates supported server connections during setup. The OAuth providers Spotify, Qobuz and Tidal sign in later in the player. Mixcloud checks optional browser-session or OAuth credentials when you use them. See [docs/cli.md](docs/cli.md#setup-wizard) for details.
+The wizard guides you through each provider. It writes the provider keys into the section of that provider in your config file (`~/.config/cliamp/config.toml`, or `%APPDATA%\cliamp\config.toml` on Windows unless `HOME` names another directory). It keeps your other keys and comments. It validates supported server connections during setup. The OAuth providers Spotify, Qobuz and Tidal sign in later in the player, and Telegram offers the sign-in right after saving. Mixcloud checks optional browser-session or OAuth credentials when you use them. See [docs/cli.md](docs/cli.md#setup-wizard) for details.
 
 See the [Mixcloud provider guide](docs/mixcloud.md) for discovery, account,
 creator/show, genre search, local genre favorites, authentication, signed-in
@@ -186,7 +186,7 @@ stations as a playlist. cliamp does not work out where you are unless you pick
 "Use my location" and accept; it then reads your country from the system
 timezone, never from a geo-IP service. See [docs/radio.md](docs/radio.md).
 
-Add your own stations to `~/.config/cliamp/radios.toml` (or `%APPDATA%\cliamp\radios.toml` on Windows when `HOME` is unset). See [docs/configuration.md](docs/configuration.md#custom-radio-stations).
+Add your own stations to `~/.config/cliamp/radios.toml` (or `%APPDATA%\cliamp\radios.toml` on Windows unless `HOME` names another directory). See [docs/configuration.md](docs/configuration.md#custom-radio-stations).
 
 To host a radio station, use [cliamp-server](https://github.com/bjarneo/cliamp-server).
 
@@ -194,7 +194,7 @@ To host a radio station, use [cliamp-server](https://github.com/bjarneo/cliamp-s
 
 **Prerequisites:**
 
-- [Go](https://go.dev/dl/) 1.26.6 or later
+- [Go](https://go.dev/dl/) 1.26.10 or later
 - ALSA development headers (Linux only, required by the audio backend)
 
 **Linux (Debian/Ubuntu):**
@@ -221,9 +221,7 @@ sudo pacman -S alsa-lib flac libvorbis libogg mpg123
 brew install flac libvorbis libogg mpg123 pkg-config
 ```
 
-**Windows:** The core player needs no extra SDKs. It uses pure-Go audio decoding. `ffmpeg.exe` and `yt-dlp.exe` remain optional runtime dependencies for the same formats and providers as other platforms.
-
-Spotify support uses `go-librespot`. It needs CGO and a MinGW toolchain:
+**Windows source builds:** Every Windows source build needs CGO and the MSYS2 MinGW64 toolchain because the Spotify provider is compiled in even when it is not configured. `ffmpeg.exe` and `yt-dlp.exe` remain optional runtime dependencies for the same formats and providers as other platforms.
 
 1. Install [MSYS2](https://www.msys2.org/).
 2. Open the **MSYS2 MinGW64** terminal, not the standard MSYS2 terminal. Install the toolchain and codec libraries:

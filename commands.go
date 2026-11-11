@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,9 +16,12 @@ import (
 
 	cli "github.com/urfave/cli/v3"
 
+	"github.com/charmbracelet/x/term"
+
 	"github.com/bjarneo/cliamp/applog"
 	"github.com/bjarneo/cliamp/cmd"
 	"github.com/bjarneo/cliamp/config"
+	"github.com/bjarneo/cliamp/external/bandcamp"
 	"github.com/bjarneo/cliamp/external/qobuz"
 	"github.com/bjarneo/cliamp/external/spotify"
 	"github.com/bjarneo/cliamp/external/tidal"
@@ -85,6 +91,7 @@ func buildApp() *cli.Command {
 			spotifyCommand(),
 			qobuzCommand(),
 			tidalCommand(),
+			bandcampCommand(),
 			ytmusicCommand(),
 			ipcSimpleCommand("play", "resume playback"),
 			ipcSimpleCommand("pause", "pause playback"),
@@ -345,14 +352,18 @@ func pluginsCommand() *cli.Command {
 func preferencesCommand() *cli.Command {
 	return &cli.Command{Name: "preferences", Usage: "read and save desktop preferences as JSON", Commands: []*cli.Command{
 		{Name: "schema", Aliases: []string{"read"}, Usage: "read nonsecret preferences and field constraints", Action: func(ctx context.Context, c *cli.Command) error { return cmd.PreferencesSchema(c.Writer) }},
-		{Name: "apply", Usage: "save a JSON object of preferences from stdin", Action: func(ctx context.Context, c *cli.Command) error { return cmd.PreferencesApply(firstLine(c.Reader), c.Writer) }},
+		{Name: "apply", Usage: "save a JSON object of preferences from stdin", Action: func(ctx context.Context, c *cli.Command) error {
+			return cmd.PreferencesApply(firstLine(c.Reader), c.Writer)
+		}},
 	}}
 }
 
 func pluginsDesktopCommand() *cli.Command {
 	command := &cli.Command{Name: "desktop", Usage: "manage plugins with exact-content review and JSON stdin"}
 	for _, action := range []string{"list", "prepare", "review", "apply", "trust", "remove", "configure"} {
-		command.Commands = append(command.Commands, &cli.Command{Name: action, Action: func(ctx context.Context, c *cli.Command) error { return pluginmgr.Desktop(action, firstLine(c.Reader), c.Writer) }})
+		command.Commands = append(command.Commands, &cli.Command{Name: action, Action: func(ctx context.Context, c *cli.Command) error {
+			return pluginmgr.Desktop(action, firstLine(c.Reader), c.Writer)
+		}})
 	}
 	return command
 }
@@ -428,9 +439,10 @@ func setupCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "setup",
 		Usage: "interactive wizard to configure remote providers",
-		Description: "Walks through configuring Navidrome, Plex, Jellyfin, Spotify,\n" +
-			"Qobuz, Tidal, NetEase, Audiobookshelf, and YouTube Music. Validates\n" +
-			"connections and writes ~/.config/cliamp/config.toml.",
+		Description: "Walks through configuring Navidrome, Lyrion, Bandcamp, Plex,\n" +
+			"Jellyfin, Emby, Audiobookshelf, Spotify, Qobuz, Tidal, SoundCloud,\n" +
+			"Mixcloud, NetEase, Yandex Music, YouTube Music, and Telegram. Validates\n" +
+			"connections and writes ~/.config/cliamp/config.toml.\n",
 		Commands: []*cli.Command{
 			{
 				Name:  "schema",
@@ -448,7 +460,7 @@ func setupCommand() *cli.Command {
 					&cli.BoolFlag{Name: "save-without-check", Usage: "save after local validation without checking the provider connection"},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
-					return cmd.SetupApply(c.String("provider"), firstLine(c.Reader), c.Writer,!c.Bool("save-without-check"))
+					return cmd.SetupApply(c.String("provider"), firstLine(c.Reader), c.Writer, !c.Bool("save-without-check"))
 				},
 			},
 		},
@@ -487,6 +499,28 @@ func tidalCommand() *cli.Command {
 		},
 	})
 	return cmd
+}
+
+func bandcampCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "bandcamp",
+		Usage: "manage Bandcamp integration",
+		Commands: []*cli.Command{
+			{
+				Name:  "probe",
+				Usage: "print sanitized Subsonic API diagnostics (no tokens or signed URLs)",
+				Action: func(ctx context.Context, c *cli.Command) error {
+					cfg, err := config.Load()
+					if err != nil {
+						return fmt.Errorf("config: %w", err)
+					}
+					probeCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+					defer cancel()
+					return bandcamp.Probe(probeCtx, os.Stdout, cfg.Bandcamp)
+				},
+			},
+		},
+	}
 }
 
 func ytmusicCommand() *cli.Command {
@@ -1234,15 +1268,17 @@ func remoteCommand() *cli.Command {
 				ArgsUsage: "<operation>",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "params", Usage: "JSON object passed as operation parameters", Value: "{}"},
+					&cli.StringFlag{Name: "params-file", Usage: "read JSON parameters from a file, or - for stdin"},
+					&cli.BoolFlag{Name: "params-stdin", Usage: "read JSON parameters from stdin"},
 					&cli.BoolFlag{Name: "wait", Usage: "wait for a submitted job to finish"},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					if c.Args().Len() == 0 {
-						return fmt.Errorf("usage: cliamp remote call <operation> [--params '{}']")
+						return fmt.Errorf("usage: cliamp remote call <operation> [--params '{}' | --params-file <path> | --params-stdin]")
 					}
-					params := json.RawMessage(c.String("params"))
-					if !json.Valid(params) {
-						return fmt.Errorf("--params must be a JSON value")
+					params, err := readRemoteCallParams(c)
+					if err != nil {
+						return err
 					}
 					response, err := sendV2(ipc.V2Request{
 						Method:    "operation.submit",
@@ -1326,4 +1362,95 @@ func remoteCommand() *cli.Command {
 			},
 		},
 	}
+}
+
+// maxRemoteParamsSize limits the byte size of parameters passed via file or stdin to 1 MiB.
+const maxRemoteParamsSize = 1 << 20
+
+var remoteStdin io.Reader = os.Stdin
+
+func readRemoteCallParams(c *cli.Command) (json.RawMessage, error) {
+	return readRemoteCallParamsFrom(c, remoteStdin)
+}
+
+func readRemoteCallParamsFrom(c *cli.Command, stdin io.Reader) (json.RawMessage, error) {
+	hasParams := c.IsSet("params")
+	hasFile := c.IsSet("params-file")
+	hasStdin := c.Bool("params-stdin")
+
+	count := 0
+	if hasParams {
+		count++
+	}
+	if hasFile {
+		count++
+	}
+	if hasStdin {
+		count++
+	}
+	if count > 1 {
+		return nil, errors.New("--params, --params-file, and --params-stdin are mutually exclusive")
+	}
+
+	var data []byte
+	if hasStdin || (hasFile && c.String("params-file") == "-") {
+		if f, ok := stdin.(*os.File); ok && term.IsTerminal(f.Fd()) {
+			return nil, errors.New("cannot read parameters from terminal stdin; pipe data or use --params")
+		}
+		var err error
+		data, err = io.ReadAll(io.LimitReader(stdin, maxRemoteParamsSize+1))
+		if err != nil {
+			return nil, fmt.Errorf("reading parameters from stdin: %w", err)
+		}
+		if len(data) > maxRemoteParamsSize {
+			return nil, fmt.Errorf("parameters exceed maximum allowed size of %d bytes", maxRemoteParamsSize)
+		}
+		if len(bytes.TrimSpace(data)) == 0 {
+			return nil, errors.New("parameters input is empty")
+		}
+	} else if hasFile {
+		filePath := strings.TrimSpace(c.String("params-file"))
+		if filePath == "" {
+			return nil, errors.New("--params-file requires a path, or - for stdin")
+		}
+		f, err := os.Open(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("opening parameters file: %w", err)
+		}
+		defer f.Close()
+
+		data, err = io.ReadAll(io.LimitReader(f, maxRemoteParamsSize+1))
+		if err != nil {
+			return nil, fmt.Errorf("reading parameters file: %w", err)
+		}
+		if len(data) > maxRemoteParamsSize {
+			return nil, fmt.Errorf("parameters exceed maximum allowed size of %d bytes", maxRemoteParamsSize)
+		}
+		if len(bytes.TrimSpace(data)) == 0 {
+			return nil, errors.New("parameters file is empty")
+		}
+	} else if hasParams {
+		data = []byte(c.String("params"))
+		if len(data) > maxRemoteParamsSize {
+			return nil, fmt.Errorf("parameters exceed maximum allowed size of %d bytes", maxRemoteParamsSize)
+		}
+	} else {
+		data = []byte("{}")
+	}
+
+	data = bytes.TrimSpace(data)
+	if !json.Valid(data) {
+		if hasFile || hasStdin {
+			return nil, errors.New("parameters must be valid JSON")
+		}
+		return nil, errors.New("--params must be a JSON object")
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return nil, errors.New("parameters must be a JSON object")
+	}
+	if obj == nil {
+		return nil, errors.New("parameters must be a JSON object")
+	}
+	return json.RawMessage(data), nil
 }

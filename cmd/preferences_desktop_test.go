@@ -103,7 +103,7 @@ func TestPreferencesRejectEntireInvalidBatch(t *testing.T) {
 func TestPreferenceListsAndEnableFlagsRoundTrip(t *testing.T) {
 	t.Setenv("CLIAMP_CONFIG_DIR", t.TempDir())
 	var output bytes.Buffer
-	if err := PreferencesApply(strings.NewReader(`{"spotify.enabled":"true","tidal.enabled":"false","audiobookshelf.libraries":"[\"Audio, Books\",\"New\"]","plugins.allowed_binaries":"[\"notify-send\"]"}`), &output); err != nil {
+	if err := PreferencesApply(strings.NewReader(`{"spotify.enabled":"true","tidal.enabled":"false","audiobookshelf.libraries":"[\"Audio, Books\",\"New\"]","plugins.allowed_binaries":"[\"notify-send\"]","plugins.allowed_private_addresses":"[\"127.0.0.1:8080\"]","bandcamp.browse_sort":"newest","netease.cookies_file":"/tmp/cookies.txt","telegram.chats":"[\"music\"]","telegram.buffer_mb":"4"}`), &output); err != nil {
 		t.Fatal(err)
 	}
 	output.Reset()
@@ -116,7 +116,17 @@ func TestPreferenceListsAndEnableFlagsRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	for key, want := range map[string]string{"spotify.enabled": "true", "tidal.enabled": "false", "audiobookshelf.libraries": `["Audio, Books","New"]`, "plugins.allowed_binaries": `["notify-send"]`} {
+	for key, want := range map[string]string{
+		"spotify.enabled":                   "true",
+		"tidal.enabled":                     "false",
+		"audiobookshelf.libraries":          `["Audio, Books","New"]`,
+		"plugins.allowed_binaries":          `["notify-send"]`,
+		"plugins.allowed_private_addresses": `["127.0.0.1:8080"]`,
+		"bandcamp.browse_sort":              "newest",
+		"netease.cookies_file":              "/tmp/cookies.txt",
+		"telegram.chats":                    `["music"]`,
+		"telegram.buffer_mb":                "4",
+	} {
 		if response.Values[key] != want {
 			t.Errorf("%s = %q, want %q", key, response.Values[key], want)
 		}

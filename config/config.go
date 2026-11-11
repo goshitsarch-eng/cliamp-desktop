@@ -236,6 +236,54 @@ func (n *NavidromeConfig) set(key, val string) {
 	}
 }
 
+// TelegramConfig holds the credentials of a Telegram user account, the
+// account itself (not a bot token). Enable rule: api_id and api_hash.
+type TelegramConfig struct {
+	AppID       int      // api_id from my.telegram.org/apps
+	AppHash     string   // api_hash from my.telegram.org/apps
+	Phone       string   // international format, used only for the first sign-in
+	Password    string   // optional 2FA password
+	Chats       []string // usernames to show; empty lists every dialog
+	BufferMB    int      // megabytes buffered before playback starts; 0 uses 1
+	SessionFile string   // session path; empty uses ~/.local/share/cliamp/telegram.session
+}
+
+// IsSet reports whether the application credentials are present.
+func (t TelegramConfig) IsSet() bool { return t.AppID != 0 && t.AppHash != "" }
+
+// set applies one key of the [telegram] section.
+func (t *TelegramConfig) set(key, val string) {
+	switch key {
+	case "api_id":
+		if v, ok := parseInt(val); ok {
+			t.AppID = v
+		}
+	case "api_hash":
+		t.AppHash = parseString(val)
+	case "phone":
+		t.Phone = parseString(val)
+	case "password":
+		t.Password = parseString(val)
+	case "chat":
+		// Single-chat key from the first version; it still works and joins
+		// the list.
+		if v := parseString(val); v != "" {
+			t.Chats = append(t.Chats, v)
+		}
+	case "chats":
+		// An empty list is the same as no list: every dialog.
+		if v := parseStringSlice(val); len(v) > 0 {
+			t.Chats = v
+		}
+	case "buffer_mb":
+		if v, ok := parseInt(val); ok {
+			t.BufferMB = v
+		}
+	case "session_file":
+		t.SessionFile = parseString(val)
+	}
+}
+
 // LyrionConfig holds settings for a Lyrion Music Server (LMS) instance.
 // User and Password are optional — they are only needed when the server has
 // password protection enabled.
@@ -268,6 +316,40 @@ func (l *LyrionConfig) set(key, val string) {
 		if v, ok := parseBool(val); ok {
 			l.ShowUnplayable = v
 		}
+	}
+}
+
+// BandcampConfig holds credentials for Bandcamp's official Subsonic API
+// (open beta). The user and password are the dedicated Subsonic credentials
+// generated in Bandcamp Fan Settings — never the Bandcamp account login.
+// Enable rule: credentials, where the URL is optional.
+type BandcampConfig struct {
+	URL        string // API endpoint override; empty uses the official default
+	User       string
+	Password   string
+	BrowseSort string // album browse sort order, e.g. "newest"
+}
+
+// IsSet reports whether the Bandcamp Subsonic credentials are present.
+// The URL is optional (it defaults to the official endpoint).
+func (b BandcampConfig) IsSet() bool {
+	return b.User != "" && b.Password != ""
+}
+
+// set applies one key of the [bandcamp] section. Every value is trimmed:
+// Bandcamp's Fan Settings UI copies credentials with a stray leading space
+// that breaks auth, and the dialect's sort list is exhaustive, so a stray
+// space in browse_sort would silently drop the saved choice.
+func (b *BandcampConfig) set(key, val string) {
+	switch key {
+	case "url":
+		b.URL = strings.TrimSpace(parseString(val))
+	case "user":
+		b.User = strings.TrimSpace(parseString(val))
+	case "password":
+		b.Password = strings.TrimSpace(parseString(val))
+	case "browse_sort":
+		b.BrowseSort = strings.TrimSpace(parseString(val))
 	}
 }
 
@@ -529,11 +611,12 @@ func (m *MixcloudConfig) set(key, val string) {
 
 // NetEaseConfig holds settings for the NetEase Cloud Music provider.
 // The provider is opt-in and can reuse an existing browser session through
-// yt-dlp's --cookies-from-browser support.
+// yt-dlp's --cookies-from-browser support, or read an exported cookies file.
 // Enable rule: opt-in.
 type NetEaseConfig struct {
 	Enabled     bool   // true only when user explicitly sets enabled = true
 	CookiesFrom string // browser name for account APIs and playback (e.g. "chrome")
+	CookiesFile string // Netscape-format cookies file; takes precedence over CookiesFrom
 	UserID      string // optional account user id; setup can discover this from cookies
 }
 
@@ -549,6 +632,8 @@ func (n *NetEaseConfig) set(key, val string) {
 		}
 	case "cookies_from":
 		n.CookiesFrom = strings.TrimSpace(parseString(val))
+	case "cookies_file":
+		n.CookiesFile = strings.TrimSpace(parseString(val))
 	case "user_id":
 		n.UserID = parseString(val)
 	}
@@ -748,7 +833,9 @@ type Config struct {
 	InitialDirectory string                       // initial directory for the file browser
 	LyricsOffsetMs   int                          // lyric timestamp adjustment in ms (-10000..10000), applied to all sources
 	Navidrome        NavidromeConfig              // optional Navidrome/Subsonic server credentials
+	Telegram         TelegramConfig               // optional Telegram user account provider
 	Lyrion           LyrionConfig                 // optional Lyrion Music Server (LMS) instance
+	Bandcamp         BandcampConfig               // optional Bandcamp Subsonic API credentials
 	Spotify          SpotifyConfig                // optional Spotify provider (requires Premium)
 	Qobuz            QobuzConfig                  // optional Qobuz provider (requires subscription)
 	Tidal            TidalConfig                  // optional Tidal provider (requires subscription)
@@ -857,8 +944,12 @@ func Load() (Config, error) {
 			cfg.Downloads.set(key, val)
 		case "navidrome":
 			cfg.Navidrome.set(key, val)
+		case "telegram":
+			cfg.Telegram.set(key, val)
 		case "lyrion":
 			cfg.Lyrion.set(key, val)
+		case "bandcamp":
+			cfg.Bandcamp.set(key, val)
 		case "spotify":
 			cfg.Spotify.set(key, val)
 		case "qobuz":
@@ -940,9 +1031,9 @@ func pluginSection(section string) (string, bool) {
 
 // pluginValue reads a value of the [plugins] section, or of the
 // [plugins.<name>] section when plugin is not empty. Plugins get each value
-// as a string. cliamp reads three keys itself, so these follow the value
-// rules: enabled of a plugin is a bool, and disabled and allowed_binaries of
-// [plugins] are lists. Load stores the bool as true or false, and a list in
+// as a string. cliamp reads four keys itself, so these follow the value
+// rules: enabled of a plugin is a bool, and disabled, allowed_binaries and
+// allowed_private_addresses of [plugins] are lists. Load stores the bool as true or false, and a list in
 // square brackets as names that commas separate.
 func pluginValue(plugin, key, val string) string {
 	switch {
@@ -950,7 +1041,7 @@ func pluginValue(plugin, key, val string) string {
 		if v, ok := parseBool(val); ok {
 			return strconv.FormatBool(v)
 		}
-	case plugin == "" && (key == "disabled" || key == "allowed_binaries"):
+	case plugin == "" && (key == "disabled" || key == "allowed_binaries" || key == "allowed_private_addresses"):
 		if strings.HasPrefix(val, "[") {
 			return strings.Join(parseStringSlice(val), ",")
 		}
@@ -1193,6 +1284,12 @@ func editTopLevel(data, key, line string) string {
 // If no [navidrome] section exists, one is appended along with the key.
 func SaveNavidromeSort(sortType string) error {
 	return SaveSection("navidrome", []KeyValue{{"browse_sort", QuoteString(sortType)}}, nil)
+}
+
+// SaveBandcampSort persists the given album browse sort type to the
+// [bandcamp] section of the config file.
+func SaveBandcampSort(sortType string) error {
+	return SaveSection("bandcamp", []KeyValue{{"browse_sort", QuoteString(sortType)}}, nil)
 }
 
 // SaveRadioCountry persists the listener's home country in the [radio] section

@@ -57,6 +57,13 @@ http://station-1.com/stream
 http://station-2.com/stream/hd
 ```
 
+Attributes between the duration and the title, as IPTV and radio lists write them, are skipped, and durations may have decimals:
+
+```m3u
+#EXTINF:-1 tvg-logo="https://example.com/logo.png" group-title="Jazz, Blues",Smooth FM
+http://example.com/smooth
+```
+
 Entries without `#EXTINF` also work. cliamp uses the file name or URL as the title.
 
 ### Relative Paths
@@ -72,19 +79,22 @@ http://example.com/live
 
 If `radio.m3u` is in `~/playlists/`, cliamp resolves `../Music/song.mp3` to `~/Music/song.mp3`.
 
+A local PLS file works the same way: cliamp resolves relative `File1=` entries from the PLS file directory.
+
 ### Edge Cases Handled
 
 - UTF-8 BOM (common in Windows-created files)
 - `\r\n` line endings
 - Missing `#EXTM3U` header
 - Mixed local and remote entries in the same file
+- `file://` entries, as VLC writes them, in local M3U files
 - Other `#` directives (silently skipped)
 
 ---
 
 ## Local TOML Playlists
 
-Create and manage playlists as `.toml` files in `~/.config/cliamp/playlists/`. The folder follows cliamp config directory resolution: `CLIAMP_CONFIG_DIR`, then `XDG_CONFIG_HOME/cliamp`, then `HOME/.config/cliamp`.
+Create and manage playlists as `.toml` files in `~/.config/cliamp/playlists/`. The folder follows the [config directory](configuration.md#config-directory) order.
 
 ### File Format
 

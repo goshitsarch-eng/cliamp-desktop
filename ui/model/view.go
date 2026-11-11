@@ -150,6 +150,13 @@ func (m Model) isProviderRowActive(p playlist.PlaylistInfo) bool {
 // counts on cliamp radio channel rows. Any other provider renders the plain
 // playlist label.
 func (m Model) providerRowLabel(prefix string, p playlist.PlaylistInfo) string {
+	if m.provPane.picking && !m.provPane.pickLoad {
+		box := "[ ] "
+		if m.provPane.picked[p.ID] {
+			box = "[x] "
+		}
+		prefix += box
+	}
 	if _, ok := m.provider.(*radio.ChannelProvider); !ok {
 		return playlistLabel(prefix, p)
 	}
@@ -202,7 +209,7 @@ func (m Model) radioPlayingHere(id string) bool {
 // hide the duration: their track counts are cheap estimates, so a runtime
 // total would be misleading.
 func playlistLabel(prefix string, p playlist.PlaylistInfo) string {
-	out := prefix + p.Name
+	out := prefix + terminalText(p.Name)
 	var parts []string
 	if p.TrackCount > 0 || p.Name == favorites.PlaylistName {
 		parts = append(parts, fmt.Sprintf("%d tracks", p.TrackCount))
@@ -261,6 +268,9 @@ func (m Model) View() tea.View {
 	rendered := m.centerFrame(m.layout.frameStyle().Render(content))
 	rendered = ui.FitRect(rendered, m.layout.frameWidth, max(1, m.height))
 
+	if box := m.renderLuaSelect(); box != "" {
+		rendered = overlayCentered(rendered, box, m.layout.frameWidth, m.height)
+	}
 	view := tea.NewView(rendered)
 	view.BackgroundColor = ui.ColorBackground
 	if ui.ColorBackground != nil {
@@ -438,14 +448,25 @@ func (m Model) renderSimplifiedTrackInfo() string {
 		}
 	}
 
-	name = scrollTrackName(name, max(1, m.layout.panelWidth-lipgloss.Width(duration)-1), m.titleOff)
-	gap := max(1, m.layout.panelWidth-lipgloss.Width(name)-lipgloss.Width(duration))
-	return trackStyle.Render(name) + strings.Repeat(" ", gap) + dimStyle.Render(duration)
+	suffix := duration
+	if rating := trackRatingLabel(track); rating != "" {
+		suffix = rating + " " + suffix
+	}
+	name = scrollTrackName(name, max(1, m.layout.panelWidth-lipgloss.Width(suffix)-1), m.titleOff)
+	gap := max(1, m.layout.panelWidth-lipgloss.Width(name)-lipgloss.Width(suffix))
+	return trackStyle.Render(name) + strings.Repeat(" ", gap) + dimStyle.Render(suffix)
+}
+
+func trackRatingLabel(track playlist.Track) string {
+	if track.UserRating <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("★%d", track.UserRating)
 }
 
 func trackInfoName(track playlist.Track, streamTitle string) string {
 	if streamTitle != "" && track.Stream {
-		return streamTitle
+		return terminalText(streamTitle)
 	}
 
 	name := trackViewName(track)
@@ -461,7 +482,7 @@ func trackInfoName(track playlist.Track, streamTitle string) string {
 	if track.Album != "" {
 		name += " · " + track.Album
 	}
-	return name
+	return terminalText(name)
 }
 
 // scrollTrackName returns the width-cell window of name at the given tick.
@@ -506,10 +527,10 @@ func (m Model) renderTransient() string {
 	// Fresh status wins over a sticky m.err so confirmations are not masked
 	// by an older network error; the error reappears once status expires.
 	if text := m.save.activityText(); text != "" {
-		return ui.FitRect(feedbackActivityStyle.Render(text), m.layout.panelWidth, 1)
+		return ui.FitRect(feedbackActivityStyle.Render(terminalText(text)), m.layout.panelWidth, 1)
 	}
 	if m.status.text != "" {
-		text := m.status.text
+		text := terminalText(m.status.text)
 		style := feedbackSuccessStyle
 		switch m.status.kind {
 		case feedbackActivity:
@@ -524,10 +545,10 @@ func (m Model) renderTransient() string {
 		return ui.FitRect(style.Render(text), m.layout.panelWidth, 1)
 	}
 	if m.err != nil {
-		return ui.FitRect(errorStyle.Render(fmt.Sprintf("ERR: %s", m.err)), m.layout.panelWidth, 1)
+		return ui.FitRect(errorStyle.Render(terminalText(fmt.Sprintf("ERR: %s", m.err))), m.layout.panelWidth, 1)
 	}
 	if n := len(m.logLines); n > 0 {
-		return ui.FitRect(dimStyle.Render(m.logLines[n-1].text), m.layout.panelWidth, 1)
+		return ui.FitRect(dimStyle.Render(terminalText(m.logLines[n-1].text)), m.layout.panelWidth, 1)
 	}
 	return ""
 }
@@ -593,7 +614,11 @@ func (m Model) renderTrackInfo() string {
 	name := trackInfoName(track, m.streamTitle)
 	// The "♫ " prefix takes two cells; the rest of the row is the marquee's,
 	// so a name only scrolls once it genuinely cannot fit.
-	return trackStyle.Render("♫ " + scrollTrackName(name, m.layout.panelWidth-2, m.titleOff))
+	suffix := ""
+	if rating := trackRatingLabel(track); rating != "" {
+		suffix = " " + dimStyle.Render(rating)
+	}
+	return trackStyle.Render("♫ "+scrollTrackName(name, max(1, m.layout.panelWidth-2-lipgloss.Width(suffix)), m.titleOff)) + suffix
 }
 
 func (m Model) renderTimeStatus() string {
@@ -643,7 +668,26 @@ func (m Model) renderSpectrum() string {
 	if m.visualizerDisabled() {
 		return ""
 	}
-	return m.vis.Render()
+	panes := m.regionPanes(ui.RegionVisualizer)
+	if len(panes) == 1 && panes[0].Pane == ui.PaneBuiltin {
+		// The shortcut only applies when the builtin is the whole region: at
+		// 100% the only pane can be a plugin, and it still has to render.
+		return m.vis.Render()
+	}
+	widths := ui.SplitWeights(m.layout.panelWidth, paneWeights(panes))
+	blocks := make([]string, len(panes))
+	for i, pane := range panes {
+		if pane.Vis != "" {
+			blocks[i] = m.renderPaneVis(pane.Vis, m.vis.Rows, widths[i])
+			continue
+		}
+		if pane.Pane == ui.PaneBuiltin {
+			blocks[i] = m.vis.RenderAt(widths[i])
+			continue
+		}
+		blocks[i] = m.renderPluginPane(pane.Pane, m.vis.Rows, widths[i])
+	}
+	return joinPanesRow(blocks, widths, m.vis.Rows)
 }
 
 // renderFullVisualizer renders a full-screen view showing only the visualizer
@@ -655,8 +699,19 @@ func (m Model) renderFullVisualizer() string {
 		"",
 		m.renderSpectrum(),
 		m.renderSeekBar(),
-		"",
-		helpKey("V", "Exit ") + helpKey("v", "Mode:"+m.vis.ModeName()+" ") + helpKey("Spc", "▶❚❚ ") + helpKey("<>", "Trk ") + helpKey("+-", "Vol ") + helpKey("t", "Title ") + helpKey("?", "Keys"),
+	}
+	if !m.hideHelpBar {
+		sections = append(
+			sections,
+			"",
+			helpKey("V", "Exit ")+
+				helpKey("v", "Mode:"+m.vis.ModeName()+" ")+
+				helpKey("Spc", "▶❚❚ ")+
+				helpKey("<>", "Trk ")+
+				helpKey("+-", "Vol ")+
+				helpKey("t", "Title ")+
+				helpKey("?", "Keys"),
+		)
 	}
 
 	return strings.Join(sections, "\n")
@@ -1254,7 +1309,7 @@ func (m Model) renderPlaylist() string {
 			if remaining >= len(" (unavailable)") {
 				albumSuffix = truncate(" (unavailable)", remaining)
 			}
-		} else if album := t.Album; album != "" && !m.showAlbumHeaders && m.layout.panelWidth >= 56 {
+		} else if album := terminalText(t.Album); album != "" && !m.showAlbumHeaders && m.layout.panelWidth >= 56 {
 			remaining := m.layout.panelWidth - linePrefixWidth - nameLen - queueLen - durationGap - 3 // 3 = " · "
 			if remaining >= 4 {
 				albumSuffix = " · " + truncate(album, remaining)

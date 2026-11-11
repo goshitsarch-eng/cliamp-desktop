@@ -2,6 +2,7 @@
 package model
 
 import (
+	"context"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -217,6 +218,7 @@ const (
 	screenURLInput
 	screenLyrics
 	screenJump
+	screenAuthCode
 	// screenFullVisualizer stays last. TestOverlayStackOrder checks that
 	// overlayStack holds each screen up to it.
 	screenFullVisualizer
@@ -256,6 +258,8 @@ func (s topLevelScreen) label() string {
 		return "Lyrics"
 	case screenJump:
 		return "Jump to Time"
+	case screenAuthCode:
+		return "Sign In"
 	case screenFullVisualizer:
 		return "Visualizer"
 	default:
@@ -312,6 +316,12 @@ const (
 // Model is the Bubbletea model for the CLIAMP TUI.
 type Model struct {
 	ipcPlaylistDesktop *ipcPlaylistDesktopState
+	// panes is the runtime layout plugins add panes to. Nil means builtin only.
+	panes              *ui.PaneSet
+	paneCache          *paneCache
+	luaSelect          *luaSelectState
+	artRef             *artRef
+	slotVis            *slotVisualizers
 	downloadsDirectory string
 	// audioDevice names the output device that the last device switch or
 	// list reported. The runtime snapshot shows it.
@@ -328,6 +338,13 @@ type Model struct {
 	pendingSeekActive    bool
 	pendingSeekPct       int
 	pendingSeekExpiresAt time.Time
+
+	// Primed rating chord: `*` followed by 0..5 rates the selected track.
+	pendingRatingActive    bool
+	pendingRatingExpiresAt time.Time
+	ratingSync             *favorites.SyncQueue
+	ratingRequest          uint64
+	ratingLatest           map[string]uint64
 
 	// UI navigation
 	focus           focusArea
@@ -388,9 +405,19 @@ type Model struct {
 	jump     jumpState
 	urlInput urlInputState
 
+	authCode authCodeState
+
 	// Async feed/M3U URL resolution
 	pendingURLs []string
 	feedLoading bool
+	// feedRequest is the queue request of the latest feed resolve. Only its
+	// answer clears feedLoading, so a stale answer leaves a newer resolve
+	// marked as loading.
+	feedRequest uint64
+
+	// ytdlArtistCancel stops the uploader lookup of the playing track. The
+	// next track start calls it, so a fast skip ends the yt-dlp process.
+	ytdlArtistCancel context.CancelFunc
 
 	spinnerTicking bool // a spinnerTickMsg is pending
 

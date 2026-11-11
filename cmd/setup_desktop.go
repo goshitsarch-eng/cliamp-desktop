@@ -79,7 +79,7 @@ func SetupSchema(provider string, input io.Reader, output io.Writer) error {
 			result.Values[p.key] = values[p.key]
 		}
 		for _, field := range selected.fields {
-			if field.onlyIf != nil && !field.onlyIf(values) {
+			if field.key == keyPickChats || (field.onlyIf != nil && !field.onlyIf(values)) {
 				continue
 			}
 			value := ""
@@ -153,7 +153,9 @@ func applySetupValues(spec providerSpec, values map[string]string, verifyConnect
 func prepareSetupValues(spec providerSpec, input map[string]string) (map[string]string, error) {
 	allowed := make(map[string]bool, len(spec.fields)+1)
 	for _, field := range spec.fields {
-		allowed[field.key] = true
+		if field.key != keyPickChats {
+			allowed[field.key] = true
+		}
 	}
 	if spec.picker != nil {
 		allowed[spec.picker.key] = true
@@ -181,6 +183,9 @@ func prepareSetupValues(spec providerSpec, input map[string]string) (map[string]
 	}
 	visible := make(map[string]bool, len(spec.fields))
 	for _, field := range spec.fields {
+		if field.key == keyPickChats {
+			continue
+		}
 		if field.onlyIf == nil || field.onlyIf(values) {
 			visible[field.key] = true
 			if values[field.key] == "" {

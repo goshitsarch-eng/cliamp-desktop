@@ -20,7 +20,7 @@ import (
 	"github.com/bjarneo/cliamp/luaplugin"
 )
 
-const implicitPluginAccess = "Unrestricted file reads; allowlisted file writes; public HTTP. Declared permissions may additionally permit playback control, process execution, or keybindings."
+const implicitPluginAccess = "Unrestricted file reads; allowlisted file writes; public HTTP and allowlisted private host:port addresses. Declared permissions may additionally permit playback control, process execution, keybindings, terminal images, layout panes, or UI controls."
 
 type desktopRequest struct {
 	Source      string            `json:"source"`

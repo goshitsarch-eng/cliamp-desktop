@@ -595,7 +595,7 @@ func TestYTDLUnpauseReconnectFollowsThePlayback(t *testing.T) {
 		{
 			name: "skip during the reconnect",
 			during: func(m *Model) {
-				m.skipNext()
+				settlePlay(nil, m, m.skipNext())
 				// A debounced seek waits on the new track.
 				m.seek.active = true
 				m.seek.timer = seekDebounceTicks
@@ -1111,6 +1111,33 @@ func TestYTDLLiveStreamFailedFirstStartDoesNotAdvance(t *testing.T) {
 	}
 }
 
+func TestUnavailableYTDLTrackSkipsToNext(t *testing.T) {
+	player := &playbackFakeEngine{}
+	p := playlist.New()
+	p.Replace([]playlist.Track{
+		{Title: "Gone", Path: "https://www.youtube.com/watch?v=YMwftR69o9w", Stream: true},
+		{Title: "Next", Path: "https://www.youtube.com/watch?v=next", Stream: true},
+	})
+	p.SetIndex(0)
+	m := Model{player: player, playlist: p, vis: ui.NewVisualizer(44100)}
+	m.SetVisualizer("none")
+	track, _ := m.playlist.Current()
+	m.playTrack(track)
+
+	updated, cmd := m.Update(streamPlayedMsg{path: track.Path, gen: m.requests.stream, err: errors.New("yt-dlp: exit status 1: ERROR: [youtube] YMwftR69o9w: Video unavailable")})
+	m = updated.(Model)
+	if m.err != nil {
+		t.Fatalf("err = %v, want the failure skipped", m.err)
+	}
+	if cmd == nil {
+		t.Fatal("skip did not start the next track")
+	}
+	msg := streamPlayedFrom(t, cmd)
+	if msg.path != "https://www.youtube.com/watch?v=next" {
+		t.Fatalf("next path = %q", msg.path)
+	}
+}
+
 // Playing another track while a drained live stream waits to restart ends the
 // retries, so that track's own failed start stays put like any other.
 func TestPlayDuringYTDLLiveRestartWaitDoesNotInheritRetries(t *testing.T) {
@@ -1406,8 +1433,10 @@ func TestFailedPreloadIsNotRetriedEveryTick(t *testing.T) {
 
 	t.Run("new track retries", func(t *testing.T) {
 		m, _ := failed(t)
-		updated, _ := m.Update(PluginQueueMsg{Op: "jump", Index: 0})
-		if !updated.(Model).preloading {
+		updated, cmd := m.Update(PluginQueueMsg{Op: "jump", Index: 0})
+		m = updated.(Model)
+		settlePlay(t, &m, cmd)
+		if !m.preloading {
 			t.Fatal("b.mp3 was not preloaded again after a new track started")
 		}
 	})
@@ -1599,7 +1628,7 @@ func TestNextTrackRulesAgree(t *testing.T) {
 
 			engine := &playbackFakeEngine{playing: true}
 			m = setup(engine)
-			m.nextTrack()
+			settlePlay(t, &m, m.nextTrack())
 			if got := strings.Join(engine.playCalls, ","); got != tt.want {
 				t.Errorf("nextTrack plays %q, want %q", got, tt.want)
 			}

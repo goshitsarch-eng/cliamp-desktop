@@ -114,8 +114,9 @@ func preferenceFields() []preferenceField {
 		{"show_metadata", "ShowMetadata", "Terminal appearance", "bool"}, {"expanded", "Expanded", "Terminal appearance", "bool"},
 		{"padding_horizontal", "PaddingH", "Terminal appearance", "integer"}, {"padding_vertical", "PaddingV", "Terminal appearance", "integer"},
 		{"log_level", "LogLevel", "System", "string"}, {"low_power", "LowPower", "System", "bool"},
-		{"plugins.disabled", "", "Plugins", "list"}, {"plugins.allowed_binaries", "", "Plugins", "list"},
+		{"plugins.disabled", "", "Plugins", "list"}, {"plugins.allowed_binaries", "", "Plugins", "list"}, {"plugins.allowed_private_addresses", "", "Plugins", "list"},
 		{"radio.country", "Radio.Country", "Radio", "string"}, {"podcast.country", "Podcast.Country", "Podcasts", "string"},
+		{"bandcamp.browse_sort", "Bandcamp.BrowseSort", "Bandcamp", "string"},
 		{"navidrome.browse_sort", "Navidrome.BrowseSort", "Navidrome", "string"}, {"navidrome.format", "Navidrome.Format", "Navidrome", "string"},
 		{"navidrome.scrobble", "Navidrome.ScrobbleDisabled", "Navidrome", "bool"}, {"lyrion.show_unplayable", "Lyrion.ShowUnplayable", "Lyrion", "bool"},
 		{"spotify.enabled", "Spotify.Enabled", "Spotify", "bool"}, {"spotify.client_id", "Spotify.ClientID", "Spotify", "string"}, {"spotify.bitrate", "Spotify.Bitrate", "Spotify", "integer"},
@@ -126,8 +127,9 @@ func preferenceFields() []preferenceField {
 		{"soundcloud.enabled", "SoundCloud.Enabled", "SoundCloud", "bool"}, {"soundcloud.user", "SoundCloud.User", "SoundCloud", "string"}, {"soundcloud.cookies_from", "SoundCloud.CookiesFrom", "SoundCloud", "string"},
 		{"mixcloud.enabled", "Mixcloud.Enabled", "Mixcloud", "bool"}, {"mixcloud.username", "Mixcloud.Username", "Mixcloud", "string"}, {"mixcloud.cookies_from", "Mixcloud.CookiesFrom", "Mixcloud", "string"},
 		{"mixcloud.styles", "Mixcloud.Styles", "Mixcloud", "list"}, {"mixcloud.max_items", "Mixcloud.MaxItems", "Mixcloud", "integer"}, {"mixcloud.stream_creators", "Mixcloud.StreamCreators", "Mixcloud", "integer"},
-		{"netease.enabled", "NetEase.Enabled", "NetEase", "bool"}, {"netease.cookies_from", "NetEase.CookiesFrom", "NetEase", "string"}, {"netease.user_id", "NetEase.UserID", "NetEase", "string"},
-		{"yandex.enabled", "Yandex.Enabled", "Yandex", "bool"}, {"plex.libraries", "Plex.Libraries", "Plex", "list"},
+		{"netease.enabled", "NetEase.Enabled", "NetEase", "bool"}, {"netease.cookies_from", "NetEase.CookiesFrom", "NetEase", "string"}, {"netease.cookies_file", "NetEase.CookiesFile", "NetEase", "string"}, {"netease.user_id", "NetEase.UserID", "NetEase", "string"},
+		{"yandex.enabled", "Yandex.Enabled", "Yandex", "bool"}, {"telegram.chats", "Telegram.Chats", "Telegram", "list"}, {"telegram.buffer_mb", "Telegram.BufferMB", "Telegram", "integer"},
+		{"plex.libraries", "Plex.Libraries", "Plex", "list"},
 		{"jellyfin.user_id", "Jellyfin.UserID", "Jellyfin", "string"}, {"emby.user_id", "Emby.UserID", "Emby", "string"}, {"audiobookshelf.libraries", "Audiobookshelf.Libraries", "Audiobookshelf", "list"},
 	} {
 		add(item.key, item.path, item.group, item.kind)
@@ -136,13 +138,15 @@ func preferenceFields() []preferenceField {
 		"repeat": {"off", "all", "one"}, "log_level": {"debug", "info", "warn", "error"},
 		"sample_rate": {"0", "22050", "44100", "48000", "96000", "192000"}, "bit_depth": {"16", "32"},
 		"spotify.bitrate": {"96", "160", "320"}, "qobuz.quality": {"5", "6", "7", "27"},
-		"tidal.quality": {"", "low", "high", "lossless", "hires"},
+		"tidal.quality":        {"", "low", "high", "lossless", "hires"},
+		"bandcamp.browse_sort": {"", "newest", "alphabeticalByName", "alphabeticalByArtist"},
 	}
 	ranges := map[string][2]float64{
 		"volume": {-90, 6}, "volume_min": {-90, 0}, "speed": {0.25, 2}, "seek_large_step_sec": {6, 600},
 		"lyrics_offset_ms": {-10000, 10000}, "buffer_ms": {50, 5000}, "resample_quality": {1, 4},
 		"vis_rows": {0, 40}, "padding_horizontal": {0, 10}, "padding_vertical": {0, 5},
 		"mixcloud.max_items": {0, mixcloud.MaxItemsLimit}, "mixcloud.stream_creators": {0, mixcloud.MaxStreamCreators},
+		"telegram.buffer_mb": {0, 64},
 	}
 	for i := range fields {
 		field := &fields[i]
@@ -161,6 +165,12 @@ func preferenceFields() []preferenceField {
 		}
 		if field.Key == "audio_device" {
 			field.Help = "Output device name; blank uses the system default. Windows uses the system output."
+		}
+		if field.Key == "plugins.allowed_private_addresses" {
+			field.Help = "JSON array of private or loopback host:port endpoints plugins may reach over HTTP."
+		}
+		if field.Key == "netease.cookies_file" {
+			field.Help = "Path to a Netscape-format cookies.txt file; overrides cookies_from when set."
 		}
 	}
 	return fields

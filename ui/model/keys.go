@@ -190,6 +190,11 @@ func normalizeShiftedLetter(msg tea.KeyPressMsg) tea.KeyPressMsg {
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	msg = normalizeShiftedLetter(msg)
 
+	if m.luaSelect != nil {
+		m.handleLuaSelectKey(msg)
+		return nil
+	}
+
 	if cmd, ok := m.handleGlobalKey(msg); ok {
 		return cmd
 	}
@@ -221,6 +226,44 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.handleProvPillKey(msg)
 	}
 	return m.handleMainKey(msg)
+}
+
+// openAuthCodeInput shows the code input. Enter there runs the handshake.
+func (m *Model) openAuthCodeInput() tea.Cmd {
+	m.authCode = authCodeState{active: true, name: m.provider.Name()}
+	if ca, ok := m.provider.(provider.CodeAuthenticator); ok {
+		m.authCode.hint = ca.Prompt()
+	}
+	return nil
+}
+
+// handleAuthCodeKey owns the input of the one-time code overlay.
+func (m *Model) handleAuthCodeKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.Code {
+	case tea.KeyEscape:
+		m.authCode.active = false
+	case tea.KeyEnter:
+		code := strings.TrimSpace(m.authCode.input)
+		ca, ok := m.provider.(provider.CodeAuthenticator)
+		if !ok {
+			m.authCode.active = false
+			return nil
+		}
+		if code == "" {
+			m.authCode.err = "Enter the code the app received."
+			return nil
+		}
+		m.authCode.active = false
+		m.provPane.signIn = false
+		m.provPane.loading = true
+		m.err = nil
+		return authenticateCodeCmd(ca, code, m.authCode.name, nextRequest(&m.requests.auth))
+	default:
+		if m.editText("auth-code", &m.authCode.input, msg) {
+			m.authCode.err = ""
+		}
+	}
+	return nil
 }
 
 // handleGlobalKey processes the keys that work over every overlay and focus:
@@ -272,6 +315,10 @@ func (m *Model) handleProviderPaneKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 
+	if m.provPane.picking {
+		return m.handleChatPickerKey(msg)
+	}
+
 	if cmd, ok := m.providerShortcut(msg.String()); ok {
 		return cmd
 	}
@@ -298,6 +345,11 @@ func (m *Model) handleProviderPaneKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.maybeLoadCatalogBatch()
 	case "enter":
 		if m.provPane.signIn {
+			if _, ok := m.provider.(provider.CodeAuthenticator); ok {
+				// A typed code needs the input first; the handshake waits
+				// for it on the live connection.
+				return m.openAuthCodeInput()
+			}
 			if auth, ok := m.provider.(playlist.Authenticator); ok {
 				cmd := m.startTUIProviderAuth(auth)
 				if cmd == nil {
@@ -366,6 +418,10 @@ func (m *Model) handleProviderPaneKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.toggleExpandedView()
 	case "ctrl+f":
 		m.openProviderSearch()
+	case "ctrl+p":
+		if _, ok := m.provider.(provider.ChatFilter); ok {
+			return m.startChatPicker()
+		}
 	}
 	return nil
 }
@@ -399,6 +455,23 @@ func (m *Model) handleProvPillKey(msg tea.KeyPressMsg) tea.Cmd {
 // handleMainKey processes a key press for the playlist and the focused
 // playback controls. It forwards the keys that it does not handle to plugins.
 func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
+	if m.pendingRatingActive {
+		m.pendingRatingActive = false
+		m.pendingRatingExpiresAt = time.Time{}
+		m.status.Clear()
+		if s := msg.String(); m.focus == focusPlaylist && len(s) == 1 && s[0] >= '0' && s[0] <= '5' {
+			return m.rateSelectedTrack(int(s[0] - '0'))
+		}
+	}
+	if msg.String() == "*" && m.focus == focusPlaylist {
+		m.pendingSeekActive = false
+		m.pendingSeekExpiresAt = time.Time{}
+		m.pendingRatingActive = true
+		m.pendingRatingExpiresAt = time.Now().Add(time.Duration(statusTTLMedium))
+		m.status.Activityf(statusTTLMedium, "* then 0-5 -> rate selected track")
+		return nil
+	}
+
 	// Vim-style count prefix: a digit primes a pending percentage; the next `j`
 	// jumps there (e.g. `7j` → 70%). Any other key cancels and runs normally.
 	if s := msg.String(); m.focus == focusPlaylist && len(s) == 1 && s[0] >= '0' && s[0] <= '9' {
@@ -518,6 +591,12 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
 			return cmd
 		}
 
+	case "ctrl+o":
+		if m.focus == focusPlaylist {
+			cmd, _ := m.reverseTracks()
+			return cmd
+		}
+
 	case "up", "k":
 		if m.focus == focusEQ {
 			bands := m.player.EQBands()
@@ -606,6 +685,13 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) tea.Cmd {
 			break
 		}
 		m.cycleEQPreset()
+		m.scheduleEQSave()
+
+	case "alt+e":
+		if m.simplified || m.layout.tier == layoutMinimal {
+			break
+		}
+		m.previousEQPreset()
 		m.scheduleEQSave()
 
 	case "a":

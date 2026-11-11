@@ -60,6 +60,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}()
 
 	switch msg := msg.(type) {
+	case providerPickLoadedMsg:
+		m.handleChatPickerLoaded(msg)
+		return m, nil
+
 	case tea.PasteMsg:
 		cmd := m.handlePaste(msg.Content)
 		return m, cmd
@@ -77,6 +81,35 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.playlist.Len() > 0 && !m.player.IsPlaying() {
 			cmd := m.playCurrentTrack()
 			return m, cmd
+		}
+		return m, nil
+
+	case SetVisMsg:
+		if msg.Name != "" {
+			m.SetVisualizer(msg.Name)
+		}
+		return m, nil
+
+	case LuaSelectMsg:
+		if prev := m.luaSelect; prev != nil {
+			// A second request replaces the first: cancel it so its plugin gets
+			// a result instead of losing both callbacks.
+			if prev.onCancel != nil {
+				prev.onCancel()
+			} else {
+				prev.onDone(-1)
+			}
+		}
+		cursor := msg.Cursor - 1
+		if cursor < 0 || cursor >= len(msg.Options) {
+			cursor = 0
+		}
+		m.luaSelect = &luaSelectState{
+			title:    msg.Title,
+			options:  msg.Options,
+			cursor:   cursor,
+			onDone:   msg.OnDone,
+			onCancel: msg.OnCancel,
 		}
 		return m, nil
 
@@ -186,6 +219,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lyrics.lines = msg.lines
 		}
 		return m, nil
+
+	case ytdlArtistMsg:
+		return m, m.handleYTDLArtist(msg)
 
 	case fbTracksResolvedMsg:
 		cmd := m.handleFBTracksResolved(msg)
@@ -348,6 +384,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case trackFavoriteSyncedMsg:
 		m.handleTrackFavoriteSynced(msg)
+		return m, nil
+
+	case trackRatingSyncedMsg:
+		m.handleTrackRatingSynced(msg)
 		return m, nil
 
 	case ShowStatusMsg:

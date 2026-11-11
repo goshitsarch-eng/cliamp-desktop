@@ -263,7 +263,11 @@ func (m *Model) tickVisualizer(now time.Time) {
 		m.vis.Suspend()
 		return
 	}
-	m.vis.Tick(m.visualizerTickContext(now))
+	ctx := m.visualizerTickContext(now)
+	m.vis.Tick(ctx)
+	if m.slotVis != nil {
+		m.slotVis.tickAll(ctx, m.vis.WaveSamples())
+	}
 }
 
 func (m Model) refreshVisualizerIfPending() {
@@ -412,6 +416,10 @@ func (m *Model) tickExpire(now time.Time, dt time.Duration) {
 	if m.pendingSeekActive && !m.pendingSeekExpiresAt.IsZero() && !now.Before(m.pendingSeekExpiresAt) {
 		m.pendingSeekActive = false
 		m.pendingSeekExpiresAt = time.Time{}
+	}
+	if m.pendingRatingActive && !m.pendingRatingExpiresAt.IsZero() && !now.Before(m.pendingRatingExpiresAt) {
+		m.pendingRatingActive = false
+		m.pendingRatingExpiresAt = time.Time{}
 	}
 	// Decrement seek grace period.
 	advanceTickUnits(&m.seek.grace, &m.seek.graceFor, dt, ui.TickFast)

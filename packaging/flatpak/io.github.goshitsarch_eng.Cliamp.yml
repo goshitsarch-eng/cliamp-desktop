@@ -36,8 +36,8 @@ modules:
         branch: main
       - type: archive
         dest: sdk/go
-        url: https://go.dev/dl/go1.26.6.linux-amd64.tar.gz
-        sha256: 708effb774be8237570d0add163225abbdfaf4fca28b2611df167beba4feef89
+        url: https://go.dev/dl/go1.26.10.linux-amd64.tar.gz
+        sha256: ccfe7ae822d2c2f41f4fe7c956199967a4dac22d0ee0d2b2bfdb440aab3b20c5
       - type: archive
         dest: sdk/godot
         strip-components: 0

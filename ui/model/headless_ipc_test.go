@@ -209,8 +209,8 @@ func TestHeadlessPlayRestartsLiveStation(t *testing.T) {
 	if got := m.playlist.Index(); got != 0 {
 		t.Fatalf("playlist index = %d, want the current station 0", got)
 	}
-	if engine.stopCalls != 1 || !m.buffering || m.playingTrack.Path != "https://radio.example.com/one" {
-		t.Fatalf("stops = %d, buffering %v, track %q; want a new connection to station one", engine.stopCalls, m.buffering, m.playingTrack.Path)
+	if engine.stopCalls != 1 || m.playingTrack.Path != "https://radio.example.com/one" || len(engine.playCalls) != 1 || engine.playCalls[0] != "https://radio.example.com/one" {
+		t.Fatalf("stops = %d, plays %v, track %q; want a new connection to station one", engine.stopCalls, engine.playCalls, m.playingTrack.Path)
 	}
 }
 
@@ -368,6 +368,53 @@ func TestHeadlessLibraryRequests(t *testing.T) {
 			m := newHeadlessModel(t, &headlessEngine{}, providers)
 			if response := runV2(t, &m, tc.op, tc.params); !response.OK || !tc.ok(response) {
 				t.Fatalf("%s = %+v", tc.op, response)
+			}
+		})
+	}
+}
+
+// provider.load starts the track at index, with shuffle on or off. No earlier
+// track starts first.
+func TestHeadlessProviderLoadStartsAtIndex(t *testing.T) {
+	tracks := []playlist.Track{
+		{Path: "/music/one.flac", Title: "One"},
+		{Path: "/music/two.flac", Title: "Two"},
+		{Path: "/music/three.flac", Title: "Three"},
+	}
+	providers := []provider.Entry{{Key: "test", Name: "Test", Provider: fixedTracksProvider{commandsTestProvider{name: "Test"}, tracks}}}
+	for _, tc := range []struct {
+		name    string
+		shuffle bool
+		index   int
+	}{
+		{name: "index", index: 2},
+		{name: "shuffle index", shuffle: true, index: 2},
+		{name: "shuffle no index", shuffle: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := &headlessEngine{}
+			m := newHeadlessModel(t, engine, providers, playlist.Track{Path: "/music/old.flac", Title: "Old"})
+			if tc.shuffle {
+				m.playlist.ToggleShuffle()
+			}
+
+			// runV2 drops the command of the load result, so run the load by
+			// hand and settle the play that its result starts.
+			reply := make(chan ipc.Response, 1)
+			result := m.handleIPCLibrary(ipcLibraryRequest{Op: "provider.load", Provider: "test", Playlist: "mix", Index: tc.index, Reply: reply})()
+			updated, cmd := m.Update(result)
+			m = updated.(Model)
+			settlePlay(t, &m, cmd)
+
+			if response := <-reply; !response.OK || response.Total != len(tracks) {
+				t.Fatalf("provider.load = %+v", response)
+			}
+			want := tracks[tc.index].Path
+			if !slices.Equal(engine.playCalls, []string{want}) || m.buffering || m.playingTrack.Path != want {
+				t.Fatalf("play calls = %v, buffering %v, playing %q; want only %q started", engine.playCalls, m.buffering, m.playingTrack.Path, want)
+			}
+			if idx := m.playlist.Index(); idx != tc.index || m.plCursor != tc.index {
+				t.Fatalf("index = %d, cursor %d; want %d", idx, m.plCursor, tc.index)
 			}
 		})
 	}
@@ -638,6 +685,44 @@ func TestIPCPlaylistsReportTheProviderFavoriteMark(t *testing.T) {
 		if got := response.Playlists[i].Favorite; got != want {
 			t.Errorf("row %q favorite = %v, want %v", response.Playlists[i].Name, got, want)
 		}
+	}
+}
+
+// partialRowsProvider lists the rows it could load with the error that cut
+// the list short, as Bandcamp keeps its Library rows when the playlist
+// endpoint fails.
+type partialRowsProvider struct {
+	commandsTestProvider
+	rows []playlist.PlaylistInfo
+}
+
+func (p partialRowsProvider) Playlists() ([]playlist.PlaylistInfo, error) {
+	return p.rows, errors.New("playlists unavailable")
+}
+
+// provider.playlists sends the rows of a partial list with the error as a
+// warning. A failure with no rows fails the job.
+func TestIPCPlaylistsKeepPartialRows(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		rows     []playlist.PlaylistInfo
+		wantOK   bool
+		wantRows int
+	}{
+		{name: "partial list", rows: []playlist.PlaylistInfo{{ID: "a", Name: "A"}, {ID: "b", Name: "B"}}, wantOK: true, wantRows: 2},
+		{name: "no rows", wantOK: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			prov := partialRowsProvider{commandsTestProvider{name: "Rows"}, tc.rows}
+			m := newHeadlessModel(t, &headlessEngine{}, []provider.Entry{{Key: "rows", Name: "Rows", Provider: prov}})
+			response := runV2(t, &m, "provider.playlists", ipc.Request{Provider: "rows"})
+			if response.OK != tc.wantOK || len(response.Playlists) != tc.wantRows {
+				t.Fatalf("provider.playlists = %+v, want ok=%v with %d rows", response, tc.wantOK, tc.wantRows)
+			}
+			if !strings.Contains(response.Error, "playlists unavailable") {
+				t.Errorf("error = %q, want the provider's error", response.Error)
+			}
+		})
 	}
 }
 

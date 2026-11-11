@@ -17,7 +17,6 @@ import (
 
 	"github.com/gopxl/beep/v2"
 	"github.com/gopxl/beep/v2/flac"
-	"github.com/gopxl/beep/v2/mp3"
 	"github.com/gopxl/beep/v2/vorbis"
 	"github.com/gopxl/beep/v2/wav"
 
@@ -288,7 +287,7 @@ func formatExt(path string) string {
 // needsFFmpeg reports whether the given extension requires ffmpeg to decode.
 func needsFFmpeg(ext string) bool {
 	switch ext {
-	case ".m4a", ".aac", ".aacp", ".m4b", ".alac", ".wma", ".opus", ".webm":
+	case ".m4a", ".mp4", ".aac", ".aacp", ".m4b", ".alac", ".wma", ".opus", ".webm":
 		return true
 	}
 	return false
@@ -335,6 +334,6 @@ func decodeWithExt(rc io.ReadCloser, ext string) (beep.StreamSeekCloser, beep.Fo
 	case ".ogg":
 		return vorbis.Decode(rc)
 	default:
-		return mp3.Decode(rc)
+		return decodeMP3(rc)
 	}
 }

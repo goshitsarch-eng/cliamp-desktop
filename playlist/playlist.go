@@ -138,6 +138,13 @@ func (p *Playlist) cloneTracksAt(indices []int) []Track {
 // Replace clears the playlist and loads the given tracks, resetting
 // position, queue, and shuffle order.
 func (p *Playlist) Replace(tracks []Track) {
+	p.ReplaceAt(tracks, 0)
+}
+
+// ReplaceAt is Replace with the position set to track start. With shuffle
+// on, start plays first and the other tracks follow in shuffled order. A
+// start outside tracks falls back to 0.
+func (p *Playlist) ReplaceAt(tracks []Track, start int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	before := p.snapshot()
@@ -146,7 +153,10 @@ func (p *Playlist) Replace(tracks []Track) {
 	for i := range tracks {
 		p.order[i] = i
 	}
-	p.pos = 0
+	if start < 0 || start >= len(tracks) {
+		start = 0
+	}
+	p.pos = start
 	p.queue = nil
 	p.queuePositions = nil
 	p.queuedIdx = -1
@@ -764,6 +774,37 @@ func (p *Playlist) Move(from, to int) bool {
 
 	p.revision++
 	return true
+}
+
+// Reverse flips the track order. The current track, the play-next queue
+// and, with shuffle on, the play order keep pointing at the same tracks.
+// With shuffle off, playback follows the new visual order.
+func (p *Playlist) Reverse() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	n := len(p.tracks)
+	if n < 2 {
+		return
+	}
+	slices.Reverse(p.tracks)
+	for i, idx := range p.order {
+		p.order[i] = n - 1 - idx
+	}
+	for i, idx := range p.queue {
+		p.queue[i] = n - 1 - idx
+	}
+	p.rebuildQueuePositions()
+	if p.queuedIdx >= 0 {
+		p.queuedIdx = n - 1 - p.queuedIdx
+	}
+	if !p.shuffle {
+		cur := p.order[p.pos]
+		for i := range p.order {
+			p.order[i] = i
+		}
+		p.pos = cur
+	}
+	p.revision++
 }
 
 // Remove deletes the track at index idx, updating order, queue, and position

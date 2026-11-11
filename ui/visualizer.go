@@ -71,6 +71,21 @@ func NewVisualizer(sampleRate float64) *Visualizer {
 	}
 }
 
+// RenderAt renders one frame at the given column count. Plugin panes share
+// the visualizer region with the builtin, so the caller passes the pane width
+// instead of the full panel; the cached Cols keeps the full-panel value for
+// the lone-builtin render and the next mode tick.
+func (v *Visualizer) RenderAt(cols int) string {
+	if v == nil {
+		return ""
+	}
+	saved := v.Cols
+	v.Cols = cols
+	out := v.Render()
+	v.Cols = saved
+	return out
+}
+
 // Render dispatches to the active visualizer mode.
 func (v *Visualizer) Render() string {
 	if v == nil || v.Mode == VisNone || v.Rows <= 0 {
@@ -86,6 +101,44 @@ func (v *Visualizer) Render() string {
 		return ""
 	}
 	return fitVisualizerFrame(driver.Render(v), cols, v.Rows)
+}
+
+// WaveSamples returns the raw samples of the last analysis, which the wave,
+// scope and heartbeat modes draw.
+func (v *Visualizer) WaveSamples() []float64 {
+	if v == nil {
+		return nil
+	}
+	return v.waveBuf
+}
+
+// SetWaveSamples copies the raw samples of another visualizer so a pane that
+// draws a waveform has data without running its own analysis.
+func (v *Visualizer) SetWaveSamples(samples []float64) {
+	if v == nil {
+		return
+	}
+	if len(samples) == 0 {
+		v.waveBuf = v.waveBuf[:0]
+		return
+	}
+	if cap(v.waveBuf) < len(samples) {
+		v.waveBuf = make([]float64, len(samples))
+	}
+	v.waveBuf = v.waveBuf[:len(samples)]
+	copy(v.waveBuf, samples)
+}
+
+// SetBands injects the spectrum of another visualizer, so several panes share
+// one FFT analysis instead of running it once per pane.
+func (v *Visualizer) SetBands(bands []float64) {
+	if v == nil {
+		return
+	}
+	if len(v.bands) != len(bands) {
+		v.bands = make([]float64, len(bands))
+	}
+	copy(v.bands, bands)
 }
 
 func (v *Visualizer) RequestRefresh() {

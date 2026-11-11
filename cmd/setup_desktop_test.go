@@ -63,7 +63,7 @@ func TestSetupSchemaProvidersAndForms(t *testing.T) {
 				}
 				var wantKeys, gotKeys []string
 				for _, field := range spec.fields {
-					if field.onlyIf == nil || field.onlyIf(form.Values) {
+					if field.key != keyPickChats && (field.onlyIf == nil || field.onlyIf(form.Values)) {
 						wantKeys = append(wantKeys, field.key)
 					}
 				}

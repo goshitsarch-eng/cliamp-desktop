@@ -10,7 +10,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/bjarneo/cliamp/applog"
-	"github.com/bjarneo/cliamp/player"
 	"github.com/bjarneo/cliamp/playlist"
 	"github.com/bjarneo/cliamp/provider"
 )
@@ -26,13 +25,19 @@ const (
 // queue. The undo of the last queue edit goes, because it restores the old
 // queue.
 func (m *Model) replacePlaylist(tracks []playlist.Track) {
+	m.replacePlaylistAt(tracks, 0)
+}
+
+// replacePlaylistAt is replacePlaylist with the queue positioned on track
+// start.
+func (m *Model) replacePlaylistAt(tracks []playlist.Track, start int) {
 	nextRequest(&m.requests.queue)
 	m.resetYTDLBatch()
 	m.playlistUndo = playlistUndo{}
 	if m.resumeSaver != nil {
 		tracks = playlist.WithPlaybackContext(tracks)
 	}
-	m.playlist.Replace(tracks)
+	m.playlist.ReplaceAt(tracks, start)
 	m.normalizeQueueOverlay()
 }
 
@@ -406,15 +411,16 @@ func (m *Model) restorePlaylistMutation() (tea.Cmd, error) {
 	return m.rearmStalePreload(), nil
 }
 
-// playTrack plays a track, using async starts for streams and local ffmpeg
-// formats, and sync I/O for other local files. The player picks the
+// playTrack plays a track. A stream, a provider URI, and a local file start
+// in a command, so a slow open does not freeze the UI. The player picks the
 // pipeline, such as the yt-dlp | ffmpeg chain for a yt-dlp page URL.
 func (m *Model) playTrack(track playlist.Track) tea.Cmd {
 	m.pausedAt = time.Time{}
 	if track.Feed || playlist.IsFeed(track.Path) {
 		m.feedLoading = true
+		m.feedRequest = nextRequest(&m.requests.queue)
 		m.status.Activity("Loading feed...", statusTTLLong)
-		return resolveFeedTrackCmd(track.Path, m.requests.stream, nextRequest(&m.requests.queue))
+		return resolveFeedTrackCmd(track.Path, m.requests.stream, m.feedRequest)
 	}
 	// The track that plays now is left, so it can scrobble before the
 	// engine moves on.
@@ -425,11 +431,10 @@ func (m *Model) playTrack(track playlist.Track) tea.Cmd {
 	track, fetchCmd := m.beginPlaybackTrack(track)
 
 	dur := time.Duration(track.DurationSecs) * time.Second
-	// yt-dlp page URLs (YouTube, SoundCloud, Bandcamp, etc.) and custom URIs
-	// such as spotify: open over the network, which can take seconds. A
-	// local file that ffmpeg decodes waits for ffprobe and the first audio.
-	// Start them off the Update goroutine like streams.
-	if track.Stream || playlist.IsYTDL(track.Path) || m.isCustomStreamURI(track.Path) || player.UsesLocalFFmpeg(track.Path) {
+	// A stream, a yt-dlp page, a provider URI, or a local file can block
+	// the Update goroutine. A file on a network share can block for minutes.
+	// Start those opens in a command.
+	if track.Stream || playlist.IsYTDL(track.Path) || m.isCustomStreamURI(track.Path) || plainLocalPath(track.Path) {
 		m.buffering = true
 		m.bufferingAt = time.Now()
 		m.err = nil
@@ -460,6 +465,12 @@ func (m *Model) playTrack(track playlist.Track) tea.Cmd {
 		return tea.Batch(m.preloadNext(), fetchCmd)
 	}
 	return m.preloadNext()
+}
+
+// plainLocalPath reports a filesystem path. Opening one can block on a
+// network share, so the start runs off the Update goroutine.
+func plainLocalPath(path string) bool {
+	return path != "" && !playlist.IsURL(path) && !playlist.IsYTDL(path) && !strings.HasPrefix(path, "ssh://")
 }
 
 // isCustomStreamURI reports whether a provider decodes path itself, as the
@@ -574,7 +585,7 @@ func (m *Model) beginPlaybackTrack(track playlist.Track) (playlist.Track, tea.Cm
 		positionSec = m.resume.secs
 	}
 	m.persistPlaybackContext(track, positionSec, time.Now())
-	historyCmd := m.recordListenedTrack(track)
+	cmd := tea.Batch(m.recordListenedTrack(track), m.ytdlArtistCmd(track))
 	m.reconnect.attempts = 0
 	m.reconnect.at = time.Time{}
 	m.reconnect.ytdlLiveDrain = false
@@ -587,14 +598,14 @@ func (m *Model) beginPlaybackTrack(track playlist.Track) (playlist.Track, tea.Cm
 	if m.lyrics.visible {
 		q := lyricsLookupKey(track, track.Artist, track.Title)
 		if q == "" {
-			return track, historyCmd
+			return track, cmd
 		}
 		m.lyrics.loading = true
 		m.lyrics.query = q
-		return track, tea.Batch(historyCmd, m.fetchLyricsForTrack(track, track.Artist, track.Title))
+		return track, tea.Batch(cmd, m.fetchLyricsForTrack(track, track.Artist, track.Title))
 	}
 	m.lyrics.loading = false
-	return track, historyCmd
+	return track, cmd
 }
 
 func (m *Model) fetchLyricsForTrack(track playlist.Track, artist, title string) tea.Cmd {

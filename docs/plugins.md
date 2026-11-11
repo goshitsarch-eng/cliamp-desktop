@@ -95,7 +95,7 @@ p:on("track.change", function(track)
 end)
 ```
 
-`os.execute` is not available in the sandbox. Use `cliamp.http` for public HTTP endpoints. cliamp blocks private, loopback, link-local, multicast, and unspecified addresses. For local automation, write to an allowed file for a watcher to read. You can also declare the permission-gated `exec` capability.
+`os.execute` is not available in the sandbox. Use `cliamp.http` for public HTTP endpoints. cliamp blocks private, loopback, link-local, multicast, and unspecified addresses, except an exact `ip:port` you allow for a self-hosted server (see [Allowing a self-hosted server](#allowing-a-self-hosted-server)). For local automation, write to an allowed file for a watcher to read. You can also declare the permission-gated `exec` capability.
 
 ### Webhook
 
@@ -223,9 +223,9 @@ Up to 256 events and key presses can wait for one plugin. If a plugin falls furt
 
 | Event | Callback argument | When |
 |-------|-------------------|------|
-| `track.change` | `{title, artist, album, genre, year, path, duration, stream}` | New track starts successfully |
+| `track.change` | `{title, artist, album, genre, year, path, duration, stream, album_art_url}` | New track starts successfully |
 | `track.scrobble` | Same + `{played_secs}` | You left a track that played at least 50% of its known duration: it ended, or you skipped, stopped, removed it from the queue, rewound with previous, or started another track. Each start of a track fires this at most once |
-| `playback.state` | `{status, title, artist, album, path, duration, stream, position}` | Once for each playback state change (play, pause, stop, seek, volume, track transition, new stream title), and once per second while a track plays. A message that changes nothing does not fire it |
+| `playback.state` | `{status, title, artist, album, path, duration, stream, position, album_art_url}` | Once for each playback state change (play, pause, stop, seek, volume, track transition, new stream title), and once per second while a track plays. A message that changes nothing does not fire it |
 | `player.seek` | `{position, duration}` (seconds) | A seek completes |
 | `player.volume` | `{db}` | Volume changes |
 | `player.eq` | `{bands, preset}` | An EQ band or preset changes |
@@ -239,6 +239,8 @@ Up to 256 events and key presses can wait for one plugin. If a plugin falls furt
 In `playback.state`, `status` is `"playing"`, `"paused"`, or `"stopped"`. In `player.mode`, `repeat` is `"Off"`, `"All"`, or `"One"`, matching `cliamp.player.repeat_mode()`. In `player.eq`, `bands` is an array of 10 dB values.
 
 In `track.change`, `track.scrobble`, `playback.state` and `queue.end`, `duration` is the length in whole seconds. A track with no length in its metadata, such as a local file, gets the decoded length. `duration` is 0 when the length is unknown, as for a live stream.
+
+`album_art_url` is the cover the track already carries, when there is one. A provider that reads the cover on demand — artwork embedded in the file, or a download-backed source such as Telegram — sends it empty in `track.change` and fills it in a later `playback.state`; while a track plays, `playback.state` repeats once per second, so a cover pane can wait for the first value instead of missing it. Re-read the field on every event and treat it as changeable. `cliamp.track.album_art_url()` returns the latest value.
 
 `track.change` fires after playback starts successfully for all sources, including YouTube and SoundCloud. A stream that is still buffering, fails to start, or is superseded before it starts does not emit this event. Gapless transitions also emit `track.change`.
 
@@ -272,7 +274,7 @@ Returns `true` on success. Returns `false, reason` when cliamp's core UI owns th
 
 Use Bubbletea's `msg.String()` form for key strings: lowercase letters and the `ctrl+`, `shift+`, or `alt+` prefixes. For example: `"n"`, `"ctrl+y"`, and `"shift+f1"`. Key strings are case-insensitive.
 
-Plugin keys work only in the main view. Overlays such as the file browser, theme picker, and keymap capture their own input. The core reserves the keys of its own commands, in the main view and in each overlay. It also reserves the text-editor keys `Ctrl+A`, `Ctrl+E`, `Ctrl+W`, `Ctrl+U`, `Home`, `End`, `Delete`, and `Backspace`. The cursor aliases `Ctrl+N` and `Ctrl+P` stay free. A bind of a reserved key logs a warning to `plugins.log` and returns `false, reason`.
+Plugin keys work only in the main view. Overlays such as the file browser, theme picker, and keymap capture their own input. The core reserves the keys of its own commands, in the main view and in each overlay. It also reserves the text-editor keys `Ctrl+A`, `Ctrl+E`, `Ctrl+W`, `Ctrl+U`, `Home`, `End`, `Delete`, and `Backspace`. The cursor aliases that stay free: `Ctrl+N`. `Ctrl+P` belongs to the provider pane, which uses it to pick the chats or channels of providers that support it. A bind of a reserved key logs a warning to `plugins.log` and returns `false, reason`.
 
 Use `p:unbind(key)` to release a binding.
 
@@ -336,6 +338,7 @@ cliamp.track.path()           --> string
 cliamp.track.is_stream()      --> boolean
 cliamp.track.is_live()        --> boolean (no track boundary: radio, or a stream that is live now)
 cliamp.track.duration_secs()  --> number
+cliamp.track.album_art_url()  --> string (file:// or data: URL; resolved on demand)
 ```
 
 `cliamp.track` reports the track that plays, as `playback.state` does. When you load a playlist during playback, the old track plays on, and `cliamp.track` reports it until the next track starts. For a radio stream, `title` and `artist` come from the stream title when the station sends one. When nothing plays, `cliamp.track` reports the current track of the queue.
@@ -348,7 +351,7 @@ You can read the playlist without permission. To change it, declare `permissions
 
 ```lua
 -- read (no permission)
-cliamp.queue.list()        --> array of {title, artist, album, genre, year, path, duration, stream, index, queued}
+cliamp.queue.list()        --> array of {title, artist, album, genre, year, path, duration, stream, album_art_url, index, queued}
 cliamp.queue.count()       --> number of tracks
 cliamp.queue.current()     --> 0-based index of the current track
 cliamp.queue.has_next()    --> true when a playable track follows in play order (play-next queue, repeat, shuffle)
@@ -382,11 +385,13 @@ HTTP stream, an M3U/PLS URL, or a YouTube/yt-dlp URL. cliamp resolves it off the
 UI thread. A slow URL does not block playback.
 
 `add` also takes a track table with the same keys as the track tables in
-events: `{path, title, artist, album, genre, year, duration, stream}`. Only
-`path` is required, and other keys are ignored, so a track from an event or from
-`queue.list()` can be passed back as it is. cliamp appends the track exactly as
-described, without resolving the path. Use it for tracks a path alone can't
-describe, such as a provider track from another service:
+events: `{path, title, artist, album, genre, year, duration, stream, album_art_url}`.
+Only `path` is required. `album_art_url` is accepted but ignored, because the
+cover of a queued track is resolved from its path; any key outside this shape is
+ignored as well, so a track from an event or from `queue.list()` can be passed
+back as it is. cliamp appends the track exactly as described, without resolving
+the path. Use it for tracks a path alone can't describe, such as a provider
+track from another service:
 
 ```lua
 local ok, err = cliamp.queue.add({
@@ -434,7 +439,7 @@ cliamp.fs.mkdir(path)             -- create directory (recursive)
 cliamp.fs.listdir(path)           --> {names}, err
 ```
 
-You can write only to the system temp directory (`/tmp/` on Unix), `~/.config/cliamp/`, `~/.local/share/cliamp/`, and `~/Music/cliamp/`. In `~/.config/cliamp/`, you cannot write to the `plugins/` directory, `config.toml`, `radios.toml`, `cliamp.sock`, `cliamp.sock.pid`, or `plugins.log`. You can read from any path. `cliamp.fs.read` reads only regular files. For a FIFO, a device, or a directory, it returns `nil` and an error, because a read of such a file can block without a limit. On Windows, when `HOME` is unset, the config directory resolves to `%APPDATA%\cliamp`.
+You can write only to the system temp directory (`/tmp/` on Unix), `~/.config/cliamp/`, `~/.local/share/cliamp/`, and `~/Music/cliamp/`. In `~/.config/cliamp/`, you cannot write to the `plugins/` directory, `config.toml`, `radios.toml`, `cliamp.sock`, `cliamp.sock.pid`, or `plugins.log`. You can read from any path. `cliamp.fs.read` reads only regular files. For a FIFO, a device, or a directory, it returns `nil` and an error, because a read of such a file can block without a limit. On Windows, the config directory resolves to `%APPDATA%\cliamp` unless `HOME` names another directory. If that directory has no `config.toml` and `HOME/.config/cliamp` has one, cliamp keeps the existing directory.
 
 ### cliamp.json
 
@@ -617,6 +622,72 @@ cliamp.timer.cancel(id)
 
 Each timer callback times out after 5 seconds.
 
+### cliamp.image (requires permissions)
+
+A plugin can draw an image inside its pane. The pixels travel out of band: the
+terminal holds them and the plugin prints the placeholders that display them, so
+a redraw does not lose the image.
+
+```lua
+-- kitty graphics protocol: transmit the image and get its placeholders
+local id, err = cliamp.image.show(source, { cols = 20, rows = 10 })  --> number, string
+local block = cliamp.image.block(id)                                 --> string, string
+cliamp.image.clear(id)
+
+-- text fallback: the same image as ANSI half blocks, no protocol needed
+local text = cliamp.image.blocks(source, { cols = 20, rows = 10 })   --> string, string
+```
+
+`source` is a `data:` URL, a `file://` URL, or a path. The permission reads any
+regular file the user can read, up to 32 MiB, and rejects devices and pipes; it
+does not restrict paths to a directory of images.
+
+`show` returns at once: decoding, scaling and the terminal write run in the
+background. Call `block` with the id `show` returned and print the block every
+frame; the core alternates an invisible reset inside it so the renderer keeps
+repainting those lines.
+
+### cliamp.layout (requires permissions)
+
+```lua
+cliamp.layout.add({ region = "visualizer", weight = 1, position = "after" })
+cliamp.layout.remove({ region = "visualizer" })
+cliamp.layout.set_weight({ region = "visualizer", pane = "builtin", weight = 60 })
+cliamp.layout.set_builtin({ region = "settings", enabled = false })
+cliamp.layout.set_vis({ region = "visualizer", vis = "Scatter" })
+cliamp.layout.list()  --> {{region = "visualizer", pane = "cover", weight = 1, vis = "", position = "after"}, ...}
+```
+
+Regions are `visualizer` (the band above the columns) and `settings` (the
+right-hand column). A pane belongs to the plugin that added it: `remove`,
+`set_weight` and `set_vis` accept only the caller's pane, except `set_weight`,
+which also accepts `builtin`. `weight` is relative and `position` is `before` or
+`after` the builtin content. Hiding the builtin leaves the region to the plugin
+panes.
+
+### cliamp.ui (requires permissions)
+
+```lua
+cliamp.ui.select{
+    title = "Which visualizer?",
+    options = { "Bars", "Scatter", "None" },
+    cursor = 2,                       -- optional, 1-based
+    on_select = function(index) ... end,
+    on_cancel = function() ... end,   -- optional, Esc
+}
+```
+
+Returns true when the request was accepted. With no interactive UI (headless
+mode) it returns an error. Closing the selector calls `on_cancel` when given, or
+`on_select(-1)` otherwise.
+
+### cliamp.vis
+
+```lua
+cliamp.vis.set("Scatter")  -- switch the active visualizer, built-in or plugin
+cliamp.vis.list()          --> {"Bars", "Rain", ...}
+```
+
 ## Configuration
 
 Put plugin-specific configuration in `config.toml` under `[plugins.<name>]`:
@@ -637,6 +708,17 @@ Read it in Lua:
 local api_key = p:config("api_key")   --> "abc123" or nil
 ```
 
+### Allowing a self-hosted server
+
+A plugin that talks to a server on your machine or home network, such as a self-hosted gPodder or Jellyfin, is blocked like any non-public address. Allow that one server in `[plugins]`:
+
+```toml
+[plugins]
+allowed_private_addresses = ["127.0.0.1:8085", "192.168.1.20:8096"]
+```
+
+Each entry is a literal IP address and a port, with IPv6 in brackets such as `[::1]:8085`. cliamp checks the address every connection resolves to, so a host name is not accepted: DNS could point it elsewhere. Every plugin may then connect to these addresses, so list only servers you trust plugins with. An entry that is not `ip:port` is ignored, with a warning in `plugins.log`.
+
 ### Disabling plugins
 
 Disable one plugin:
@@ -653,7 +735,7 @@ To disable several plugins:
 disabled = webhook, discord-rpc
 ```
 
-A list in square brackets also works, such as `disabled = ["webhook", "discord-rpc"]`. `allowed_binaries` accepts the same forms. `enabled` accepts every bool form in [Value syntax](configuration.md#value-syntax), such as `False`.
+A list in square brackets also works, such as `disabled = ["webhook", "discord-rpc"]`. `allowed_binaries` and `allowed_private_addresses` accept the same forms. `enabled` accepts every bool form in [Value syntax](configuration.md#value-syntax), such as `False`.
 
 ## Visualizer plugins
 
@@ -752,7 +834,7 @@ Writing outside these directories, or to a read-only path, raises a Lua error. c
 - Each plugin has its own Lua VM. A plugin cannot reach the Lua variables of another plugin.
 - The sandbox does not keep secrets from a plugin. `cliamp.fs` reads each file that you can read. Examples are `config.toml`, with the `[plugins.<name>]` keys of every plugin, and the `cliamp.store` file of another plugin. `os.getenv()` reads the environment. Install only plugins that you trust with these values.
 - A plugin crash does not affect other plugins or the player.
-- Use `cliamp.http` for public network access. Raw socket access is not available. cliamp blocks private, loopback, link-local, multicast, and unspecified destinations after DNS resolution and through redirects.
+- Use `cliamp.http` for public network access. Raw socket access is not available. cliamp blocks private, loopback, link-local, multicast, and unspecified destinations after DNS resolution and through redirects. Only an exact `ip:port` from `allowed_private_addresses` gets through.
 - `os.execute` is not available. Permission-gated `cliamp.exec` can start only configured allowed binaries.
 
 ## Debugging

@@ -202,10 +202,10 @@ func resolveLocalPLS(path string) ([]playlist.Track, error) {
 	if err != nil {
 		return nil, err
 	}
-	for i := range entries {
-		if !playlist.IsURL(entries[i].File) {
-			entries[i].File = resolveM3UPath(filepath.Dir(path), entries[i].File)
-		}
+	// Relative entries are relative to the playlist's folder, as in M3U.
+	baseDir := filepath.Dir(path)
+	for i, e := range entries {
+		entries[i].File = resolveM3UPath(baseDir, e.File)
 	}
 	return plsEntriesToTracks(entries), nil
 }
