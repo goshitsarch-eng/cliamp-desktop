@@ -51,7 +51,7 @@ func _ready() -> void:
 
 	var frame := await Backend.read_frame(40, 10)
 	ok(not Backend.failed(frame), "visualizer frame (%s)" % str(frame.get("error", "")))
-	ok(Backend.current_jobs().is_empty() or true, "jobs tracked")
+	ok(Backend.current_jobs().any(func(job: BackendJob) -> bool: return job.operation == "queue.list" and job.state == "succeeded"), "completed queue read is tracked")
 
 	var tracks := await Backend.call_op("provider.playlists", {"provider": "local", "limit": 50})
 	ok(not Backend.failed(tracks), "local playlists " + str(tracks))
@@ -65,7 +65,7 @@ func _playback() -> void:
 	var path := OS.get_environment("SMOKE_WAV")
 	if path.is_empty():
 		path = ProjectSettings.globalize_path("user://smoke.wav")
-	_write_wav(path, 6.0)
+		_write_wav(path, 6.0)
 	var loaded = await Store.run("sources.load", {"args": [path], "name": "replace", "play": true, "if_revision": Store.state.get("playlist_revision", 0)})
 	ok(loaded != null, "sources.load replace+play")
 	await _wait_for(func() -> bool: return Store.state.get("state") == "playing", "state becomes playing")

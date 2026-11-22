@@ -2,7 +2,21 @@ class_name UiKit
 extends RefCounted
 ## Small control factories shared by the library widgets and dialogs.
 
+static var _text_font: Font
 static var _mixed_font: Font
+
+
+## Preserve the UI typeface and let platform fonts cover international track metadata.
+static func text_font() -> Font:
+	if _text_font == null:
+		var fallback := SystemFont.new()
+		fallback.font_names = PackedStringArray(["Hiragino Sans", "Microsoft YaHei", "Noto Sans CJK JP", "sans-serif"])
+		fallback.allow_system_fallback = true
+		var font := FontVariation.new()
+		font.base_font = ThemeDB.fallback_font
+		font.fallbacks = [fallback]
+		_text_font = font
+	return _text_font
 
 
 ## The default font with the icon font as fallback, so one label or button can
@@ -10,7 +24,7 @@ static var _mixed_font: Font
 static func mixed_font() -> Font:
 	if _mixed_font == null:
 		var f := FontVariation.new()
-		f.base_font = ThemeDB.fallback_font
+		f.base_font = text_font()
 		f.fallbacks = [Icons.font()]
 		_mixed_font = f
 	return _mixed_font
@@ -39,7 +53,7 @@ static var _bold: Font
 static func bold_font() -> Font:
 	if _bold == null:
 		var f := FontVariation.new()
-		f.base_font = ThemeDB.fallback_font
+		f.base_font = text_font()
 		f.variation_embolden = 0.6
 		_bold = f
 	return _bold

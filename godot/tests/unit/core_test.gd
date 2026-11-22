@@ -114,6 +114,12 @@ func test_plugin_source_validation_mirrors_the_resolver() -> void:
 		assert_bool(PluginLogic.source_error(bad) != "").is_true()
 
 
+func test_remote_recording_and_live_artist_labels() -> void:
+	assert_str(LibraryLogic.artist_of({"stream": true})).is_equal("Unknown artist")
+	assert_str(LibraryLogic.artist_of({"stream": true, "realtime": true})).is_equal("Live stream")
+	assert_str(LibraryLogic.artist_of({"station": "Test radio", "realtime": true})).is_equal("Test radio")
+
+
 func test_title_with_artist_drops_missing_artist() -> void:
 	assert_str(LibraryLogic.title_with_artist("alpha", "")).is_equal("alpha")
 	assert_str(LibraryLogic.title_with_artist("alpha", "  ")).is_equal("alpha")
@@ -205,3 +211,15 @@ func test_macos_bundle_sidecar_never_picks_app_binary_on_case_insensitive_fs() -
 	var missing_res := func(p: String) -> bool:
 		return p.to_lower() == exe.to_lower()
 	assert_str(Backend.pick_sidecar_path(exe, "macOS", missing_res)).is_equal("cliamp")
+
+
+func test_command_snapshot_cannot_overwrite_newer_playback_event() -> void:
+	var local_store := preload("res://autoload/store.gd").new()
+	local_store.accept_state({"revision": 4, "state": "playing"})
+	local_store.accept_state({"revision": 3, "state": "stopped"})
+	assert_bool(local_store.is_playing()).is_true()
+	# A replacement engine starts a fresh sequence.
+	local_store._state_session = Backend.session_id - 1
+	local_store.accept_state({"revision": 1, "state": "stopped"})
+	assert_bool(local_store.is_playing()).is_false()
+	local_store.free()

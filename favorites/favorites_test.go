@@ -417,3 +417,27 @@ func TestWritesCreateMissingConfigDir(t *testing.T) {
 		})
 	}
 }
+
+func TestFavoriteSurvivesSubsonicStreamAuthenticationChange(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "favorites.toml")
+	store := NewAt(file)
+	first := playlist.Track{Path: "https://music.test/rest/stream?id=42&u=qa&s=first&t=one"}
+	latest := playlist.Track{Path: "https://music.test/rest/stream?id=42&u=qa&s=second&t=two"}
+	if added, err := store.Toggle(first); err != nil || !added {
+		t.Fatalf("first toggle = %v, %v", added, err)
+	}
+	if !NewAt(file).IsFavorited(latest.Path) {
+		t.Fatal("favorite was lost after reloading the stream URL")
+	}
+	if store.IsFavorited("https://another.test/rest/stream?id=42&u=qa") ||
+		store.IsFavorited("https://music.test/rest/stream?id=42&u=other") {
+		t.Fatal("favorite matched a different server or user")
+	}
+	if added, err := store.Import([]playlist.Track{latest}); err != nil || added != 0 {
+		t.Fatalf("duplicate import = %v, %v", added, err)
+	}
+	if added, err := store.Toggle(latest); err != nil || added || store.Count() != 0 {
+		t.Fatalf("second toggle = %v, %v, count %d", added, err, store.Count())
+	}
+}

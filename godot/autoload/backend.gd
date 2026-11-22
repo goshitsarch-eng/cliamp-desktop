@@ -37,6 +37,8 @@ var proc_factory: Callable = func() -> Object: return Proc.new()
 
 var executable := ""
 var connected := false
+## State revisions are comparable only within one engine connection.
+var session_id := 0
 
 var _closed := false
 var _closing := false
@@ -118,10 +120,12 @@ func connect_engine() -> Dictionary:
 
 func _connect() -> Dictionary:
 	var current := await _read_snapshot()
+	if _closed:
+		return fail("closed", "The player connection is closed.")
 	if failed(current) and current["error"]["code"] != "not_running":
 		return current
 	if failed(current):
-		if _daemon == null or _daemon_exit != -1:
+		if _daemon not in _children:
 			_interrupt_active_jobs()
 			_daemon_log = ""
 			_daemon_exit = -1
@@ -133,7 +137,7 @@ func _connect() -> Dictionary:
 			daemon.exited.connect(func(code: int) -> void:
 				if _daemon == daemon:
 					_daemon_log = (_daemon_log + str(daemon.stderr_text)).right(4096)
-					_daemon_exit = code)
+					_daemon_exit = code, CONNECT_ONE_SHOT)
 		var deadline := Time.get_ticks_msec() + int(startup_timeout * 1000.0)
 		while failed(current):
 			if _closed:
@@ -148,11 +152,12 @@ func _connect() -> Dictionary:
 				break
 			if current["error"]["code"] != "not_running":
 				return current
-			if _daemon_exit != -1:
+			if _daemon not in _children:
 				return fail("startup_failed", "cliamp exited before it was ready (exit %d). %s" % [_daemon_exit, _daemon_log.strip_edges()])
 			await get_tree().create_timer(0.1).timeout
 	if _closed:
 		return fail("closed", "The player connection is closed.")
+	session_id += 1
 	connected = true
 	_reconnect_pending = false
 	_publish_snapshot(current["snapshot"])
@@ -241,11 +246,12 @@ func _watch_stream(bands: bool, generation: int) -> void:
 		_spectrum_proc = proc
 	else:
 		_event_proc = proc
+	var stream_id := proc.get_instance_id()
 	proc.stdout_line.connect(func(line: String) -> void:
 		if _closed or generation != _generation:
 			return
 		var active_proc: Object = _spectrum_proc if bands else _event_proc
-		if active_proc != proc:
+		if active_proc == null or active_proc.get_instance_id() != stream_id:
 			return
 		var envelope := _decode_object(line)
 		if envelope.is_empty():
@@ -257,7 +263,7 @@ func _watch_stream(bands: bool, generation: int) -> void:
 	proc.exited.connect(func(_code: int) -> void:
 		var active_proc: Object = _spectrum_proc if bands else _event_proc
 		if not _closed and not _restarting and generation == _generation and active_proc == proc:
-			_schedule_reconnect(fail("disconnected", "The player %s connection closed. %s" % ["spectrum" if bands else "event", str(proc.stderr_text).strip_edges()])["error"]))
+			_schedule_reconnect(fail("disconnected", "The player %s connection closed. %s" % ["spectrum" if bands else "event", str(proc.stderr_text).strip_edges()])["error"]), CONNECT_ONE_SHOT)
 
 
 func _on_spectrum_line(envelope: Dictionary) -> void:
@@ -317,7 +323,7 @@ func _spawn(arguments: PackedStringArray) -> Object:
 	if not proc.start(resolve_executable(), arguments):
 		return null
 	_children.append(proc)
-	proc.exited.connect(func(_c: int) -> void: _children.erase(proc))
+	proc.exited.connect(func(_c: int) -> void: _children.erase(proc), CONNECT_ONE_SHOT)
 	return proc
 
 
@@ -479,6 +485,7 @@ func call_op(operation: String, params := {}, track_job := true) -> Dictionary:
 	var c := await connect_engine()
 	if failed(c):
 		return c
+	var session := session_id
 	var deadline := Time.get_ticks_msec() + int(operation_timeout * 1000.0)
 	var encoded := encode_json(params)
 	var response := await _command(["remote", "call", "--params-line", "--", operation], -1.0, encoded)
@@ -492,7 +499,7 @@ func call_op(operation: String, params := {}, track_job := true) -> Dictionary:
 		if track_job:
 			_record_job(job, operation, str(params.get("provider", "")) if operation == "provider.auth" else "")
 		if state == "succeeded" or state == "failed" or state == "canceled":
-			if job.get("snapshot") is Dictionary:
+			if session == session_id and job.get("snapshot") is Dictionary:
 				_publish_snapshot(job["snapshot"])
 			if state != "succeeded":
 				return _protocol_error(job.get("error"), "Operation %s." % state)
@@ -653,7 +660,7 @@ func cancel_job(job_id: String) -> Dictionary:
 # Lifecycle
 
 func owns_daemon() -> bool:
-	return not _closed and _daemon != null and _daemon_exit == -1 and _daemon in _children
+	return not _closed and _daemon in _children
 
 
 func restart_owned_engine() -> Dictionary:
@@ -799,7 +806,7 @@ func _restore_runtime_state(preserved: Dictionary) -> void:
 
 func _stop_owned_daemon() -> Dictionary:
 	var daemon := _daemon
-	if daemon == null or _daemon_exit != -1 or not daemon in _children:
+	if daemon not in _children:
 		return {}
 	# Submit only: polling the quit job races with the socket shutting down.
 	# Wait on our own process handle for the normal exit save.
@@ -848,8 +855,11 @@ func close() -> void:
 	_stop_streams()
 	# The IPC quit lets the engine run its exit save, which a plain kill skips on Windows.
 	await _stop_owned_daemon()
-	for child: Object in _children.duplicate():
+	var remaining := _children.duplicate()
+	for child: Object in remaining:
 		child.kill()
+	for child: Object in remaining:
+		await _wait_exit(child, shutdown_timeout)
 	_closing = false
 	_wake.emit()
 

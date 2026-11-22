@@ -67,13 +67,13 @@ func TotalDurationSecs(tracks []Track) int {
 // For local files, embedded tags (ID3v2, Vorbis, MP4) are tried first,
 // falling back to "Artist - Title" filename parsing.
 func TrackFromPath(path string) Track {
-	if IsURL(path) {
+	if IsURL(path) || strings.HasPrefix(path, "ssh://") {
 		return trackFromURL(path)
 	}
 	return readTags(path)
 }
 
-// trackFromURL creates a Track from an HTTP/HTTPS URL, extracting a clean
+// trackFromURL creates a Track from a remote URL, extracting a clean
 // display title from the URL path (ignoring query parameters).
 func trackFromURL(rawURL string) Track {
 	t := Track{Path: rawURL, Stream: true}

@@ -12,6 +12,7 @@ var _generation := 0
 var _loaded_track: Dictionary = {}
 var _is_active := false
 var _synced := false
+var _can_seek_lines := false
 var _scroll_tween: Tween
 
 var _title: Label
@@ -191,9 +192,12 @@ func _on_state(_state: Dictionary) -> void:
 	if LyricsLogic.track_changed(track, _loaded_track):
 		_load()
 		return
-	_update_controls()
-	_sync_timer()
-	_update_active()
+	if _can_seek_lines != (_synced and Store.state.get("seekable") == true):
+		_rebuild()
+	else:
+		_update_controls()
+		_sync_timer()
+		_update_active()
 
 
 func _load() -> void:
@@ -230,11 +234,11 @@ func _rebuild() -> void:
 	_buttons.clear()
 	_active = -1
 	_synced = LyricsLogic.is_synced(_lines, Store.track().get("realtime") == true)
+	_can_seek_lines = _synced and Store.state.get("seekable") == true
 	for i in _lines.size():
 		var text := Util.text(_lines[i].get("text"), "")
-		var interactive: bool = _synced and Store.state.get("seekable") == true
 		var node: Control
-		if interactive:
+		if _can_seek_lines:
 			var b := Button.new()
 			b.flat = true
 			b.text = text
@@ -351,7 +355,7 @@ func _update_controls() -> void:
 	_offset_plus.disabled = offset >= LyricsLogic.MAX_OFFSET_MS
 	_offset_label.text = LyricsLogic.offset_text(offset)
 	if _synced:
-		_status.text = "Synced lyrics · select a line to seek"
+		_status.text = "Synced lyrics · select a line to seek" if _can_seek_lines else "Synced lyrics"
 	elif Store.track().get("realtime") == true:
 		_status.text = "Live stream · lyrics shown without timing"
 	else:

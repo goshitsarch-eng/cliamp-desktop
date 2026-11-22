@@ -22,6 +22,7 @@ func apply(p: Palette) -> void:
 
 static func build(p: Palette) -> Theme:
 	var t := Theme.new()
+	t.default_font = UiKit.text_font()
 	t.default_font_size = 14
 	t.set_color("font_color", "Label", p.foreground)
 	t.set_color("font_color", "Button", p.foreground)

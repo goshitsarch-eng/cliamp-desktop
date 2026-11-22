@@ -25,3 +25,24 @@ func isSubsonicStreamPath(p string) bool {
 		strings.HasSuffix(p, "/rest/download") ||
 		strings.HasSuffix(p, "/rest/download.view")
 }
+
+// FavoritePathKey preserves the playback location while comparing Subsonic
+// recordings independently of the fresh authentication salt on each request.
+func FavoritePathKey(path string) string {
+	if !strings.Contains(path, "?") {
+		return path
+	}
+	u, err := url.Parse(path)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || !isSubsonicStreamPath(u.Path) {
+		return path
+	}
+	params := u.Query()
+	if params.Get("id") == "" {
+		return path
+	}
+	params.Del("t")
+	params.Del("s")
+	params.Del("p")
+	u.RawQuery = params.Encode()
+	return u.String()
+}

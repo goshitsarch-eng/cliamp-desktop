@@ -3,59 +3,85 @@
 package player
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"os/exec"
-	"strings"
+	"syscall"
+	"time"
 )
 
-// ListAudioDevices lists audio output devices via PowerShell on Windows.
-func ListAudioDevices() ([]AudioDevice, error) {
-	// Use Get-CimInstance Win32_SoundDevice for basic sound card enumeration.
-	script := `Get-CimInstance Win32_SoundDevice | ForEach-Object { $_.Name + '|' + $_.DeviceID }`
-	out, err := exec.Command("powershell", "-NoProfile", "-Command", script).Output()
-	if err != nil {
-		return nil, fmt.Errorf("powershell: %w", err)
-	}
+var errWindowsAudioTools = errors.New("choose your output in Windows Settings > System > Sound, or install AudioDeviceCmdlets or NirCmd to switch it here")
 
+const listWindowsAudio = `
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$ErrorActionPreference = 'Stop'
+if (Get-Command Get-AudioDevice -ErrorAction SilentlyContinue) {
+    $devices = @(Get-AudioDevice -List | Where-Object Type -eq Playback | ForEach-Object {
+        @{Name=$_.ID; Description=$_.Name; Active=$_.Default}
+    })
+} elseif (Get-Command nircmd.exe -CommandType Application -ErrorAction SilentlyContinue) {
+    $devices = @(Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render' |
+        Where-Object { $_.GetValue('DeviceState') -eq 1 } | ForEach-Object {
+            $props = Get-ItemProperty -LiteralPath ($_.PSPath + '\Properties')
+            $name = $props.'{a45c254e-df1c-4efd-8020-67d146a850e0},2'
+            if ($name) { @{Name=$name; Description=$name} }
+        })
+} else { exit 3 }
+ConvertTo-Json -InputObject $devices -Compress
+`
+
+const switchWindowsAudio = `
+$ErrorActionPreference = 'Stop'
+if (Get-Command Set-AudioDevice -ErrorAction SilentlyContinue) {
+    Set-AudioDevice -ID $env:CLIAMP_SELECTED_ENDPOINT -DefaultOnly | Out-Null
+} elseif (Get-Command nircmd.exe -CommandType Application -ErrorAction SilentlyContinue) {
+    & nircmd.exe setdefaultsounddevice $env:CLIAMP_SELECTED_ENDPOINT
+    exit $LASTEXITCODE
+} else { exit 3 }
+`
+
+func windowsAudioCommand(script, device string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	cmd.Env = append(os.Environ(), "CLIAMP_SELECTED_ENDPOINT="+device)
+	out, err := cmd.Output()
+	var status *exec.ExitError
+	if errors.As(err, &status) && status.ExitCode() == 3 {
+		return nil, errWindowsAudioTools
+	}
+	return out, err
+}
+
+// ListAudioDevices enumerates playback endpoints using identifiers accepted by
+// the installed switcher. A sound controller's hardware ID is not an endpoint.
+func ListAudioDevices() ([]AudioDevice, error) {
+	out, err := windowsAudioCommand(listWindowsAudio, "")
+	if err != nil {
+		return nil, fmt.Errorf("audio outputs: %w", err)
+	}
 	var devices []AudioDevice
-	for i, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		name, id, _ := strings.Cut(line, "|")
-		devices = append(devices, AudioDevice{
-			Index:       i,
-			Name:        strings.TrimSpace(id),
-			Description: strings.TrimSpace(name),
-			Active:      false,
-		})
+	if err := json.Unmarshal(out, &devices); err != nil {
+		return nil, fmt.Errorf("read Windows audio outputs: %w", err)
+	}
+	for i := range devices {
+		devices[i].Index = i
 	}
 	return devices, nil
 }
 
-// PrepareAudioDevice is a no-op on Windows — the system default output
-// device is used. Returns a no-op cleanup.
-func PrepareAudioDevice(device string) func() {
-	return func() {}
-}
+// PrepareAudioDevice uses the Windows system default for new streams.
+func PrepareAudioDevice(device string) func() { return func() {} }
 
-// SwitchAudioDevice changes the Windows system default output device.
-// The running audio stream keeps its original device; the change
-// takes full effect on the next app restart.
-func SwitchAudioDevice(deviceName string) error {
-	script := fmt.Sprintf(
-		`Get-AudioDevice -PlaybackCommunication | Out-Null; `+
-			`Set-AudioDevice -ID '%s' -ErrorAction Stop`,
-		strings.ReplaceAll(deviceName, "'", "''"),
-	)
-	if out, err := exec.Command("powershell", "-NoProfile", "-Command", script).CombinedOutput(); err != nil {
-		// AudioDeviceCmdlets may not be installed; fall back to nircmd.
-		cmd := exec.Command("nircmd", "setdefaultsounddevice", deviceName)
-		if out2, err2 := cmd.CombinedOutput(); err2 != nil {
-			return fmt.Errorf("failed to set output device (install AudioDeviceCmdlets or nircmd): %s / %s",
-				strings.TrimSpace(string(out)), strings.TrimSpace(string(out2)))
-		}
+// SwitchAudioDevice changes the default Windows playback endpoint. An open
+// stream can continue on the previous device until the engine restarts.
+func SwitchAudioDevice(device string) error {
+	if _, err := windowsAudioCommand(switchWindowsAudio, device); err != nil {
+		return fmt.Errorf("switch Windows playback output: %w", err)
 	}
 	return nil
 }

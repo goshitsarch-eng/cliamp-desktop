@@ -48,6 +48,7 @@ var _fs_view: AnsiView
 var _fs_caption: Label
 var _fs_cancel: Button
 var _fs_apply: Button
+var _fs_next: Button
 var _fs_info_btn: Button
 var _fs_title: Label
 var _fs_detail: Label
@@ -211,6 +212,7 @@ func restore_appearance() -> void:
 	while _restoring:
 		await get_tree().create_timer(0.02).timeout
 	_restoring = true
+	_update_chrome()
 	while _changing:
 		await get_tree().create_timer(0.02).timeout
 	if _original_mode >= 0:
@@ -371,7 +373,7 @@ func _on_theme_selected(position: int) -> void:
 
 
 func _select(operation: String, params: Dictionary) -> void:
-	if _changing or _theme.is_empty() or _mode_index < 0:
+	if _changing or _restoring or _theme.is_empty() or _mode_index < 0:
 		_sync_pickers()
 		return
 	if _preview_supported() and not _previewing():
@@ -395,10 +397,11 @@ func _select(operation: String, params: Dictionary) -> void:
 
 
 func _cancel_preview() -> void:
-	if _changing:
+	if _changing or _restoring:
 		return
 	await restore_appearance()
 	_changing = true
+	_update_chrome()
 	_last_frame = ""
 	await _read_frame()
 	_changing = false
@@ -407,7 +410,7 @@ func _cancel_preview() -> void:
 
 
 func _apply_preview() -> void:
-	if _changing or not _previewing():
+	if _changing or _restoring or not _previewing():
 		return
 	_changing = true
 	_update_chrome()
@@ -433,7 +436,7 @@ func _on_state(_state: Dictionary) -> void:
 
 
 func _update_chrome() -> void:
-	var busy := _changing
+	var busy := _changing or _restoring
 	_mode_picker.disabled = busy
 	_theme_picker.disabled = busy
 	_next_btn.disabled = busy
@@ -453,6 +456,7 @@ func _update_chrome() -> void:
 		_fs_apply.visible = _previewing()
 		_fs_cancel.disabled = busy
 		_fs_apply.disabled = busy
+		_fs_next.disabled = busy
 
 
 # Fullscreen
@@ -490,7 +494,8 @@ func _open_fullscreen() -> void:
 	top_row.add_child(_fs_apply)
 	_fs_info_btn = Icons.button("visibility", "Hide track information (T)", _toggle_info)
 	top_row.add_child(_fs_info_btn)
-	top_row.add_child(Icons.button("graphic_eq", "Next visualizer", func() -> void: _select("desktop.vis", {"name": "next"})))
+	_fs_next = Icons.button("graphic_eq", "Next visualizer", func() -> void: _select("desktop.vis", {"name": "next"}))
+	top_row.add_child(_fs_next)
 	top_row.add_child(Icons.button("fullscreen_exit", "Exit fullscreen visualizer", _close_fullscreen))
 
 	_fs_view = AnsiView.new()

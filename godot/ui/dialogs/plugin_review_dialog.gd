@@ -16,13 +16,14 @@ static func open(host: Node, review: Dictionary) -> bool:
 	var info := Label.new()
 	info.text = "Source: %s\nSHA-256: %s" % [review.get("source", ""), review.get("sha256", "")]
 	info.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
-	info.custom_minimum_size.x = 100
+	info.custom_minimum_size.x = box.custom_minimum_size.x
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(info)
 	var perms := Label.new()
 	perms.text = "Declared permissions: %s" % (", ".join(permissions) if not permissions.is_empty() else "none")
 	box.add_child(perms)
 	var implicit := FormKit.muted(str(review.get("implicit_access", "")), 12)
+	implicit.custom_minimum_size.x = box.custom_minimum_size.x
 	box.add_child(implicit)
 
 	var code := TextEdit.new()

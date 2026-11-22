@@ -181,7 +181,16 @@ func _sync_playback() -> void:
 	var enabled := Store.connected
 	_mono.disabled = not enabled
 	_speed.disabled = not enabled
-	_device_label.text = Util.text(Store.state.get("device"), "System default")
+	_sync_device_label()
+
+
+func _sync_device_label() -> void:
+	var current := Util.text(Store.state.get("device"))
+	_device_label.text = Util.text(current, "System default")
+	for device in _devices:
+		if device.get("name") == current or (current.is_empty() and device.get("active") == true):
+			_device_label.text = Util.text(device.get("description"), Util.text(device.get("name"), "System default"))
+			break
 
 
 func _on_connection_changed() -> void:
@@ -207,13 +216,18 @@ func _load_devices() -> void:
 		FormKit.set_error(_device_error, data["error"]["message"])
 		return
 	FormKit.set_error(_device_error, "")
-	_devices = Util.objects(data.get("devices"))
-	_render_devices()
+	var devices := Util.objects(data.get("devices"))
+	if devices != _devices:
+		_devices = devices
+		_render_devices()
+	else:
+		_sync_device_label()
 
 
 func _render_devices() -> void:
 	if _device_list == null:
 		return
+	_sync_device_label()
 	for child in _device_list.get_children():
 		_device_list.remove_child(child)
 		child.queue_free()
@@ -228,12 +242,12 @@ func _device_row(device: Dictionary) -> Control:
 	var palette := ThemeBuilder.palette
 	row.add_child(Icons.label("radio_button_checked" if active else "radio_button_off", 18, palette.accent if active else palette.muted))
 	var button := Button.new()
-	button.text = name
+	button.text = Util.text(device.get("description"), name)
 	button.flat = true
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.clip_text = true
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	button.accessibility_name = "Use %s for audio output" % name
+	button.accessibility_name = "Use %s for audio output" % button.text
 	button.pressed.connect(_use_device.bind(name))
 	row.add_child(button)
 	return row

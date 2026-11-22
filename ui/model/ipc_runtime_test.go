@@ -379,7 +379,7 @@ func TestV2ProviderLoadIndex(t *testing.T) {
 // A device job records the output device for the snapshot. Only a switch
 // saves the device in the config. The list text feeds cliamp device list.
 func TestV2DeviceResponseRecordsDevice(t *testing.T) {
-	devices := []player.AudioDevice{{Name: "speakers"}, {Name: "headphones", Active: true}}
+	devices := []player.AudioDevice{{Name: "speakers"}, {Name: "headphones", Description: "USB Headphones", Active: true}}
 	for _, tc := range []struct {
 		name       string
 		response   ipc.Response
@@ -402,7 +402,7 @@ func TestV2DeviceResponseRecordsDevice(t *testing.T) {
 		})
 	}
 	list := deviceListResponse(devices)
-	if want := "  speakers\n* headphones"; list.Device != want || len(list.Devices) != 2 || !list.Devices[1].Active {
+	if want := "  speakers\n* headphones"; list.Device != want || len(list.Devices) != 2 || list.Devices[1].Description != "USB Headphones" || !list.Devices[1].Active {
 		t.Fatalf("device list = %q %+v, want %q", list.Device, list.Devices, want)
 	}
 }

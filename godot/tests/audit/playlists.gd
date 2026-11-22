@@ -21,8 +21,9 @@ func _create(name: String) -> void:
 		return
 	var d: Window = ds.back()
 	var edit := _dialog_edit(d)
-	edit.text = name
-	(d as AcceptDialog).get_ok_button().pressed.emit()
+	await click(edit)
+	edit.get_viewport().push_text_input(name)
+	await click((d as AcceptDialog).get_ok_button())
 	await wait(0.8)
 	var still := dialogs()
 	print("create '%s': dialog still open=%s" % [name.left(30), not still.is_empty()])
@@ -68,8 +69,10 @@ func run() -> void:
 		if not ds.is_empty():
 			var edit := _dialog_edit(ds.back())
 			print("rename prefilled: ", edit.text)
-			edit.text = "Road trip 2"
-			(ds.back() as AcceptDialog).get_ok_button().pressed.emit()
+			await click(edit)
+			edit.select_all()
+			edit.get_viewport().push_text_input("Road trip 2")
+			await click((ds.back() as AcceptDialog).get_ok_button())
 			await wait(0.8)
 		print("after rename: ", (await _names()).map(func(n: String) -> String: return n.left(24)))
 	# open the playlist card
@@ -92,7 +95,7 @@ func run() -> void:
 		await shot_dialogs("delete_confirm")
 		var ds2 := dialogs()
 		if not ds2.is_empty():
-			(ds2.back() as AcceptDialog).get_ok_button().pressed.emit()
+			await click((ds2.back() as AcceptDialog).get_ok_button())
 			await wait(0.8)
 		print("after delete: ", (await _names()).map(func(n: String) -> String: return n.left(24)))
 	await shot("playlists_final")

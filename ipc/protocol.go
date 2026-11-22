@@ -185,6 +185,7 @@ type HistoryInfo struct {
 }
 
 type DeviceInfo struct {
-	Name   string `json:"name"`
-	Active bool   `json:"active"`
+	Description string `json:"description,omitempty"`
+	Name        string `json:"name"`
+	Active      bool   `json:"active"`
 }

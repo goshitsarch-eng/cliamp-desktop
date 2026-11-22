@@ -7,7 +7,10 @@ func run() -> void:
 	await Store.run("sources.load", {"args": [OS.get_environment("SHOT_WAV")], "name": "replace", "play": true, "if_revision": Store.state.get("playlist_revision", 0)})
 	await wait(1.5)
 	check(Store.connected, "connected before kill")
-	OS.execute("taskkill", ["/F", "/IM", "cliamp.exe"])
+	if not Backend.owns_daemon():
+		check(false, "disconnect test needs a private, app-owned engine")
+		return
+	Backend._daemon.kill()
 	for i in 20:
 		await wait(1.0)
 		if not Store.connected:
@@ -28,8 +31,28 @@ func run() -> void:
 			await wait(1.0)
 			if Store.connected:
 				break
-		print("connected after Retry: ", Store.connected)
+		check(Store.connected, "Retry recovers the engine")
 		await shot("reconnected")
+	check(Store.connected, "engine is available again")
 	Store.navigate("queue")
 	await wait(1.0)
+	check(by_name("Select tracks") != null, "queue controls return after reconnect")
 	await shot("queue_after")
+
+	# Hold the automatic retry until after the explicit button has been exercised.
+	Backend.reconnect_delay = 20.0
+	Backend._daemon.kill()
+	for i in 50:
+		if not Store.connected:
+			break
+		await wait(0.1)
+	check(not Store.connected, "offline state available before manual retry")
+	for page in Pages.LIST:
+		await click_name(page["label"])
+		await wait(0.1)
+	await click_name("Retry connection")
+	for i in 60:
+		if Store.connected:
+			break
+		await wait(0.1)
+	check(Store.connected, "explicit Retry reconnects before the scheduled delay")

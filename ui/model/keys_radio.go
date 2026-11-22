@@ -215,6 +215,6 @@ func trackFavorited(track playlist.Track, favSet map[string]struct{}, stations *
 			return stations.Contains(station.URL)
 		}
 	}
-	_, ok := favSet[track.Path]
+	_, ok := favSet[playlist.FavoritePathKey(track.Path)]
 	return ok
 }

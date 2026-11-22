@@ -26,7 +26,7 @@ def msys_to_windows(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--version', default='0.1.0')
+    parser.add_argument('--version', default='0.1.1')
     options = parser.parse_args()
     version = options.version.lstrip('v')
     if not re.fullmatch(r'[0-9]+(\.[0-9]+){0,3}(-[A-Za-z0-9._-]+)?', version):

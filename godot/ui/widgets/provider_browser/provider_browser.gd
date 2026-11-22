@@ -568,7 +568,7 @@ func _track_action(action: String, track: Dictionary) -> void:
 		"related":
 			await _related(track)
 		"details":
-			await _details(track)
+			await TrackDetailsDialog.open(self, track)
 
 
 func _play_visible_tracks(track: Dictionary) -> void:
@@ -643,39 +643,6 @@ func _replace_with_visible(track: Dictionary) -> String:
 	if Backend.failed(replaced):
 		return replaced["error"]["message"]
 	return ""
-
-
-func _details(track: Dictionary) -> void:
-	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(460, 0)
-	var fields := {
-		"title": "Title", "artist": "Artist", "album": "Album", "genre": "Genre", "year": "Year",
-		"track_number": "Track number", "station": "Station", "path": "Location",
-	}
-	for key: String in fields:
-		var value := Util.text(track.get(key))
-		if value.is_empty():
-			continue
-		var name := Label.new()
-		name.text = fields[key]
-		name.add_theme_font_size_override("font_size", 11)
-		name.add_theme_color_override("font_color", ThemeBuilder.palette.muted)
-		box.add_child(name)
-		var text := RichTextLabel.new()
-		text.fit_content = true
-		text.selection_enabled = true
-		text.context_menu_enabled = true
-		text.bbcode_enabled = false
-		text.scroll_active = false
-		text.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
-		text.text = value
-		text.add_theme_color_override("default_color", ThemeBuilder.palette.foreground)
-		text.accessibility_name = fields[key]
-		box.add_child(text)
-		var gap := Control.new()
-		gap.custom_minimum_size = Vector2(0, 8)
-		box.add_child(gap)
-	await Dialogs.open(self, "Track details", box, ["Close"], Vector2i(500, 0))
 
 
 # Rendering
@@ -1112,6 +1079,7 @@ func _toggle_album_favorite(item: Dictionary) -> void:
 
 func _menu_button(tooltip: String) -> MenuButton:
 	var m := MenuButton.new()
+	m.focus_mode = Control.FOCUS_ALL
 	m.flat = true
 	m.theme_type_variation = "IconButton"
 	m.text = Icons.glyph("more_vert")

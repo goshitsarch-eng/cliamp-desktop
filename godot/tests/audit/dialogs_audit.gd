@@ -18,6 +18,13 @@ func _probe(name: String, opener: Callable, win_wait := 0.8) -> void:
 		if d.size.y > 900 or d.size.x > 1200:
 			note("dialog '%s' is oversized: %s" % [name, d.size])
 		lint("dialog-" + name, d)
+		if not d.unresizable:
+			var normal := d.size
+			for target: Vector2i in [Vector2i(1, 1), Vector2i(1024, 620), Vector2i(1280, 600), Vector2i(640, 960), normal]:
+				d.size = target
+				await frames(3)
+				lint("dialog-%s@%s" % [name, d.size], d)
+				print("resize ", name, " requested ", target, " actual ", d.size)
 	await shot_dialogs(name)
 	# Escape closes a dialog.
 	await close_dialogs()

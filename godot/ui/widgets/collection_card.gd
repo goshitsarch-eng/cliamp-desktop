@@ -31,6 +31,8 @@ func _init(data: Dictionary, kind: String, subtitle: String, connected: bool, ha
 	focus.set_border_width_all(2)
 	focus.set_corner_radius_all(14)
 	add_theme_stylebox_override("focus", focus)
+	focus_entered.connect(queue_redraw)
+	focus_exited.connect(queue_redraw)
 	var name_text := Util.text(data.get("name"), "Untitled")
 	accessibility_name = name_text
 	tooltip_text = name_text
@@ -56,6 +58,7 @@ func _init(data: Dictionary, kind: String, subtitle: String, connected: bool, ha
 	head.add_child(title)
 	if has_menu:
 		_menu = MenuButton.new()
+		_menu.focus_mode = Control.FOCUS_ALL
 		_menu.flat = true
 		_menu.theme_type_variation = "IconButton"
 		_menu.text = Icons.glyph("more_horiz")
@@ -104,3 +107,8 @@ func _gui_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("ui_accept"):
 		activated.emit(item)
 		accept_event()
+
+
+func _draw() -> void:
+	if has_focus():
+		draw_style_box(get_theme_stylebox("focus"), Rect2(Vector2.ZERO, size))

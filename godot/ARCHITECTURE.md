@@ -1,7 +1,6 @@
 # Godot client architecture
 
-A GDScript port of the Flutter app in `../desktop/lib/src/`. The Go `cliamp`
-engine is unchanged; the client drives it through `autoload/backend.gd`.
+The desktop UI runs from `ui/main.tscn`. Its GDScript client drives the shared Go music engine through `autoload/backend.gd`.
 
 ## Layers
 

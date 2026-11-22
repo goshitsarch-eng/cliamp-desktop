@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/bjarneo/cliamp/internal/httpclient"
+	"github.com/bjarneo/cliamp/internal/sshurl"
 	"github.com/bjarneo/cliamp/internal/ytdlcookies"
 	"github.com/bjarneo/cliamp/playlist"
 
@@ -116,6 +117,13 @@ func argsContext(ctx context.Context, args []string) (Result, error) {
 	var files []string
 
 	for _, arg := range args {
+		if strings.HasPrefix(arg, "ssh://") {
+			if _, err := sshurl.Parse(arg); err != nil {
+				return r, fmt.Errorf("loading SSH source: %w", err)
+			}
+			files = append(files, arg)
+			continue
+		}
 		if playlist.IsURL(arg) {
 			if classifyRemote(arg) != kindStream || sniffFeedURL(ctx, arg) {
 				r.Pending = append(r.Pending, arg)

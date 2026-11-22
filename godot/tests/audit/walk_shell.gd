@@ -77,24 +77,19 @@ func run() -> void:
 	await key(KEY_ESCAPE)
 	await wait(0.3)
 	await key(KEY_SPACE)
-	await wait(0.8)
-	check(Store.is_playing(), "Space starts playback")
+	check(await _state_reaches(Store.is_playing), "Space starts playback")
 	await key(KEY_SPACE)
-	await wait(0.6)
-	check(not Store.is_playing(), "Space pauses")
+	check(await _state_reaches(func() -> bool: return Store.state.get("state") == "paused"), "Space pauses")
 
 	# Player bar
 	var vol0 := Util.number(Store.state.get("volume"))
 	await key(KEY_DOWN, true)
-	await wait(0.5)
-	check(Util.number(Store.state.get("volume")) < vol0, "Ctrl+Down lowers volume")
+	check(await _state_reaches(func() -> bool: return Util.number(Store.state.get("volume")) < vol0), "Ctrl+Down lowers volume")
 	await key(KEY_UP, true)
 	await click_name("Play")
-	await wait(0.8)
-	check(Store.is_playing(), "Play button plays")
+	check(await _state_reaches(Store.is_playing), "Play button plays")
 	await click_name("Pause")
-	await wait(0.6)
-	check(not Store.is_playing(), "Pause button pauses")
+	check(await _state_reaches(func() -> bool: return Store.state.get("state") == "paused"), "Pause button pauses")
 	await click_name("Shuffle")
 	await wait(0.5)
 	check(Store.state.get("shuffle") == true, "shuffle on (%s)" % str(Store.state))
@@ -130,3 +125,10 @@ func run() -> void:
 	await wait(0.6)
 	check(Store.current_page == "lyrics", "lyrics button opens lyrics")
 	await shot("lyrics_nolyrics")
+
+
+func _state_reaches(condition: Callable) -> bool:
+	var deadline := Time.get_ticks_msec() + 5000
+	while not condition.call() and Time.get_ticks_msec() < deadline:
+		await wait(0.05)
+	return condition.call()

@@ -17,7 +17,7 @@ else
 fi
 export GOPROXY="${GOPROXY:-https://proxy.golang.org,direct}"
 
-go build -trimpath -ldflags='-s -w -X main.version=0.1.0-flatpak' -o /tmp/cliamp-engine .
+go build -trimpath -ldflags='-s -w -X main.version=0.1.1-flatpak' -o /tmp/cliamp-engine .
 
 # Godot reads export templates from its data directory, named by version.
 godot_bin=$(set -- sdk/godot/Godot_v*_linux.x86_64; echo "$1")

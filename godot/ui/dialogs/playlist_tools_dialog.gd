@@ -64,6 +64,9 @@ func _target() -> Dictionary:
 func _set_busy(busy: bool) -> void:
 	_busy = busy
 	_progress.visible = busy
+	if busy:
+		for control in _body.find_children("*", "BaseButton", true, false):
+			(control as BaseButton).disabled = true
 	var w := get_window()
 	if w is AcceptDialog:
 		(w as AcceptDialog).get_ok_button().disabled = busy
@@ -100,7 +103,6 @@ func _refresh() -> void:
 			_capabilities = caps
 			_directories = Util.objects(dirs.get("directories"))
 			_error = ""
-			_render()
 			var page: Variant = {}
 			if caps.get("replace") == true:
 				var params := _target()
@@ -130,9 +132,11 @@ func _refresh() -> void:
 
 
 func _write(operation: String, params := {}) -> void:
+	if _busy:
+		return
 	_set_busy(true)
 	_error = ""
-	_render()
+	_error_label.hide()
 	var merged := _target()
 	merged.merge(params, true)
 	var result: Variant = await _call(operation, merged)
@@ -294,18 +298,14 @@ func _render_tracks(muted: Color) -> void:
 
 
 func _add_directory() -> void:
-	var paths := await Dialogs.pick_paths(DisplayServer.FILE_DIALOG_MODE_OPEN_DIR, "Add directory source")
-	if not _closed and is_inside_tree():
-		get_window().grab_focus()
+	var paths := await Dialogs.pick_paths(self, DisplayServer.FILE_DIALOG_MODE_OPEN_DIR, "Add directory source")
 	if _closed or paths.is_empty():
 		return
 	await _write("playlist.dirs.add", {"path": paths[0]})
 
 
 func _add_files() -> void:
-	var paths := await Dialogs.pick_paths(DisplayServer.FILE_DIALOG_MODE_OPEN_FILES, "Add to playlist", PackedStringArray(AddSourceDialog.AUDIO_FILTERS))
-	if not _closed and is_inside_tree():
-		get_window().grab_focus()
+	var paths := await Dialogs.pick_paths(self, DisplayServer.FILE_DIALOG_MODE_OPEN_FILES, "Add to playlist", PackedStringArray(AddSourceDialog.AUDIO_FILTERS))
 	if _closed or paths.is_empty():
 		return
 	await _write("playlist.import", {"args": Array(paths)})

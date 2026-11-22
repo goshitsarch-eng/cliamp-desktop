@@ -12,6 +12,8 @@ ssh://hostname/absolute/path/to/file.mp3
 
 The player runs `ssh hostname cat /path/to/file.mp3` and sends the output to the audio decoder. It uses no temporary files or filesystem mounts.
 
+To open a single recording, paste its SSH URL into **Add music** in Cliamp Desktop or pass it directly to `cliamp`. Paths can contain URL-encoded spaces.
+
 ## Creating SSH Playlists
 
 Use `--ssh HOST` with `playlist create` to scan a remote directory. HOST can be `host`, `user@host`, or `host:port`:

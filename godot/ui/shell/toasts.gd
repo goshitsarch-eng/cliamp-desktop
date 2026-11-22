@@ -56,7 +56,10 @@ func show_notice(message: String, is_error := false) -> void:
 	label.text = message
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var max_w := minf(520.0, maxf(160.0, size.x - 80.0))
-	label.custom_minimum_size = Vector2(max_w, 0)
+	var font := get_theme_font("font", "Label")
+	var font_size := get_theme_font_size("font_size", "Label")
+	var message_width := font.get_multiline_string_size(message, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	label.custom_minimum_size.x = minf(max_w, ceilf(message_width))
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.add_theme_color_override("font_color", fg)
 	if message.length() > 220 or message.count("\n") > 3:
@@ -75,8 +78,11 @@ func show_notice(message: String, is_error := false) -> void:
 	center.add_child(panel)
 	center.set_meta("serial", Time.get_ticks_usec())
 	_stack.add_child(center)
-	var timer := get_tree().create_timer(8.0 if is_error else 4.0)
-	timer.timeout.connect(func() -> void: _dismiss(center))
+	var timer := Timer.new()
+	timer.one_shot = true
+	center.add_child(timer)
+	timer.timeout.connect(_dismiss.bind(center))
+	timer.start(8.0 if is_error else 4.0)
 
 
 func _dismiss(toast: Node) -> void:

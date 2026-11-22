@@ -1,7 +1,7 @@
 ; Inno Setup script for the unofficial Cliamp Desktop build. Build it with
 ; packaging/windows/build.py, which stages the engine DLLs first.
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.1.1"
 #endif
 #define BundleDir "..\..\godot\build\windows"
 

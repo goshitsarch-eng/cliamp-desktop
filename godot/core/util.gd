@@ -77,4 +77,4 @@ static func basename(path: String) -> String:
 
 ## Nearest ancestor of `node` that is a Window, for parenting dialogs.
 static func host(node: Node) -> Node:
-	return node.get_tree().root
+	return node.get_window()

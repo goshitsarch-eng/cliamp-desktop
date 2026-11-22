@@ -1,8 +1,10 @@
 package fileutil
 
 import (
+	"bytes"
 	"crypto/rand"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -10,16 +12,16 @@ import (
 // WriteFileAtomic replaces path only after data has been written and synced.
 // Preserves destination symlinks, creating missing target files.
 func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
-	return replaceFileAtomic(path, data, perm, true)
+	return replaceFileAtomic(path, bytes.NewReader(data), perm, true)
 }
 
 // WriteFileAtomicInExistingDir replaces path without changing its parent
 // directory's permissions. The parent directory must already exist.
 func WriteFileAtomicInExistingDir(path string, data []byte, perm os.FileMode) error {
-	return replaceFileAtomic(path, data, perm, false)
+	return replaceFileAtomic(path, bytes.NewReader(data), perm, false)
 }
 
-func replaceFileAtomic(path string, data []byte, perm os.FileMode, secureDir bool) (err error) {
+func replaceFileAtomic(path string, source io.Reader, perm os.FileMode, secureDir bool) (err error) {
 	originalDir := filepath.Dir(path)
 
 	// Harden only the original directory, not an external symlink target's parent.
@@ -71,7 +73,7 @@ func replaceFileAtomic(path string, data []byte, perm os.FileMode, secureDir boo
 			return fmt.Errorf("set temporary file permissions: %w", err)
 		}
 	}
-	if _, err = tmp.Write(data); err != nil {
+	if _, err = io.Copy(tmp, source); err != nil {
 		return fmt.Errorf("write temporary file: %w", err)
 	}
 	if err = tmp.Sync(); err != nil {

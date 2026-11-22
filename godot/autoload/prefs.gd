@@ -44,6 +44,8 @@ func set_ui_scale(value: float) -> void:
 func save() -> void:
 	var win := get_window()
 	var cfg := ConfigFile.new()
+	if FileAccess.file_exists(PATH):
+		cfg.load(PATH) # Keep the last windowed geometry while maximized or minimized.
 	_last_visible_mode = persisted_mode(win.mode, _last_visible_mode)
 	cfg.set_value("window", "mode", _last_visible_mode)
 	cfg.set_value("window", "screen", win.current_screen)
@@ -66,14 +68,23 @@ func _restore() -> void:
 	var cfg := ConfigFile.new()
 	var win := get_window()
 	if cfg.load(PATH) == OK:
-		ui_scale = clampf(cfg.get_value("ui", "scale", 1.0), 0.75, 2.0)
-		var screen: int = cfg.get_value("window", "screen", 0)
-		win.current_screen = clampi(screen, 0, DisplayServer.get_screen_count() - 1)
-		if cfg.has_section_key("window", "size"):
-			win.size = cfg.get_value("window", "size")
-		if cfg.has_section_key("window", "position"):
-			win.position = _on_screen(cfg.get_value("window", "position"), win.size)
-		win.mode = persisted_mode(cfg.get_value("window", "mode", Window.MODE_WINDOWED), Window.MODE_WINDOWED)
+		var scale: Variant = cfg.get_value("ui", "scale", 1.0)
+		if (scale is float or scale is int) and is_finite(float(scale)):
+			ui_scale = clampf(scale, 0.75, 2.0)
+		var screen: Variant = cfg.get_value("window", "screen", 0)
+		if screen is int:
+			win.current_screen = clampi(screen, 0, DisplayServer.get_screen_count() - 1)
+		var saved_size: Variant = cfg.get_value("window", "size", win.size)
+		if saved_size is Vector2i and saved_size.x > 0 and saved_size.y > 0:
+			var usable := DisplayServer.screen_get_usable_rect(win.current_screen)
+			if usable.has_area():
+				win.size = saved_size.min(usable.size)
+		var pos: Variant = cfg.get_value("window", "position", win.position)
+		if pos is Vector2i:
+			win.position = _on_screen(pos, win.size)
+		var mode: Variant = cfg.get_value("window", "mode", Window.MODE_WINDOWED)
+		if mode is int and mode >= Window.MODE_WINDOWED and mode <= Window.MODE_EXCLUSIVE_FULLSCREEN:
+			win.mode = persisted_mode(mode, Window.MODE_WINDOWED)
 		_last_visible_mode = win.mode
 	_apply_scale()
 
@@ -86,8 +97,12 @@ func _apply_scale() -> void:
 
 ## Keeps a restored window inside a connected screen.
 func _on_screen(pos: Vector2i, size: Vector2i) -> Vector2i:
-	for i in DisplayServer.get_screen_count():
-		var rect := Rect2i(DisplayServer.screen_get_position(i), DisplayServer.screen_get_size(i))
-		if rect.intersects(Rect2i(pos, size)):
-			return pos
-	return DisplayServer.screen_get_position(0) + Vector2i(64, 64)
+	var screen := DisplayServer.get_screen_from_rect(Rect2i(pos, size))
+	if screen < 0:
+		screen = get_window().current_screen
+	var rect := DisplayServer.screen_get_usable_rect(screen)
+	if not rect.has_area():
+		return pos
+	var title_height := maxi(0, get_window().position.y - get_window().get_position_with_decorations().y)
+	var top_left := rect.position + Vector2i(0, title_height)
+	return pos.clamp(top_left, (rect.end - size).max(top_left))

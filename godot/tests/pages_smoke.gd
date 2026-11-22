@@ -25,4 +25,5 @@ func _ready() -> void:
 	if view.grid_size().x < 10:
 		failures += 1
 	print("pages_smoke: %d failure(s)" % failures)
+	await Backend.close()
 	get_tree().quit(failures)

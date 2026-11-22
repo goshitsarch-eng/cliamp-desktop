@@ -79,7 +79,7 @@ func (m *Model) syncTrackFavoriteCmd(track playlist.Track, favorite bool) tea.Cm
 	if m.favSync == nil {
 		m.favSync = &favorites.SyncQueue{}
 	}
-	run := m.favSync.Enqueue(track.Path, func() error {
+	run := m.favSync.Enqueue(playlist.FavoritePathKey(track.Path), func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), trackFavoriteSyncTimeout)
 		defer cancel()
 		return fav.SetTrackFavorite(ctx, track, favorite)

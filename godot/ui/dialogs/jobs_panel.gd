@@ -7,6 +7,8 @@ var _list: VBoxContainer
 var _summary: Label
 var _error: Label
 var _timer: Timer
+var _empty: Label
+var _rows: Dictionary[String, JobRow] = {}
 
 
 static func open(host: Node) -> void:
@@ -42,6 +44,11 @@ func _init() -> void:
 	_list = VBoxContainer.new()
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_list)
+	_empty = Label.new()
+	_empty.text = "Provider loading, downloads, and sign-in will appear here."
+	_empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_empty.custom_minimum_size.x = 460
+	_list.add_child(_empty)
 
 
 func _ready() -> void:
@@ -55,10 +62,9 @@ func _ready() -> void:
 
 
 func _tick() -> void:
-	for job: BackendJob in Backend.current_jobs():
-		if job.is_active():
-			_rebuild(Backend.current_jobs())
-			return
+	for row: JobRow in _rows.values():
+		if row.job.is_active():
+			row.update_elapsed()
 
 
 func _rebuild(jobs: Array) -> void:
@@ -68,76 +74,93 @@ func _rebuild(jobs: Array) -> void:
 			return a.is_active()
 		return a.created_at > b.created_at)
 	var active := 0
-	for job: BackendJob in sorted:
+	var seen := {}
+	for i in sorted.size():
+		var job: BackendJob = sorted[i]
+		seen[job.id] = true
 		if job.is_active():
 			active += 1
+		var row: JobRow = _rows.get(job.id)
+		if row == null:
+			row = JobRow.new(_cancel.bind(job.id))
+			_rows[job.id] = row
+			_list.add_child(row)
+		_list.move_child(row, i + 1)
+		row.update_job(job)
+	for id: String in _rows.keys():
+		if not seen.has(id):
+			var row: JobRow = _rows[id]
+			_rows.erase(id)
+			_list.remove_child(row)
+			row.queue_free()
+	_empty.visible = sorted.is_empty()
 	_summary.text = "No operations running" if active == 0 else "%d running" % active
-	for child in _list.get_children():
-		_list.remove_child(child)
-		child.queue_free()
-	if sorted.is_empty():
-		var empty := Label.new()
-		empty.text = "Provider loading, downloads, and sign-in will appear here."
-		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		empty.custom_minimum_size.x = 460
-		_list.add_child(empty)
-		return
-	for job: BackendJob in sorted:
-		_list.add_child(HSeparator.new())
-		_list.add_child(_tile(job))
 
 
-func _tile(job: BackendJob) -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	var icon_name := "hourglass_top"
-	var state_text := "Interrupted"
-	match job.state:
-		"succeeded":
-			icon_name = "check_circle_outline"
-			state_text = "Completed"
-		"canceled":
-			icon_name = "cancel"
-			state_text = "Canceled"
-		"failed":
-			icon_name = "error_outline"
-			state_text = "Failed"
-		"queued":
-			state_text = "Queued"
-		"running":
-			state_text = "Running"
-	row.add_child(Icons.label(icon_name, 22, ThemeBuilder.palette.muted))
-	var body := VBoxContainer.new()
-	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(body)
+class JobRow extends VBoxContainer:
+	var job: BackendJob
+	var icon := Icons.label("hourglass_top", 22, ThemeBuilder.palette.muted)
 	var title := Label.new()
-	title.text = label_for(job.operation)
-	body.add_child(title)
-	var end := job.finished_at if job.finished_at > 0.0 else Time.get_unix_time_from_system()
-	var seconds := clampi(int(end - job.created_at), 0, 999999)
-	var elapsed := "%ds" % seconds if seconds < 60 else "%dm %ds" % [seconds / 60, seconds % 60]
-	var sub := Label.new()
-	sub.text = "%s - %s" % ["Canceling" if job.cancellation_requested else state_text, elapsed]
-	sub.add_theme_color_override("font_color", ThemeBuilder.palette.muted)
-	sub.add_theme_font_size_override("font_size", 12)
-	body.add_child(sub)
-	if job.is_active():
-		var bar := ProgressBar.new()
-		bar.indeterminate = true
-		bar.show_percentage = false
-		bar.custom_minimum_size = Vector2(0, 4)
-		body.add_child(bar)
-		if not job.cancellable:
-			var note := Label.new()
-			note.text = "This provider cannot cancel its sign-in flow."
-			note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			note.custom_minimum_size.x = 380
-			note.add_theme_font_size_override("font_size", 12)
-			body.add_child(note)
-		var cancel := Icons.button("close", "Cancel operation", _cancel.bind(job.id))
-		cancel.disabled = not job.cancellable or job.cancellation_requested
+	var status := Label.new()
+	var progress := ProgressBar.new()
+	var note := Label.new()
+	var cancel: Button
+	var state_text := ""
+
+	func _init(on_cancel: Callable) -> void:
+		add_child(HSeparator.new())
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		add_child(row)
+		row.add_child(icon)
+		var body := VBoxContainer.new()
+		body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(body)
+		body.add_child(title)
+		status.add_theme_color_override("font_color", ThemeBuilder.palette.muted)
+		status.add_theme_font_size_override("font_size", 12)
+		body.add_child(status)
+		progress.indeterminate = true
+		progress.show_percentage = false
+		progress.custom_minimum_size = Vector2(0, 4)
+		body.add_child(progress)
+		note.text = "This provider cannot cancel its sign-in flow."
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		note.custom_minimum_size.x = 380
+		note.add_theme_font_size_override("font_size", 12)
+		body.add_child(note)
+		cancel = Icons.button("close", "Cancel operation", on_cancel)
 		row.add_child(cancel)
-	return row
+
+	func update_job(value: BackendJob) -> void:
+		job = value
+		title.text = JobsPanel.label_for(job.operation)
+		var glyph := "hourglass_top"
+		match job.state:
+			"succeeded":
+				glyph = "check_circle_outline"
+				state_text = "Completed"
+			"canceled":
+				glyph = "cancel"
+				state_text = "Canceled"
+			"failed":
+				glyph = "error_outline"
+				state_text = "Failed"
+			"queued": state_text = "Queued"
+			"running": state_text = "Running"
+			_: state_text = "Interrupted"
+		icon.text = Icons.glyph(glyph)
+		progress.visible = job.is_active()
+		note.visible = job.is_active() and not job.cancellable
+		cancel.visible = job.is_active()
+		cancel.disabled = not job.cancellable or job.cancellation_requested
+		update_elapsed()
+
+	func update_elapsed() -> void:
+		var end := job.finished_at if job.finished_at > 0.0 else Time.get_unix_time_from_system()
+		var seconds := clampi(int(end - job.created_at), 0, 999999)
+		var elapsed := "%ds" % seconds if seconds < 60 else "%dm %ds" % [seconds / 60, seconds % 60]
+		status.text = "%s - %s" % ["Canceling" if job.cancellation_requested else state_text, elapsed]
 
 
 func _cancel(job_id: String) -> void:

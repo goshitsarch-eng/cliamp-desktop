@@ -26,11 +26,16 @@ var _active: Page
 var _page_active := false
 var _compact_player := false
 var _was_compact := false
+var _about_open := false
+var _help_menu := RID()
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build()
+	if DisplayServer.get_name() == "macOS" and NativeMenu.has_system_menu(NativeMenu.HELP_MENU_ID):
+		_help_menu = NativeMenu.get_system_menu(NativeMenu.HELP_MENU_ID)
+		NativeMenu.add_item(_help_menu, "Keyboard Shortcuts and Commands", _show_shortcuts_from_menu, Callable(), "cliamp.shortcuts")
 	Store.connection_changed.connect(_on_connection_changed)
 	Store.pending_changed.connect(func(_n: int) -> void: _refresh_chrome())
 	Store.state_changed.connect(func(_s: Dictionary) -> void:
@@ -46,6 +51,18 @@ func _ready() -> void:
 	_show_page_node(Store.current_page)
 	_refresh_chrome()
 	Store.start()
+
+
+func _show_shortcuts_from_menu(_tag: Variant) -> void:
+	if get_last_exclusive_window() == get_window():
+		open_command_palette.call_deferred()
+
+
+func _exit_tree() -> void:
+	if _help_menu.is_valid():
+		var index := NativeMenu.find_item_index_with_tag(_help_menu, "cliamp.shortcuts")
+		if index >= 0:
+			NativeMenu.remove_item(_help_menu, index)
 
 
 func _build() -> void:
@@ -191,6 +208,12 @@ func _on_resized() -> void:
 
 
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_ABOUT and not _about_open:
+		_about_open = true
+		await get_tree().process_frame
+		var owner := get_window().get_last_exclusive_window()
+		await Dialogs.message(owner if owner != null else self, "About Cliamp", "Cliamp Desktop %s\nAn unofficial desktop frontend for the cliamp music player." % ProjectSettings.get_setting("application/config/version"))
+		_about_open = false
 	if what in [
 		NOTIFICATION_WM_WINDOW_FOCUS_IN,
 		NOTIFICATION_WM_WINDOW_FOCUS_OUT,

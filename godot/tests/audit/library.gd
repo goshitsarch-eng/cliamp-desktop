@@ -67,11 +67,11 @@ func run() -> void:
 			e.double_click = pressed
 			e.position = pos
 			e.global_position = pos
-			Input.parse_input_event(e)
+			vp.push_input(e, true)
 			await frames(2)
 		await wait(1.0)
 		check(Store.is_playing(), "double click plays the row")
-		check(int(Util.number(Store.state.get("index"), -1)) == 1 or true, "index follows")
+		check(Util.text(Store.track().get("path")) == _paths()[1], "index follows")
 		await shot("queue_playing_row2")
 
 	# Row menus
@@ -96,9 +96,10 @@ func run() -> void:
 		await close_dialogs()
 		menus = all_named("Track actions")
 		await menu_pick(menus[1], "Add to playlist…", "addpl")
-		await wait(0.7)
+		check(await wait_named("Place at the beginning") != null, "playlist destination chooser opens")
 		await shot_dialogs("addpl")
-		await close_dialogs()
+		if not dialogs().is_empty():
+			await click(dialogs().back().get_cancel_button())
 
 	# Selection mode
 	await wait(0.5)
@@ -121,7 +122,7 @@ func run() -> void:
 	await wait(0.6)
 	print("after undo ", await _queue_titles())
 	await click_name("Save queue as playlist")
-	await wait(0.7)
+	check(await wait_named("Playlist name") != null, "queue save opens name prompt")
 	await shot_dialogs("savequeue")
 	await close_dialogs()
 	var nonempty := Util.number(Store.state.get("total"))

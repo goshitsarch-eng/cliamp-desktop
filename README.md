@@ -23,8 +23,8 @@ Linux, Windows, and macOS. It uses the original Go player and adds provider
 discovery and setup, playlist editing with undo, plugin management, preferences,
 synced lyrics, and the original visualizers. It is not part of the official
 cliamp releases. See the [desktop guide](docs/desktop.md)
-for builds and the [feature checklist](docs/desktop-feature-parity.md) for coverage
-and platform validation status.
+for builds, the [feature checklist](docs/desktop-feature-parity.md) for coverage,
+and the [desktop QA walkthrough](docs/desktop-audit.md) for tested workflows and open checks.
 
 ## Flatpak
 

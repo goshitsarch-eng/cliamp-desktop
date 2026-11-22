@@ -55,6 +55,10 @@ var _visible := PackedInt32Array()
 var _active := false
 var _last_revision: Variant = null
 var _state_sig := ""
+var _action_state: Array = []
+var _provider_bar_state: Array = []
+var _selection_state: Array = []
+var _selection_count: Label
 var _compact := false
 var _wide_columns := false
 
@@ -201,15 +205,6 @@ func _fetch(operation: String, params: Dictionary, kind := "tracks", append := f
 	var generation := _load_generation
 	var requested: Variant = Store.state.get("playlist_revision")
 	requested = int(requested) if requested is int or requested is float else null
-	var prev_marked_entries: Array = []
-	if quiet and not append and _selecting:
-		var sorted_marked := _marked.keys()
-		sorted_marked.sort()
-		for p: int in sorted_marked:
-			if p >= 0 and p < _items.size():
-				var mp := Util.text(LibraryLogic.track_of(_items[p], _kind).get("path"))
-				if not mp.is_empty():
-					prev_marked_entries.append([p, mp])
 	var target_count := maxi(PAGE_LIMIT, _items.size()) if quiet and not append else PAGE_LIMIT
 	_request = operation
 	_params = params
@@ -218,10 +213,10 @@ func _fetch(operation: String, params: Dictionary, kind := "tracks", append := f
 	_load_error = ""
 	if not append and not quiet:
 		_items = []
-	if not append:
+	if not append and not quiet:
 		_marked.clear()
 		_anchor = -1
-	if page_id == "playlists" and not append:
+	if page_id == "playlists" and not append and not quiet:
 		_caps = {}
 		_caps_provider = ""
 	if not quiet and not append:
@@ -286,9 +281,20 @@ func _fetch(operation: String, params: Dictionary, kind := "tracks", append := f
 		_listening = merged
 	else:
 		_listening = listening
+	var keep_cards := quiet and not append and _kind not in ["tracks", "history"] and items == _items
 	if append and operation != "provider.catalog":
 		_items.append_array(items)
 	else:
+		var prev_marked_entries: Array = []
+		if quiet and _selecting:
+			var sorted_marked := _marked.keys()
+			sorted_marked.sort()
+			for p: int in sorted_marked:
+				if p >= 0 and p < _items.size():
+					var mp := Util.text(LibraryLogic.track_of(_items[p], _kind).get("path"))
+					if not mp.is_empty():
+						prev_marked_entries.append([p, mp])
+		_marked.clear()
 		_items = items
 		if not prev_marked_entries.is_empty() and _selecting:
 			var unmatched: Array[String] = []
@@ -316,7 +322,8 @@ func _fetch(operation: String, params: Dictionary, kind := "tracks", append := f
 	else:
 		_catalog_more = false
 	_loading = false
-	_rebuild_data()
+	if not keep_cards:
+		_rebuild_data()
 	_render()
 	if (operation == "queue.list" or operation == "playnext.list") and _active:
 		var latest: Variant = Store.state.get("playlist_revision")
@@ -603,6 +610,11 @@ func _render_provider_bar() -> void:
 	(_provider_bar.get_parent() as Control).visible = visible_bar
 	if not visible_bar:
 		return
+	var state := [Store.provider, Store.providers, Store.supports("provider.auth"),
+		_kind, _sorts, _params.get("sort"), _collection_title.is_empty(), ThemeBuilder.palette]
+	if _provider_bar_state == state:
+		return
+	_provider_bar_state = state.duplicate(true)
 	UiKit.clear(_provider_row)
 	var provider := _current_provider()
 	var dropdown := OptionButton.new()
@@ -661,6 +673,12 @@ func _render_list_bar() -> void:
 	_list_title.add_theme_color_override("font_color", p.foreground)
 	_list_total.text = str(_total)
 	_list_total.add_theme_color_override("font_color", p.muted)
+	var state := [page_id, _kind, _items.is_empty(), _selecting, Store.provider, _collection,
+		Store.connected, Store.supports("queue.undo"), _playlist_list_undo.has(Store.provider),
+		_caps_provider, _caps, p]
+	if _action_state == state:
+		return
+	_action_state = state.duplicate(true)
 	UiKit.clear(_list_actions)
 	var tracky := _kind == "tracks" or _kind == "history"
 	if tracky:
@@ -692,47 +710,45 @@ func _render_selection() -> void:
 	wrapper.visible = _selecting
 	if not _selecting:
 		return
-	UiKit.clear(_selection_row)
-	var empty := _marked.is_empty()
-	_selection_row.add_child(UiKit.label("%d selected" % _marked.size(), 13))
-	var gap := Control.new()
-	gap.custom_minimum_size = Vector2(12, 0)
-	_selection_row.add_child(gap)
-	_selection_row.add_child(UiKit.text_button("", "Select visible", _select_visible, "Select visible"))
-	for entry in [["append", "Append"], ["next", "Play next"], ["replace", "Replace queue"], ["save", "Save to playlist"]]:
-		var b := UiKit.text_button("", entry[1], _batch_tracks.bind(entry[0]), entry[1])
-		b.disabled = empty
-		_selection_row.add_child(b)
-	if _is_live() or _can_remove_saved(true):
-		var remove := UiKit.text_button("", "Remove", _batch_tracks.bind("remove"), "Remove")
-		remove.disabled = empty
-		_selection_row.add_child(remove)
-	_selection_row.add_child(_tool("close", "Finish selecting", finish_selecting))
+	var removable := _is_live() or _can_remove_saved(true)
+	var state := [removable, ThemeBuilder.palette]
+	if _selection_state != state:
+		_selection_state = state
+		UiKit.clear(_selection_row)
+		_selection_count = UiKit.label("", 13)
+		_selection_row.add_child(_selection_count)
+		var gap := Control.new()
+		gap.custom_minimum_size = Vector2(12, 0)
+		_selection_row.add_child(gap)
+		_selection_row.add_child(UiKit.text_button("", "Select visible", _select_visible, "Select visible"))
+		var actions := [["append", "Append"], ["next", "Play next"], ["replace", "Replace queue"], ["save", "Save to playlist"]]
+		if removable:
+			actions.append(["remove", "Remove"])
+		for entry in actions:
+			_selection_row.add_child(UiKit.text_button("", entry[1], _batch_tracks.bind(entry[0]), entry[1]))
+		_selection_row.add_child(_tool("close", "Finish selecting", finish_selecting))
+	_selection_count.text = "%d selected" % _marked.size()
+	for child in _selection_row.get_children():
+		if child is Button and child.accessibility_name not in ["Select visible", "Finish selecting"]:
+			child.disabled = _marked.is_empty()
 
 
 func _update_body() -> void:
 	var tracky := _kind == "tracks" or _kind == "history"
-	_track_view.visible = false
-	_grid_scroll.visible = false
-	_empty.visible = false
+	var has_items := _load_error.is_empty() and not _items.is_empty()
+	_track_view.visible = has_items and tracky and not _visible.is_empty()
+	_grid_scroll.visible = has_items and not tracky
+	_empty.visible = not _load_error.is_empty() or (has_items and tracky and _visible.is_empty()) or (not has_items and not _loading)
 	if not _load_error.is_empty():
 		_empty.show_message("wifi_off", "Couldn’t load this view", _load_error, _refresh_list, "Try again", "refresh")
-		_empty.visible = true
-	elif _items.is_empty():
-		if not _loading:
-			_show_empty_for_page()
-	elif tracky:
-		if _visible.is_empty():
+	elif _empty.visible:
+		if has_items:
 			_empty.show_message("search", "No matching tracks", "Try another title, artist, or album.")
-			_empty.visible = true
 		else:
-			_track_view.visible = true
-	else:
-		_grid_scroll.visible = true
+			_show_empty_for_page()
 
 
 func _show_empty_for_page() -> void:
-	_empty.visible = true
 	match page_id:
 		"queue":
 			_empty.show_message("library_music", "Your music belongs here",
@@ -745,6 +761,15 @@ func _show_empty_for_page() -> void:
 		"history":
 			_empty.show_message("history", "Your listening story starts here", "Tracks appear here as you listen.")
 		"playlists":
+			if _kind == "tracks" and not _collection.is_empty():
+				if _collection == "Favorites" and Store.provider == "local":
+					_empty.show_message("favorite_border", "No favorite tracks yet", "Use the heart beside a track to save it here.")
+				else:
+					var editable := _can_playlist("import") and not LibraryLogic.SYSTEM_PLAYLISTS.has(_collection)
+					_empty.show_message("library_music", "This playlist is empty",
+						"Add files or a directory to this playlist." if editable else "This playlist has no tracks to show.",
+						_playlist_tools if editable else Callable(), "Add tracks")
+				return
 			var can_create := _can_playlist("create")
 			_empty.show_message("library_music", "A playlist for every mood",
 				"Create your first playlist and add tracks from any collection." if can_create else "This provider has no saved playlists to show.",

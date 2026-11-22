@@ -12,6 +12,35 @@ import (
 	"testing"
 )
 
+func TestExplicitSSHSource(t *testing.T) {
+	for _, tc := range []struct {
+		path  string
+		title string
+	}{
+		{"ssh://listener@audio:2222/music/QA%20signal.wav", "QA signal"},
+		{"ssh://audio/library/Café.flac", "Café"},
+		{"ssh:///music/signal.wav", ""},
+		{"ssh://audio", ""},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			result, err := Args([]string{tc.path})
+			if tc.title == "" {
+				if err == nil {
+					t.Fatal("expected an invalid SSH source error")
+				}
+				return
+			}
+			if err != nil || len(result.Tracks) != 1 || len(result.Pending) != 0 {
+				t.Fatalf("Args returned %+v, %v", result, err)
+			}
+			track := result.Tracks[0]
+			if track.Path != tc.path || track.Title != tc.title || !track.Stream {
+				t.Fatalf("unexpected SSH track %+v", track)
+			}
+		})
+	}
+}
+
 func TestCollectAudioFilesSingleFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "song.mp3")

@@ -473,7 +473,7 @@ func deviceListResponse(devices []player.AudioDevice) ipc.Response {
 	items := make([]ipc.DeviceInfo, len(devices))
 	lines := make([]string, len(devices))
 	for i, device := range devices {
-		items[i] = ipc.DeviceInfo{Name: device.Name, Active: device.Active}
+		items[i] = ipc.DeviceInfo{Name: device.Name, Description: device.Description, Active: device.Active}
 		marker := "  "
 		if device.Active {
 			marker = "* "

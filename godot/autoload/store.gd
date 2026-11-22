@@ -38,6 +38,7 @@ var provider_action := ""
 var _theme_key := ""
 var _snapshot_key := ""
 var _state_seq := 0
+var _state_session := -1
 var _bands_silent := false
 var _state_at_ms := 0
 var _refreshing := false
@@ -182,6 +183,12 @@ func refresh_state() -> void:
 func accept_state(new_state: Dictionary) -> void:
 	if new_state.is_empty():
 		return
+	# A completed command can carry the snapshot from before its asynchronous
+	# playback transition. The event stream may already have delivered that change.
+	if _state_session == Backend.session_id and new_state.has("revision") and state.has("revision"):
+		if new_state["revision"] < state["revision"]:
+			return
+	_state_session = Backend.session_id
 	_state_seq += 1
 	var text := Util.text(new_state.get("notice"))
 	if not text.is_empty() and new_state.get("notice") != state.get("notice"):
@@ -205,6 +212,11 @@ func accept_state(new_state: Dictionary) -> void:
 
 func _on_event(envelope: Dictionary) -> void:
 	if envelope.get("event") == "runtime.state" or envelope.get("topic") == "runtime.state":
+		if not connected and not connecting and not connection_error.is_empty():
+			# An automatic reconnect may reach a different engine. Reload capabilities
+			# and providers and reactivate the page through the normal startup path.
+			start()
+			return
 		var data := Util.object(envelope.get("data"))
 		accept_state(Util.object(data.get("snapshot")) if data.has("snapshot") else data)
 

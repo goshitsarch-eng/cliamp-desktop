@@ -80,8 +80,9 @@ func (s *Store) Toggle(track playlist.Track) (bool, error) {
 		return false, fmt.Errorf("load favorites: %w", err)
 	}
 
+	key := playlist.FavoritePathKey(track.Path)
 	idx := slices.IndexFunc(entries, func(e Entry) bool {
-		return e.Track.Path == track.Path
+		return playlist.FavoritePathKey(e.Track.Path) == key
 	})
 
 	if idx >= 0 {
@@ -119,15 +120,16 @@ func (s *Store) Import(tracks []playlist.Track) (int, error) {
 	}
 	seen := make(map[string]bool, len(entries)+len(tracks))
 	for _, e := range entries {
-		seen[e.Track.Path] = true
+		seen[playlist.FavoritePathKey(e.Track.Path)] = true
 	}
 	now := time.Now()
 	added := 0
 	for _, track := range tracks {
-		if strings.TrimSpace(track.Path) == "" || seen[track.Path] {
+		key := playlist.FavoritePathKey(track.Path)
+		if strings.TrimSpace(track.Path) == "" || seen[key] {
 			continue
 		}
-		seen[track.Path] = true
+		seen[key] = true
 		entries = append(entries, Entry{Track: track, FavoritedAt: now})
 		added++
 	}
@@ -150,8 +152,9 @@ func (s *Store) IsFavorited(path string) bool {
 	if err != nil {
 		return false
 	}
+	key := playlist.FavoritePathKey(path)
 	return slices.ContainsFunc(entries, func(e Entry) bool {
-		return e.Track.Path == path
+		return playlist.FavoritePathKey(e.Track.Path) == key
 	})
 }
 
@@ -237,11 +240,14 @@ func writeEntry(w io.Writer, e Entry) {
 // It drops entries without a path, the only required field.
 func parse(data []byte) []Entry {
 	var entries []Entry
+	seen := make(map[string]bool)
 	tomlutil.ParseSections(data, "entry", func(f map[string]string) {
 		e := Entry{Track: playlist.TrackFromTOML(f)}
-		if strings.TrimSpace(e.Track.Path) == "" {
+		key := playlist.FavoritePathKey(e.Track.Path)
+		if strings.TrimSpace(key) == "" || seen[key] {
 			return
 		}
+		seen[key] = true
 		if t, err := time.Parse(time.RFC3339, f["favorited_at"]); err == nil {
 			e.FavoritedAt = t
 		}

@@ -77,7 +77,6 @@ func _add_group(group_name: String, group_fields: Array) -> void:
 	var expanded: bool = _toggled.get(group_name, not _filter.is_empty() or group_name == default_open_group)
 	var body := VBoxContainer.new()
 	body.add_theme_constant_override("separation", 14)
-	body.visible = expanded
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 12)
 	margin.add_theme_constant_override("margin_bottom", 8)

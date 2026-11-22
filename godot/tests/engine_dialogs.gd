@@ -16,10 +16,10 @@ func ok(cond: bool, what: String) -> void:
 		printerr("FAIL ", what)
 
 
-func _dialog() -> AcceptDialog:
+func _dialog(previous_id := 0) -> AcceptDialog:
 	for i in 200:
 		for c in get_tree().root.get_children():
-			if c is AcceptDialog and c.visible:
+			if c is AcceptDialog and c.visible and c.get_instance_id() != previous_id:
 				return c
 		await get_tree().create_timer(0.05).timeout
 	return null
@@ -39,6 +39,7 @@ func _button_with(root: Node, text: String) -> Button:
 
 
 func _ready() -> void:
+	await _typed_file_picker()
 	await Store.start()
 	ok(Store.connected, "connected")
 	var wav := ProjectSettings.globalize_path("user://dialogs.wav")
@@ -57,8 +58,9 @@ func _ready() -> void:
 	ok(d != null, "chooser opens")
 	var new_button := _button_with(d, "New playlist")
 	ok(new_button != null, "chooser offers New playlist")
+	var chooser_id := d.get_instance_id()
 	new_button.pressed.emit()
-	d = await _dialog()
+	d = await _dialog(chooser_id)
 	ok(d != null and _find_edit(d) != null, "name prompt opens")
 	var edit := _find_edit(d)
 	edit.text = "Dialog test"
@@ -110,6 +112,69 @@ func _ready() -> void:
 	print("engine_dialogs: %d checks, %d failure(s)" % [_checks, _failures])
 	await Backend.close()
 	get_tree().quit(1 if _failures > 0 else 0)
+
+
+func _typed_file_picker() -> void:
+	var folder := ProjectSettings.globalize_path("user://test-file-chooser")
+	DirAccess.make_dir_recursive_absolute(folder)
+	var path := folder.path_join("QA résumé.wav")
+	_write_wav(path)
+	var note := FileAccess.open(folder.path_join("notes.txt"), FileAccess.WRITE)
+	note.store_line("Non-media fixture.")
+	note.close()
+	var picker := FileDialog.new()
+	picker.access = FileDialog.ACCESS_FILESYSTEM
+	picker.file_mode = FileDialog.FILE_MODE_OPEN_FILES
+	picker.filters = PackedStringArray(AddSourceDialog.AUDIO_FILTERS)
+	add_child(picker)
+	picker.current_dir = path.get_base_dir()
+	Dialogs._enable_typed_file(picker)
+	var selected: Array[PackedStringArray] = []
+	picker.files_selected.connect(func(paths: PackedStringArray) -> void: selected.append(paths))
+	for confirm_with_button in [false, true]:
+		picker.popup_centered()
+		await get_tree().create_timer(0.15).timeout
+		if not confirm_with_button:
+			var displayed: Array[String] = []
+			for list: ItemList in picker.get_vbox().find_children("*", "ItemList", true, false):
+				if list.select_mode == ItemList.SELECT_MULTI:
+					for i in list.item_count:
+						displayed.append(list.get_item_text(i))
+			ok(displayed.has(path.get_file()) and not displayed.has("notes.txt"), "default file list shows audio and excludes unrelated files")
+		var edit := picker.get_line_edit()
+		for text in ["missing file", path if confirm_with_button else path.get_file()]:
+			edit.grab_focus()
+			edit.edit()
+			edit.select_all()
+			for character in text:
+				var event := InputEventKey.new()
+				event.unicode = character.unicode_at(0)
+				event.keycode = character.to_upper().unicode_at(0)
+				event.pressed = true
+				picker.push_input(event, true)
+			await get_tree().process_frame
+			if text == "missing file":
+				_submit_picker(picker)
+				ok(picker.visible and picker.get_ok_button().disabled, "invalid typed file leaves chooser open")
+		if confirm_with_button:
+			picker.get_ok_button().grab_focus()
+			_submit_picker(picker)
+		else:
+			_submit_picker(picker)
+		await get_tree().process_frame
+		ok(not picker.visible and selected.size() == (2 if confirm_with_button else 1) and selected.back() == PackedStringArray([path]), "typed file returns exactly the requested path")
+	picker.queue_free()
+	DirAccess.remove_absolute(path)
+	DirAccess.remove_absolute(folder.path_join("notes.txt"))
+	DirAccess.remove_absolute(folder)
+
+
+func _submit_picker(picker: FileDialog) -> void:
+	for pressed in [true, false]:
+		var event := InputEventKey.new()
+		event.keycode = KEY_ENTER
+		event.pressed = pressed
+		picker.push_input(event, true)
 
 
 func _find_edit(root: Node) -> LineEdit:

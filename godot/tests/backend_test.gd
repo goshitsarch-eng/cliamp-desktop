@@ -9,7 +9,7 @@ var _current := ""
 
 
 func _ready() -> void:
-	for t: String in ["attach_existing", "own_daemon", "daemon_quit_unsupported", "daemon_quit_stalled", "daemon_quit_queued",
+	for t: String in ["attach_existing", "own_daemon", "reconnect_after_kill", "daemon_quit_unsupported", "daemon_quit_stalled", "daemon_quit_queued",
 			"permission_error", "startup_failure_diagnostic", "startup_deadline", "capabilities_and_result",
 			"polls_jobs_once", "conflict_not_retried", "hostile_path_single_argument", "overflow_resync",
 			"auth_events", "spectrum_doubles", "command_timeout", "unsupported_version", "close_idempotent",
@@ -91,6 +91,22 @@ func own_daemon() -> void:
 	ok(not l.daemons[0].killed, "daemon stopped by quit, not killed")
 	ok(l.count_commands("desktop.quit") == 1, "quit submitted once")
 	b.queue_free()
+
+
+func reconnect_after_kill() -> void:
+	var launcher := FakeLauncher.new()
+	launcher.on_command = func(proc: FakeProc) -> bool:
+		if proc.args.has("state") and not launcher.daemons.any(func(d: FakeProc) -> bool: return d.running):
+			proc.fail("cliamp is not running (no socket at /tmp/x)")
+			return true
+		return false
+	var backend := backend_for(launcher)
+	await backend.connect_engine()
+	launcher.daemons[0].kill()
+	launcher.event_procs[0].kill()
+	await eventually(func() -> bool: return launcher.daemons.size() == 2 and backend.connected, "a killed daemon is replaced")
+	await backend.close()
+	backend.queue_free()
 
 
 func _daemon_shutdown(quit_proc_setup: Callable) -> void:

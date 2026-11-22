@@ -82,7 +82,7 @@ playlist. After `provider.load` or `provider.load_album` of another list,
 `navidrome:album:7`. `device` names the output device that the last `device`
 operation reported. `lyrics_offset_ms` is the shared lyric timing correction.
 `notice` and `notice_error` carry the current engine status message, including
-plugin notifications, so a desktop can display feedback from the shared runtime.
+plugin notifications, so a desktop can display feedback from the shared runtime. The `device` operation with `name=list` returns a switchable `name`, an `active` flag and an optional human-readable `description` for each output.
 
 ```json
 {

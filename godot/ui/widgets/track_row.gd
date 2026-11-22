@@ -13,6 +13,7 @@ signal action_requested(action: String, position: int)
 var menu_provider: Callable
 
 var _position := -1
+var _track_path := ""
 var _disabled := false
 var _selecting := false
 var _style := StyleBoxFlat.new()
@@ -151,7 +152,11 @@ func _gui_input(event: InputEvent) -> void:
 ## art (track Dictionary), label (accessibility name).
 func apply(d: Dictionary) -> void:
 	var p := ThemeBuilder.palette
+	var path := Util.text(d["art"].get("path"))
+	if _menu.get_popup().visible and (_position != d["position"] or _track_path != path or not d["connected"]):
+		_menu.get_popup().hide()
 	_position = d["position"]
+	_track_path = path
 	_disabled = d["disabled"]
 	_selecting = d["selecting"]
 	var current: bool = d["current"]

@@ -32,6 +32,7 @@ func _init(is_large := false, icon := "music_note") -> void:
 	add_theme_stylebox_override("panel", box)
 	custom_minimum_size = Vector2(46, 46) if large else Vector2(24, 24)
 	_canvas = Control.new()
+	_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_canvas.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_canvas.draw.connect(_draw_art)

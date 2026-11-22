@@ -72,7 +72,7 @@ static func title_of(track: Dictionary) -> String:
 
 
 static func artist_of(track: Dictionary) -> String:
-	return Util.single_line(track.get("artist"), Util.single_line(track.get("station"), "Live stream" if track.get("stream") == true else "Unknown artist"))
+	return Util.single_line(track.get("artist"), Util.single_line(track.get("station"), "Live stream" if track.get("realtime") == true else "Unknown artist"))
 
 
 ## "Played", "Continue at 1:02" or "" for a provider playback_state entry.

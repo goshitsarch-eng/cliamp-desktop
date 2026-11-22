@@ -166,8 +166,10 @@ func _on_focus_search() -> void:
 
 func _configure_provider() -> void:
 	var restarted: bool = await load(SETUP_DIALOG).open(self)
-	if restarted:
-		Store.start()
+	if restarted and is_inside_tree():
+		await Store.start()
+		if Store.connected and _active:
+			activate()
 
 
 func _authenticate() -> void:

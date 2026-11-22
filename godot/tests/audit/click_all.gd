@@ -48,12 +48,13 @@ func run() -> void:
 		Store.navigate(page["id"])
 		await wait(1.5)
 		var seen := {}
-		var budget := 60
-		while budget > 0:
-			budget -= 1
+		while true:
+			var dismiss := by_name("Dismiss notice")
+			if dismiss != null:
+				await click(dismiss)
 			var next: Control = null
 			for c: Control in _controls():
-				var key := "%s|%s|%s" % [_label(c), c.get_class(), str(c.get_global_rect().position)]
+				var key := "%s|%s" % [_label(c), c.get_class()]
 				if seen.has(key) or _skip(_label(c)):
 					continue
 				seen[key] = true

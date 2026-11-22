@@ -6,7 +6,6 @@ extends RefCounted
 
 const AUDIO_FILTERS: Array[String] = [
 	"*.flac,*.mp3,*.ogg,*.opus,*.wav,*.m4a,*.aac,*.alac,*.wma,*.aiff,*.aif,*.mp4,*.webm,*.m3u,*.m3u8,*.pls ; Audio and playlists",
-	"* ; All files",
 ]
 
 
@@ -55,12 +54,10 @@ static func _ask(host: Node) -> Dictionary:
 		typed[0] = content["edit"].text if is_instance_valid(content["edit"]) else typed[0]
 		if action[0] == "files" or action[0] == "folders":
 			var is_files: bool = action[0] == "files"
-			var found := await Dialogs.pick_paths(
+			var found := await Dialogs.pick_paths(host,
 				DisplayServer.FILE_DIALOG_MODE_OPEN_FILES if is_files else DisplayServer.FILE_DIALOG_MODE_OPEN_DIR,
 				"Choose files" if is_files else "Choose folders",
 				PackedStringArray(AUDIO_FILTERS) if is_files else PackedStringArray())
-			if is_instance_valid(host) and host.is_inside_tree():
-				host.get_window().grab_focus()
 			if not found.is_empty():
 				return {"paths": found, "mode": mode}
 			error_text = ""

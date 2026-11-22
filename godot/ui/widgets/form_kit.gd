@@ -100,9 +100,9 @@ static func run(host: Node, dialog: ConfirmationDialog, accept := Callable()) ->
 		if not done[0]:
 			done[0] = true
 			result.finished.emit(value)
+	dialog.dialog_hide_on_ok = false
 	dialog.confirmed.connect(func() -> void:
 		if accept.is_valid() and not accept.call():
-			dialog.call_deferred("popup_centered")
 			return
 		finish.call(true))
 	dialog.canceled.connect(finish.bind(false))
@@ -110,5 +110,9 @@ static func run(host: Node, dialog: ConfirmationDialog, accept := Callable()) ->
 	Util.host(host).add_child(dialog)
 	dialog.popup_centered()
 	var ok: bool = await result.finished
+	await dialog.get_tree().process_frame
+	if dialog.visible:
+		dialog.hide()
+	await dialog.get_tree().process_frame
 	dialog.queue_free()
 	return ok

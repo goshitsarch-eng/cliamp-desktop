@@ -9,6 +9,7 @@ general/accessibility_support=0
 [application]
 
 config/name="Cliamp"
+config/version="0.1.1"
 config/description="Desktop client for the cliamp music player."
 run/main_scene="res://ui/main.tscn"
 run/low_processor_mode=true

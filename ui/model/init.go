@@ -378,7 +378,7 @@ func (m *Model) refreshFavSet() {
 	}
 	m.favSet = make(map[string]struct{}, len(tracks))
 	for _, t := range tracks {
-		m.favSet[t.Path] = struct{}{}
+		m.favSet[playlist.FavoritePathKey(t.Path)] = struct{}{}
 	}
 }
 

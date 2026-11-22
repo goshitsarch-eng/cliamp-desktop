@@ -71,3 +71,34 @@ func TestCopyFileEmptyFile(t *testing.T) {
 		t.Fatalf("expected empty file, got %d bytes", len(got))
 	}
 }
+
+func TestCopyFileSameRecording(t *testing.T) {
+	for _, alias := range []bool{false, true} {
+		name := "same path"
+		if alias {
+			name = "hard link"
+		}
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			src := filepath.Join(dir, "audio.wav")
+			want := "recorded audio"
+			if err := os.WriteFile(src, []byte(want), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			dst := src
+			if alias {
+				dst = filepath.Join(dir, "second.wav")
+				if err := os.Link(src, dst); err != nil {
+					t.Skipf("hard links unavailable: %v", err)
+				}
+			}
+			if err := CopyFile(src, dst); err != nil {
+				t.Fatal(err)
+			}
+			got, err := os.ReadFile(src)
+			if err != nil || string(got) != want {
+				t.Fatalf("original after repeat save = %q, error %v", got, err)
+			}
+		})
+	}
+}

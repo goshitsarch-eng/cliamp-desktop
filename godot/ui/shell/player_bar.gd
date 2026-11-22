@@ -139,6 +139,7 @@ func _init() -> void:
 	_center.add_child(_seek_row)
 
 	_speed = MenuButton.new()
+	_speed.focus_mode = Control.FOCUS_ALL
 	_speed.flat = true
 	_speed.tooltip_text = "Playback speed"
 	_speed.accessibility_name = "Playback speed"
@@ -171,6 +172,7 @@ func _init() -> void:
 	_wide_only.append(_volume)
 
 	_more = MenuButton.new()
+	_more.focus_mode = Control.FOCUS_ALL
 	_more.flat = true
 	_more.theme_type_variation = "IconButton"
 	_more.text = Icons.glyph("more_vert")

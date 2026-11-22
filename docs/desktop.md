@@ -37,8 +37,9 @@ PATH when those features are used.
 Build the engine from the repository root and open the project:
 
 ```sh
-go build -o cliamp .
-godot --path godot          # run the app
+make build
+godot --headless --path godot --import
+CLIAMP_BINARY="$PWD/cliamp" godot --path godot
 godot --path godot --editor # edit it
 ```
 
@@ -50,7 +51,7 @@ Without this the link fails with `undefined reference to ogg_stream_iovecin`:
 CGO_ENABLED=1 CGO_LDFLAGS="-Wl,-Bstatic -logg -Wl,-Bdynamic" go build -o cliamp.exe .
 ```
 
-Set `CLIAMP_BINARY` to the absolute path of the built engine when it is not
+The first import registers the GDScript classes and imports fonts and icons in a fresh checkout. Set `CLIAMP_BINARY` to the absolute path of the built engine when it is not
 beside the app. In PowerShell, set `$env:CLIAMP_BINARY` to the path of `cliamp.exe`.
 
 The app attaches to a running cliamp instance using the same configuration
@@ -61,7 +62,7 @@ stops only an engine it started. Existing players keep running. Both frontends
 share the player's config and library; do not run two independent players
 against the same directory when editing settings.
 
-`CLIAMP_CONFIG_DIR` can isolate a test instance. Use **Connect service** in
+For QA, give the launched application a temporary HOME, configuration and XDG directories. On macOS also set CFFIXED_USER_HOME for Godot preferences. Build Go and import Godot resources in the development environment first. Use **Connect service** in
 Providers or Settings to configure a provider with the existing wizard rules.
 The form masks credentials and passes them privately to the engine over stdin.
 After saving, choose **Restart player** to reload an app-owned engine; the app
@@ -109,7 +110,7 @@ macOS icons from `godot/icon/icon.svg`.
 
 ```sh
 python godot/tool/build.py
-python packaging/windows/build.py --version 0.1.0
+python packaging/windows/build.py --version 0.1.1
 ```
 
 The script copies the engine's MinGW codec DLLs (libFLAC, libvorbis, libvorbisenc,
@@ -159,22 +160,20 @@ dialog (decline, then tick the exact-content approval), lists, configures and
 removes it. On Linux CI they use an ALSA null sink. It is not an
 audible playback test. The Go tests remain necessary when changing the shared engine.
 
-`godot/tests/audit/` holds interactive audit scenarios for a real engine and a
-window (not `--headless`): `walk_shell`, `library`, `playlists`, `providers`,
-`forms`, `settings` (run twice with `PHASE=1`, then `PHASE=2` on the same
-profile), `themes`, `dialogs_audit`, `click_all`, `resize_audit` and
-`disconnect`. Each extends `tests/audit_kit.gd`, which mounts the shell on the
-root window, drives it with mouse and key events, lints layout (clipped or
-overflowing text) and writes screenshots to `SHOT_DIR`. Set `CLIAMP_BINARY`,
-`CLIAMP_CONFIG_DIR` and `SHOT_DIR`, and `MUSIC` to a folder of audio files:
+The [desktop walkthrough](desktop-audit.md) documents the windowed regression suite. A provider registered after setup and restart appears immediately in the active provider picker. Add music accepts an explicit `ssh://user@host:port/path/file.wav` source using the system SSH client and its configured host key. Queue and playlist controls retain focus when their contents refresh. Track menus stay open while their recording is unchanged. On Windows, audio output selection uses AudioDeviceCmdlets or NirCmd. Windows Settings controls the system output when neither is installed. Visualizer controls wait for a canceled preview to finish restoring. Recorded streams and live stations have distinct artist fallbacks. In Background activity, keyboard focus stays on Cancel as elapsed time updates. Provider and queue tracks share the scrollable metadata window. Subsonic favorites retain their state when the server refreshes a playback URL.
+From the repository root, build the engine, import the Godot project as above, and run:
 
 ```sh
-SHOT_DIR=/tmp/shots MUSIC=/path/to/music CLIAMP_BINARY=/path/to/cliamp   $GODOT --path godot res://tests/audit/library.tscn
+python3 godot/tool/audit.py --binary ./cliamp --output /tmp/cliamp-audit-results
 ```
 
-A window that cannot take OS focus (for example one placed off-screen with
-`--position`) gets no real hover, so the kit falls back to triggering the
-control's handler and prints `synthetic click`.
+Choose a new output directory. The runner creates disposable profiles, generated audio,
+a loopback HTTP server, screenshots and one log per scenario. FFmpeg generates
+the tagged FLAC and HLS fixtures. To run a subset, append scenario names, such
+as `library pickers` or `settings1 settings2`. The two settings phases share a
+profile. Windowed scenarios use routed pointer and keyboard input. A missed
+assertion, layout finding or engine script error fails the run. Native file sheets
+and window manager actions also need a packaged walkthrough.
 
 `godot/tests/screenshots.tscn` opens the shell against a real engine and saves a
 PNG of each page; it needs a window, so run it without `--headless`.
@@ -203,12 +202,12 @@ command line or in the app's resources.
 ## Library and playback workflows
 
 **Add music** accepts native file/folder selection or entered file, playlist,
-URL and SSH paths. Choose append or replace and whether to start playback.
-Continue asks for a source when the field is empty. The
+URL and SSH paths. Choose **Add to queue** to append or **Replace queue** to start playback with the new selection.
+Choose files initially lists audio and playlists. Select All Files for other formats. In the fallback file chooser, select multiple rows or type the name or absolute path of a single existing file. Continue asks for a source when the field is empty. The
 engine resolves a selection before replacing the queue, so a failed source leaves
 the previous list intact.
 
-The queue and library use fuzzy filtering. **Select tracks** enables individual
+An unchanged playlist card retains focus after Refresh. The queue and library use fuzzy filtering. **Select tracks** enables individual
 or Shift-range selection; **Select visible** selects the current filtered page.
 Selected tracks can be appended, queued next, used to replace the queue, saved
 or removed in one edit. Live edits carry the revision belonging to the displayed
@@ -233,7 +232,7 @@ locally known listening state. **Add to queue** appends an individual track;
 filter, including tracks beyond the displayed page, while keeping playback and
 the play-next list intact.
 
-**Lyrics** can follow playback, pause following while scrolling, seek by line
+**Lyrics** can follow playback, pause following while scrolling, seek by line when the current track is seekable
 and adjust the shared timing offset. Live streams and untimed text are displayed
 without an invented playback timebase. **Visualizer** renders the engine's
 original built-in and Lua modes, with theme/mode preview, apply/cancel and
@@ -246,6 +245,7 @@ change track, **Left/Right** to seek, **-/+** to adjust volume, **T** to show or
 hide track information, **V** to cycle visualizers and **Esc** to leave
 fullscreen. Ctrl/Cmd+Left/Right also changes track.
 
+On macOS, **Help → Keyboard Shortcuts and Commands** opens the command palette.
 The command palette lists desktop controls and registered plugin key actions.
 Type to filter, press Up or Down to highlight a command, and press Enter to run it.
 Volume up and volume down are separate commands. Common shortcuts are:
@@ -277,6 +277,8 @@ Playlist names for the Local provider cannot be empty, `.` or `..`, or contain
 source must be `owner/repo[@tag]`, `gitlab:` or `codeberg:` followed by the same,
 or a link ending in `<name>.lua`. Queue and playlist rows show `--:--` while a
 track's length is not known yet (local files report it once they play).
+
+Downloading a playing file that already occupies its save destination preserves its contents.
 
 Playback/edit shortcuts do not fire while typing in a text field. Long
 operations appear in the activity view, with cancellation when supported.
